@@ -218,6 +218,31 @@ Recommended values and formats:
 Production notes:
 
 - the module-level WhatsApp integration is ready for production use
+
+## Releases
+
+This repository includes an automated GitHub release workflow.
+
+- Trigger: push a tag matching `v*`, for example `v1.1.0`
+- Validation:
+  - grep for debug artifacts
+  - grep for removed WhatsApp diagnostics
+  - `php -l` across all PHP files
+  - `node --check assets/js/marketing-builder.js`
+- Packaging:
+  - builds `release/marketing_<tag>.zip`
+  - ZIP root contains `marketing/`
+  - excludes repository-only and temp files such as `.git`, `.github`, `.DS_Store`, `__MACOSX`, `*.bak`, `*~`, `node_modules`, `release/`, `scripts/`, and temp files
+- Publishing:
+  - creates or updates the GitHub Release for the tag
+  - uploads `marketing_<tag>.zip` as a release asset
+
+Local build command:
+
+```bash
+chmod +x scripts/build_release.sh
+./scripts/build_release.sh v1.1.0
+```
 - real sending requires a valid Meta-approved WhatsApp Business App
 - real sending requires an active phone number ID and a valid WhatsApp Business Account configuration
 - real sending requires a valid, non-expired access token
