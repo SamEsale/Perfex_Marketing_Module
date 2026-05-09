@@ -352,6 +352,27 @@ check_processing_lease_ownership() {
     "schema=$schema_line | reserve=$reserve_line | where=$ownership_where_line"
 }
 
+check_queue_reservation_transaction_integrity() {
+  local helper_line begin_line rollback_line commit_line conflict_line warning_line
+  helper_line="$(first_match 'function[[:space:]]+reserve_next_recipients' "$CAMPAIGNS_FILE")"
+  begin_line="$(first_fixed_match '$this->db->trans_begin();' "$CAMPAIGNS_FILE")"
+  rollback_line="$(first_fixed_match '$this->db->trans_rollback();' "$CAMPAIGNS_FILE")"
+  commit_line="$(first_fixed_match '$this->db->trans_commit();' "$CAMPAIGNS_FILE")"
+  conflict_line="$(first_fixed_match 'recipient_reservation_count_mismatch' "$CAMPAIGNS_FILE")"
+  warning_line="$(first_fixed_match 'recipient_reservation_conflict' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$begin_line" || -z "$rollback_line" || -z "$commit_line" || -z "$conflict_line" || -z "$warning_line" ]]; then
+    fail \
+      "recipient reservation is transactional and fails closed on partial ownership" \
+      "expected reservation helper, transaction boundaries, count mismatch detection, and conflict warning in $CAMPAIGNS_FILE; helper=${helper_line:-missing}; begin=${begin_line:-missing}; rollback=${rollback_line:-missing}; commit=${commit_line:-missing}; mismatch=${conflict_line:-missing}; warning=${warning_line:-missing}"
+    return
+  fi
+
+  pass \
+    "recipient reservation is transactional and fails closed on partial ownership" \
+    "helper=$helper_line | begin=$begin_line | mismatch=$conflict_line | warning=$warning_line"
+}
+
 check_ses_sns_signature_enforcement() {
   local require_helper production_line verify_call options_helper options_usage
   require_helper="$(first_match 'function[[:space:]]+shouldRequireSesSnsSignatureVerification' "$WEBHOOKS_FILE")"
@@ -426,6 +447,7 @@ check_duplicate_redirect_metric_gate
 check_campaign_eligibility_semantics
 check_processing_recovery_timeout
 check_processing_lease_ownership
+check_queue_reservation_transaction_integrity
 check_ses_sns_signature_enforcement
 check_ses_sns_verifier_strictness
 check_sns_message_id_idempotency

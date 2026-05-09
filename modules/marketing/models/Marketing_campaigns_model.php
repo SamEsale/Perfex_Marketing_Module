@@ -1025,7 +1025,34 @@ class Marketing_campaigns_model extends App_Model
                 ]),
             ]);
 
-            $recipients = $this->reserve_next_recipients($campaign['id'], $remaining, $workerLeaseToken);
+            $reservation = $this->reserve_next_recipients($campaign['id'], $remaining, $workerLeaseToken);
+            if (empty($reservation['success'])) {
+                $reservationWarning = $reservation['warning'] ?? 'recipient_reservation_failed';
+                $this->append_unique_warning($summary['warnings'], $reservationWarning);
+                $this->append_unique_warning($campaignWarnings, $reservationWarning);
+                $this->log_safe_queue_error(
+                    'Marketing recipient reservation failed: campaign_id=' . (int) $campaign['id']
+                    . ' warning=' . $reservationWarning
+                    . ' reason=' . (string) ($reservation['error'] ?? 'unknown')
+                );
+                $this->create_event([
+                    'campaign_id' => $campaign['id'],
+                    'event_type' => 'batch_processed',
+                    'provider' => $eventProvider,
+                    'payload_json' => json_encode([
+                        'processed' => 0,
+                        'accepted' => 0,
+                        'failed' => 0,
+                        'recovered' => $campaignRecovered,
+                        'warnings' => $campaignWarnings,
+                        'manual_or_cron' => $manualOrCron,
+                        'delivery_channel' => $deliveryChannel,
+                    ]),
+                ]);
+                continue;
+            }
+
+            $recipients = $reservation['recipients'] ?? [];
             if (empty($recipients)) {
                 if ($this->finalize_campaign_if_complete($campaign['id'])) {
                     $summary['campaigns_completed']++;
@@ -1392,20 +1419,46 @@ class Marketing_campaigns_model extends App_Model
     {
         $limit = (int) $limit;
         if ($limit <= 0) {
-            return [];
+            return [
+                'success' => true,
+                'recipients' => [],
+                'warning' => null,
+                'error' => null,
+            ];
         }
 
-        $recipientIds = $this->db->select('id')
+        $this->db->trans_begin();
+
+        $recipientIdsQuery = $this->db->select('id')
             ->from($this->recipientsTable)
             ->where('campaign_id', (int) $campaignId)
             ->where_in('status', self::SENDABLE_RECIPIENT_STATUSES)
             ->order_by('id', 'ASC')
             ->limit($limit)
-            ->get()
-            ->result_array();
+            ->get();
+
+        if ($recipientIdsQuery === false) {
+            $this->db->trans_rollback();
+
+            return [
+                'success' => false,
+                'recipients' => [],
+                'warning' => 'recipient_reservation_failed',
+                'error' => 'recipient_select_failed',
+            ];
+        }
+
+        $recipientIds = $recipientIdsQuery->result_array();
 
         if (empty($recipientIds)) {
-            return [];
+            $this->db->trans_commit();
+
+            return [
+                'success' => true,
+                'recipients' => [],
+                'warning' => null,
+                'error' => null,
+            ];
         }
 
         $recipientIds = array_column($recipientIds, 'id');
@@ -1416,10 +1469,30 @@ class Marketing_campaigns_model extends App_Model
             'dateupdated' => date('Y-m-d H:i:s'),
         ];
         $update = $this->filter_existing_columns($this->recipientsTable, $update);
+        if (empty($update)) {
+            $this->db->trans_rollback();
+
+            return [
+                'success' => false,
+                'recipients' => [],
+                'warning' => 'recipient_reservation_failed',
+                'error' => 'recipient_reservation_update_filtered',
+            ];
+        }
 
         $this->db->where_in('id', $recipientIds);
         $this->db->where_in('status', self::SENDABLE_RECIPIENT_STATUSES);
-        $this->db->update($this->recipientsTable, $update);
+        $updated = $this->db->update($this->recipientsTable, $update);
+        if (!$updated || $this->db->trans_status() === false) {
+            $this->db->trans_rollback();
+
+            return [
+                'success' => false,
+                'recipients' => [],
+                'warning' => 'recipient_reservation_failed',
+                'error' => 'recipient_reservation_update_failed',
+            ];
+        }
 
         $this->db->where_in('id', $recipientIds);
         $this->db->where('status', 'processing');
@@ -1427,7 +1500,49 @@ class Marketing_campaigns_model extends App_Model
             $this->db->where('processing_token', $workerLeaseToken);
         }
 
-        return $this->db->get($this->recipientsTable)->result_array();
+        $reservedQuery = $this->db->get($this->recipientsTable);
+        if ($reservedQuery === false) {
+            $this->db->trans_rollback();
+
+            return [
+                'success' => false,
+                'recipients' => [],
+                'warning' => 'recipient_reservation_failed',
+                'error' => 'recipient_reservation_fetch_failed',
+            ];
+        }
+
+        $recipients = $reservedQuery->result_array();
+        if (count($recipients) !== count($recipientIds)) {
+            $this->db->trans_rollback();
+
+            return [
+                'success' => false,
+                'recipients' => [],
+                'warning' => 'recipient_reservation_conflict',
+                'error' => 'recipient_reservation_count_mismatch',
+            ];
+        }
+
+        if ($this->db->trans_status() === false) {
+            $this->db->trans_rollback();
+
+            return [
+                'success' => false,
+                'recipients' => [],
+                'warning' => 'recipient_reservation_failed',
+                'error' => 'recipient_reservation_transaction_failed',
+            ];
+        }
+
+        $this->db->trans_commit();
+
+        return [
+            'success' => true,
+            'recipients' => $recipients,
+            'warning' => null,
+            'error' => null,
+        ];
     }
 
     private function acquire_campaign_send_lock($campaignId, $timeout = 0)
