@@ -45,13 +45,15 @@ class Marketing_ses_sns
         return $map[$normalized] ?? $normalized;
     }
 
-    public function verify($payload, array $headers = [])
+    public function verify($payload, array $headers = [], array $options = [])
     {
         $result = [
             'implemented' => true,
             'valid' => false,
             'error' => null,
         ];
+        $expectedTopicArn = trim($this->scalar_string($options['topic_arn'] ?? '', ''));
+        $expectedRegion = strtolower(trim($this->scalar_string($options['region'] ?? '', '')));
 
         $parsed = $this->parse_payload($payload);
         if (!$parsed['valid']) {
@@ -90,6 +92,18 @@ class Marketing_ses_sns
         $signingCertUrl = trim((string) $message['SigningCertURL']);
         if (!$this->is_valid_signing_cert_url($signingCertUrl)) {
             $result['error'] = 'Invalid SNS signing certificate URL.';
+
+            return $result;
+        }
+
+        if ($expectedRegion !== '' && !$this->signing_cert_url_matches_region($signingCertUrl, $expectedRegion)) {
+            $result['error'] = 'SNS signing certificate URL region does not match the configured SES region.';
+
+            return $result;
+        }
+
+        if ($expectedTopicArn !== '' && !$this->topic_arn_matches($message['TopicArn'] ?? '', $expectedTopicArn)) {
+            $result['error'] = 'SNS TopicArn does not match the configured SES SNS topic.';
 
             return $result;
         }
@@ -147,7 +161,7 @@ class Marketing_ses_sns
         return $result;
     }
 
-    public function confirm_subscription($subscribeUrl)
+    public function confirm_subscription($subscribeUrl, array $options = [])
     {
         if (is_array($subscribeUrl) || is_object($subscribeUrl)) {
             return [
@@ -164,7 +178,8 @@ class Marketing_ses_sns
             ];
         }
 
-        if (!$this->is_valid_sns_action_url($subscribeUrl)) {
+        $expectedRegion = strtolower(trim($this->scalar_string($options['region'] ?? '', '')));
+        if (!$this->is_valid_sns_action_url($subscribeUrl, $expectedRegion)) {
             return [
                 'success' => false,
                 'error' => 'SNS SubscribeURL is invalid.',
@@ -225,18 +240,50 @@ class Marketing_ses_sns
         $host = strtolower((string) ($parts['host'] ?? ''));
         $path = (string) ($parts['path'] ?? '');
 
-        if ($scheme !== 'https') {
+        if ($scheme !== 'https' || !$this->is_safe_sns_host($host)) {
             return false;
         }
 
-        if (strpos($host, 'sns.') !== 0 || substr($host, -14) !== '.amazonaws.com') {
+        if (!empty($parts['query']) || !empty($parts['fragment']) || !empty($parts['user']) || !empty($parts['pass']) || !empty($parts['port'])) {
             return false;
         }
 
         return substr(strtolower($path), -4) === '.pem';
     }
 
-    protected function is_valid_sns_action_url($url)
+    protected function signing_cert_url_matches_region($url, $expectedRegion)
+    {
+        $expectedRegion = strtolower(trim((string) $expectedRegion));
+        if ($expectedRegion === '') {
+            return true;
+        }
+
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return false;
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if (!preg_match('/^sns\.([a-z0-9-]+)\.amazonaws\.com$/', $host, $matches)) {
+            return false;
+        }
+
+        return strtolower((string) ($matches[1] ?? '')) === $expectedRegion;
+    }
+
+    protected function topic_arn_matches($actualTopicArn, $expectedTopicArn)
+    {
+        $actualTopicArn = trim((string) $actualTopicArn);
+        $expectedTopicArn = trim((string) $expectedTopicArn);
+
+        if ($actualTopicArn === '' || $expectedTopicArn === '') {
+            return false;
+        }
+
+        return hash_equals($expectedTopicArn, $actualTopicArn);
+    }
+
+    protected function is_valid_sns_action_url($url, $expectedRegion = '')
     {
         $parts = parse_url($url);
         if (!is_array($parts)) {
@@ -246,11 +293,29 @@ class Marketing_ses_sns
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
         $host = strtolower((string) ($parts['host'] ?? ''));
 
-        if ($scheme !== 'https') {
+        if ($scheme !== 'https' || !$this->is_safe_sns_host($host)) {
             return false;
         }
 
-        return strpos($host, 'sns.') === 0 && substr($host, -14) === '.amazonaws.com';
+        if (!empty($parts['query']) || !empty($parts['fragment']) || !empty($parts['user']) || !empty($parts['pass']) || !empty($parts['port'])) {
+            return false;
+        }
+
+        if ($expectedRegion !== '' && !$this->signing_cert_url_matches_region($url, $expectedRegion)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function is_safe_sns_host($host)
+    {
+        $host = strtolower(trim((string) $host));
+        if ($host === '') {
+            return false;
+        }
+
+        return preg_match('/^sns\.[a-z0-9-]+\.amazonaws\.com$/', $host) === 1;
     }
 
     protected function build_canonical_string(array $message)

@@ -12,6 +12,9 @@ PUBLIC_LINKS_FILE="modules/marketing/models/Marketing_public_links_model.php"
 ROUTES_FILE="modules/marketing/config/routes.php"
 SCHEMA_FILE="modules/marketing/libraries/Marketing_schema.php"
 BOOTSTRAP_FILE="modules/marketing/marketing.php"
+WEBHOOKS_FILE="modules/marketing/controllers/Webhooks.php"
+SES_SNS_FILE="modules/marketing/libraries/Marketing_ses_sns.php"
+INSTALL_FILE="modules/marketing/install.php"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -349,6 +352,65 @@ check_processing_lease_ownership() {
     "schema=$schema_line | reserve=$reserve_line | where=$ownership_where_line"
 }
 
+check_ses_sns_signature_enforcement() {
+  local require_helper production_line verify_call options_helper options_usage
+  require_helper="$(first_match 'function[[:space:]]+shouldRequireSesSnsSignatureVerification' "$WEBHOOKS_FILE")"
+  production_line="$(first_fixed_match "ENVIRONMENT === 'production'" "$WEBHOOKS_FILE")"
+  verify_call="$(first_fixed_match '$this->marketing_ses_sns->verify($rawBody, $headers, $verificationOptions)' "$WEBHOOKS_FILE")"
+  options_helper="$(first_match 'function[[:space:]]+getSesSnsVerificationOptions' "$WEBHOOKS_FILE")"
+  options_usage="$(first_fixed_match '$verificationOptions = $this->getSesSnsVerificationOptions();' "$WEBHOOKS_FILE")"
+
+  if [[ -z "$require_helper" || -z "$production_line" || -z "$verify_call" || -z "$options_helper" || -z "$options_usage" ]]; then
+    fail \
+      "SES SNS webhook signature verification is enforced in production" \
+      "expected production enforcement helper and verify() call in $WEBHOOKS_FILE; helper=${require_helper:-missing}; production=${production_line:-missing}; verify=${verify_call:-missing}; options_helper=${options_helper:-missing}; options_usage=${options_usage:-missing}"
+    return
+  fi
+
+  pass \
+    "SES SNS webhook signature verification is enforced in production" \
+    "helper=$require_helper | production=$production_line | verify=$verify_call"
+}
+
+check_ses_sns_verifier_strictness() {
+  local version_line topic_line cert_region_line confirm_region_line default_line
+  version_line="$(first_fixed_match "SignatureVersion'] !== '1'" "$SES_SNS_FILE")"
+  topic_line="$(first_fixed_match "topic_arn_matches" "$SES_SNS_FILE")"
+  cert_region_line="$(first_fixed_match "signing_cert_url_matches_region" "$SES_SNS_FILE")"
+  confirm_region_line="$(first_fixed_match "is_valid_sns_action_url(\$subscribeUrl, \$expectedRegion)" "$SES_SNS_FILE")"
+  default_line="$(first_fixed_match "'marketing_ses_verify_signature' => '1'" "$INSTALL_FILE")"
+
+  if [[ -z "$version_line" || -z "$topic_line" || -z "$cert_region_line" || -z "$confirm_region_line" || -z "$default_line" ]]; then
+    fail \
+      "SES SNS verifier checks signature version, region, topic ARN, and safe install defaults" \
+      "expected strict verification hooks in $SES_SNS_FILE and default enabled option in $INSTALL_FILE; version=${version_line:-missing}; topic=${topic_line:-missing}; cert_region=${cert_region_line:-missing}; confirm_region=${confirm_region_line:-missing}; default=${default_line:-missing}"
+    return
+  fi
+
+  pass \
+    "SES SNS verifier checks signature version, region, topic ARN, and safe install defaults" \
+    "version=$version_line | cert_region=$cert_region_line | default=$default_line"
+}
+
+check_sns_message_id_idempotency() {
+  local webhook_line criteria_line lock_line filter_line
+  webhook_line="$(first_fixed_match "'sns_message_id' => \$event['sns_message_id'] ?? null" "$WEBHOOKS_FILE")"
+  criteria_line="$(first_match 'sns_message_id' "$EVENTS_FILE")"
+  lock_line="$(first_match 'function[[:space:]]+acquire_event_lock' "$EVENTS_FILE")"
+  filter_line="$(first_fixed_match "where('sns_message_id', \$snsMessageId)" "$EVENTS_FILE")"
+
+  if [[ -z "$webhook_line" || -z "$criteria_line" || -z "$lock_line" || -z "$filter_line" ]]; then
+    fail \
+      "SNS message id idempotency remains protected" \
+      "expected sns_message_id in webhook storage, event dedupe criteria, lock path, and query filters; webhook=${webhook_line:-missing}; criteria=${criteria_line:-missing}; lock=${lock_line:-missing}; filter=${filter_line:-missing}"
+    return
+  fi
+
+  pass \
+    "SNS message id idempotency remains protected" \
+    "webhook=$webhook_line | criteria=$criteria_line | filter=$filter_line"
+}
+
 check_dependencies
 
 check_no_raw_expression_where_in
@@ -364,6 +426,9 @@ check_duplicate_redirect_metric_gate
 check_campaign_eligibility_semantics
 check_processing_recovery_timeout
 check_processing_lease_ownership
+check_ses_sns_signature_enforcement
+check_ses_sns_verifier_strictness
+check_sns_message_id_idempotency
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   printf 'FAILED phase2-regressions %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"

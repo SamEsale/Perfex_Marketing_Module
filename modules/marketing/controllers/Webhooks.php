@@ -52,12 +52,13 @@ class Webhooks extends CI_Controller
         $messageType = $this->marketing_ses_sns->normalize_event_name($rawMessageType);
         $snsMessageId = $this->scalarString($body['MessageId'] ?? null, 'n/a');
         $signatureValid = 0;
-        $signatureVerificationEnabled = get_option('marketing_ses_verify_signature') == 1;
+        $signatureVerificationRequired = $this->shouldRequireSesSnsSignatureVerification();
+        $verificationOptions = $this->getSesSnsVerificationOptions();
 
         log_message('info', 'Marketing SES/SNS webhook received: type=' . ($messageType !== '' ? $messageType : 'unknown') . ' sns_message_id=' . $snsMessageId);
 
-        if ($signatureVerificationEnabled) {
-            $verification = $this->marketing_ses_sns->verify($rawBody, $headers);
+        if ($signatureVerificationRequired) {
+            $verification = $this->marketing_ses_sns->verify($rawBody, $headers, $verificationOptions);
             $messageType = !empty($verification['type']) ? $verification['type'] : $messageType;
 
             if (empty($verification['valid'])) {
@@ -97,8 +98,8 @@ class Webhooks extends CI_Controller
                 'headers_json' => $this->safeJsonEncode($headers),
             ]);
 
-            if ($signatureVerificationEnabled) {
-                $confirmation = $this->marketing_ses_sns->confirm_subscription($body['SubscribeURL'] ?? '');
+            if ($signatureVerificationRequired) {
+                $confirmation = $this->marketing_ses_sns->confirm_subscription($body['SubscribeURL'] ?? '', $verificationOptions);
                 if (!empty($confirmation['success'])) {
                     log_message('info', 'Marketing SES/SNS subscription confirmed: sns_message_id=' . $snsMessageId);
 
@@ -1217,6 +1218,23 @@ class Webhooks extends CI_Controller
         }
 
         return $normalized;
+    }
+
+    protected function shouldRequireSesSnsSignatureVerification()
+    {
+        if (defined('ENVIRONMENT') && ENVIRONMENT === 'production') {
+            return true;
+        }
+
+        return get_option('marketing_ses_verify_signature') == 1;
+    }
+
+    protected function getSesSnsVerificationOptions()
+    {
+        return [
+            'topic_arn' => trim((string) get_option('marketing_ses_sns_topic_arn')),
+            'region' => strtolower(trim((string) get_option('marketing_ses_region'))),
+        ];
     }
 
     protected function safeJsonEncode($value)
