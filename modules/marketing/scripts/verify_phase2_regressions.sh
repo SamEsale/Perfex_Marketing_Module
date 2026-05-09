@@ -291,6 +291,41 @@ check_campaign_eligibility_semantics() {
     "shared_helper=$shared_helper | public_snapshot=$public_snapshot | queue_usage=$queue_usage"
 }
 
+check_processing_recovery_timeout() {
+  local timeout_line reserve_line recover_line fallback_line
+  timeout_line="$(first_match 'PROCESSING_STALE_TIMEOUT_SECONDS' "$CAMPAIGNS_FILE")"
+  reserve_line="$(first_fixed_match "'status' => 'processing'" "$CAMPAIGNS_FILE")"
+  recover_line="$(first_fixed_match "'status' => 'queued'" "$CAMPAIGNS_FILE")"
+  fallback_line="$(first_fixed_match "dateupdated IS NULL" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$timeout_line" ]]; then
+    fail \
+      "stale processing recovery uses an explicit timeout" \
+      "expected PROCESSING_STALE_TIMEOUT_SECONDS in $CAMPAIGNS_FILE"
+    return
+  fi
+
+  local timeout_value
+  timeout_value="$(printf '%s\n' "$timeout_line" | sed -nE 's/.*PROCESSING_STALE_TIMEOUT_SECONDS[^0-9]*([0-9]+).*/\1/p')"
+  if [[ "$timeout_value" != "1800" ]]; then
+    fail \
+      "stale processing recovery uses an explicit timeout" \
+      "expected 1800 seconds, found ${timeout_value:-unparseable} in $timeout_line"
+    return
+  fi
+
+  if [[ -z "$reserve_line" || -z "$recover_line" || -z "$fallback_line" ]]; then
+    fail \
+      "recipient processing lifecycle records timestamps and only recovers stale rows" \
+      "expected processing reserve, queued recovery, and dateupdated null fallback in $CAMPAIGNS_FILE; reserve=${reserve_line:-missing}; recover=${recover_line:-missing}; fallback=${fallback_line:-missing}"
+    return
+  fi
+
+  pass \
+    "recipient processing lifecycle records timestamps and only recovers stale rows" \
+    "timeout=$timeout_line | reserve=$reserve_line | fallback=$fallback_line"
+}
+
 check_dependencies
 
 check_no_raw_expression_where_in
@@ -304,6 +339,7 @@ check_click_dedupe_window
 check_tracking_link_dedupe
 check_duplicate_redirect_metric_gate
 check_campaign_eligibility_semantics
+check_processing_recovery_timeout
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   printf 'FAILED phase2-regressions %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"

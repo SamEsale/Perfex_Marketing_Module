@@ -83,6 +83,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 
 - If campaign send is blocked, review `License & Updates` first
 - If campaigns do not process, confirm cron is running and `Campaign Delivery Enabled` is on
+- If recipients remain in `processing`, allow the stale-processing timeout to elapse before manual retry or reset. Active `processing` rows are no longer requeued immediately on the next queue run.
 - If campaign clicks are not appearing, confirm delivered links were rewritten to `marketing/track/c/{token}` and that the redirect endpoint returns `302`
 - If unsubscribe actions are not taking effect, confirm the recipient hit the module unsubscribe URL and that a suppression row was created or refreshed
 - If SES / SNS events do not appear, confirm the webhook URL and provider-side subscription configuration

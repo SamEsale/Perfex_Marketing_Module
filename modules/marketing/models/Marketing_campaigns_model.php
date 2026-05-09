@@ -24,6 +24,7 @@ class Marketing_campaigns_model extends App_Model
     private const TARGETING_MARKER_PREFIX = '<!--marketing_targeting_rules:';
     private const TARGETING_MARKER_SUFFIX = '-->';
     private const SENDABLE_RECIPIENT_STATUSES = ['queued', 'pending'];
+    private const PROCESSING_STALE_TIMEOUT_SECONDS = 1800;
     private const COMMERCIAL_PREPARE_THRESHOLD_FALLBACK = 100;
 
     protected $table;
@@ -509,8 +510,12 @@ class Marketing_campaigns_model extends App_Model
 
         $update = [
             'status' => 'queued',
+            'queued_at' => date('Y-m-d H:i:s'),
+            'sent_at' => null,
             'failed_at' => null,
             'failure_reason' => null,
+            'last_event_at' => null,
+            'dateupdated' => date('Y-m-d H:i:s'),
         ];
         $update = $this->filter_existing_columns($this->recipientsTable, $update);
 
@@ -673,6 +678,10 @@ class Marketing_campaigns_model extends App_Model
     {
         if (empty($data)) {
             return false;
+        }
+
+        if ($this->column_exists($this->recipientsTable, 'dateupdated') && !array_key_exists('dateupdated', $data)) {
+            $data['dateupdated'] = date('Y-m-d H:i:s');
         }
 
         $data = $this->filter_existing_columns($this->recipientsTable, $data);
@@ -1374,11 +1383,15 @@ class Marketing_campaigns_model extends App_Model
 
         $recipientIds = array_column($recipientIds, 'id');
 
+        $update = [
+            'status' => 'processing',
+            'dateupdated' => date('Y-m-d H:i:s'),
+        ];
+        $update = $this->filter_existing_columns($this->recipientsTable, $update);
+
         $this->db->where_in('id', $recipientIds);
         $this->db->where_in('status', self::SENDABLE_RECIPIENT_STATUSES);
-        $this->db->update($this->recipientsTable, [
-            'status' => 'processing',
-        ]);
+        $this->db->update($this->recipientsTable, $update);
 
         return $this->db->where_in('id', $recipientIds)
             ->where('status', 'processing')
@@ -1435,14 +1448,38 @@ class Marketing_campaigns_model extends App_Model
 
     private function recover_stuck_processing($campaignId = null)
     {
+        $campaign = $campaignId !== null ? $this->get((int) $campaignId) : null;
+        $cutoffTimestamp = time() - self::PROCESSING_STALE_TIMEOUT_SECONDS;
+        $cutoffDateTime = date('Y-m-d H:i:s', $cutoffTimestamp);
+        $recipientHasDateUpdated = $this->column_exists($this->recipientsTable, 'dateupdated');
+        $campaignSendStartedAtIsStale = $campaign !== null && $this->campaign_send_started_before($campaign, $cutoffTimestamp);
+
+        if (!$recipientHasDateUpdated && !$campaignSendStartedAtIsStale) {
+            return 0;
+        }
+
+        $update = [
+            'status' => 'queued',
+            'queued_at' => date('Y-m-d H:i:s'),
+            'dateupdated' => date('Y-m-d H:i:s'),
+        ];
+        $update = $this->filter_existing_columns($this->recipientsTable, $update);
+
         $this->db->where('status', 'processing');
         if ($campaignId !== null) {
             $this->db->where('campaign_id', (int) $campaignId);
         }
 
-        $this->db->update($this->recipientsTable, [
-            'status' => 'queued',
-        ]);
+        if ($recipientHasDateUpdated) {
+            $this->db->group_start();
+            $this->db->where('dateupdated <=', $cutoffDateTime);
+            if ($campaignSendStartedAtIsStale) {
+                $this->db->or_where('dateupdated IS NULL', null, false);
+            }
+            $this->db->group_end();
+        }
+
+        $this->db->update($this->recipientsTable, $update);
 
         return (int) $this->db->affected_rows();
     }
@@ -1450,6 +1487,9 @@ class Marketing_campaigns_model extends App_Model
     private function update_recipient_status($recipientId, $status, array $data = [])
     {
         $data['status'] = $status;
+        if ($this->column_exists($this->recipientsTable, 'dateupdated') && !array_key_exists('dateupdated', $data)) {
+            $data['dateupdated'] = date('Y-m-d H:i:s');
+        }
         $data = $this->filter_existing_columns($this->recipientsTable, $data);
 
         if (empty($data)) {
@@ -1625,6 +1665,21 @@ class Marketing_campaigns_model extends App_Model
         }
 
         return $updated;
+    }
+
+    private function campaign_send_started_before(array $campaign, $cutoffTimestamp)
+    {
+        $sendStartedAt = trim((string) ($campaign['send_started_at'] ?? ''));
+        if ($sendStartedAt === '') {
+            return false;
+        }
+
+        $sendStartedTimestamp = strtotime($sendStartedAt);
+        if ($sendStartedTimestamp === false) {
+            return false;
+        }
+
+        return $sendStartedTimestamp <= (int) $cutoffTimestamp;
     }
 
     public function get_queued_recipients($campaignId, $limit = 50)
