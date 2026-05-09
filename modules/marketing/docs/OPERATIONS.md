@@ -1,0 +1,91 @@
+# Operations
+
+## Scope
+
+This package is a **Perfex CRM module** located at `modules/marketing`. It is not standalone software.
+
+## Compatibility
+
+- Compatible target: `Perfex CRM 3.4.x`
+- Tested on: `Perfex CRM 3.4.1`
+
+## Deployment Approach
+
+- Use staging before production
+- Back up the database and current module ZIP before upgrades
+- Do not modify core Perfex files to deploy this module
+- Confirm module webhook URLs after each environment move or domain change
+
+## Required Runtime Dependencies
+
+- Perfex cron must be active for campaign execution
+- SMTP / SES settings must be valid before email sending
+- Module click tracking requires the public route `marketing/track/c/{token}` to be reachable from recipient devices
+- Module unsubscribe handling requires the public route `marketing/unsubscribe/{token}` to be reachable from recipient devices
+- WhatsApp Business is the only built-in social channel integration in this package. Facebook and LinkedIn surfaces are intentionally removed from the module UI.
+- WhatsApp sending requires a Meta-approved WhatsApp Business app, an active Phone Number ID, a valid non-expired access token, and approved templates
+
+## Safe Installation Flow
+
+1. Upload the `marketing` module ZIP through `Setup -> Modules`.
+2. Activate the module.
+3. Open `Marketing -> Settings`.
+4. Review `Schema Health`.
+   Activation uses safe bootstrap only. It creates missing module-owned tables, safe columns, and safe indexes without dropping or renaming live tables.
+5. Save the General, SMTP / SES, Reply-to-Lead, WhatsApp, and License panels as needed.
+6. Confirm webhook URLs are reachable from the public internet when external providers are in use.
+7. Confirm cron is running before any scheduled or batch send.
+
+## Upgrade Flow
+
+1. Back up the database and current module package.
+2. Replace the module with the new ZIP.
+3. Activate or reload the module.
+4. Review `Schema Health`.
+   If legacy duplicate tables such as accidental double-prefix `tbltblmarketing_*` tables are reported, treat them as manual review items only.
+   Use schema repair only for idempotent reconciliation of missing module-owned schema.
+5. Re-check SMTP / SES, Reply-to-Lead, WhatsApp, and License settings.
+6. Resume campaign operations only after cron and webhook checks are clean.
+
+## Regression Validation
+
+- Run `bash modules/marketing/scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
+- The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
+- Expected success result is `OK phase2-regressions 11 checks passed`.
+
+## Uninstall Notes
+
+- Module uninstall must not be used as a substitute for a backup
+- Uninstall should be tested on staging first
+- License state does not block uninstall
+- Core Perfex files remain untouched
+
+## Security Guarantees
+
+- No token rendering after save
+- No intentional secret logging
+- No destructive schema operations
+- Schema repair only adds missing safe module-owned elements
+- Legacy duplicate tables are reported for manual review and are never dropped automatically
+- Public click and unsubscribe links use opaque module tokens instead of raw recipient identifiers
+
+## Commercial Licensing Operations
+
+- License status lives under `Marketing -> Settings -> License & Updates`
+- Production license API base URL is `https://license.spitol.com/api`
+- Configuration order is `MARKETING_LICENSE_API_BASE_URL` constant first, then the `marketing_license_api_base_url` module option, then the built-in production default
+- If the license API base URL is empty, status is `unconfigured`
+- If the license server is unreachable after a previously active validation, the module grants a `7` day grace period
+- Licensing only gates commercial actions such as campaign sending, WhatsApp campaign sending, and large recipient-batch preparation
+- Diagnostics, settings access, activation, uninstall, and schema repair remain available
+
+## Troubleshooting
+
+- If campaign send is blocked, review `License & Updates` first
+- If campaigns do not process, confirm cron is running and `Campaign Delivery Enabled` is on
+- If campaign clicks are not appearing, confirm delivered links were rewritten to `marketing/track/c/{token}` and that the redirect endpoint returns `302`
+- If unsubscribe actions are not taking effect, confirm the recipient hit the module unsubscribe URL and that a suppression row was created or refreshed
+- If SES / SNS events do not appear, confirm the webhook URL and provider-side subscription configuration
+- If SES click telemetry is absent but module click tracking works, treat the issue as SES configuration-set publishing rather than outbound send failure
+- If Reply-to-Lead does not create or reuse leads, confirm inbound webhook delivery and Reply-to-Lead settings
+- If WhatsApp verification fails, confirm the stored verify token and the displayed webhook URL
