@@ -1,0 +1,105 @@
+name: Release Module
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip rsync
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Check for debug artifacts
+        run: |
+          if grep -R -n "var_dump\|print_r\|console\.log\|TODO\|FIXME" . \
+            --exclude-dir=.git \
+            --exclude-dir=.github \
+            --exclude-dir=node_modules \
+            --exclude-dir=release \
+            --exclude="build_release.sh" \
+            --exclude="*.zip"; then
+            echo "Debug artifacts found."
+            exit 1
+          fi
+
+      - name: Check for removed WhatsApp diagnostics
+        run: |
+          if grep -R -n \
+            -e "WHATSAPP_SAVE_ENTERED" \
+            -e "MARKETING_SETTINGS_DIAG" \
+            -e "WHATSAPP_SAVE_OPTION" \
+            -e "WHATSAPP_SAVE_MISMATCH" \
+            -e "WhatsApp form probe received" \
+            -e "WhatsApp settings save handler reached" \
+            -e "WhatsApp saved:" \
+            . \
+            --exclude-dir=.git \
+            --exclude-dir=.github \
+            --exclude-dir=node_modules \
+            --exclude-dir=release \
+            --exclude="build_release.sh" \
+            --exclude="*.zip"; then
+            echo "Removed WhatsApp diagnostics found."
+            exit 1
+          fi
+
+      - name: Validate PHP syntax
+        run: |
+          php -l marketing.php
+          find . \
+            -path ./.git -prune -o \
+            -path ./.github -prune -o \
+            -path ./node_modules -prune -o \
+            -path ./release -prune -o \
+            -name "*.php" -print0 | xargs -0 -n1 php -l
+
+      - name: Validate JavaScript syntax
+        run: node --check assets/js/marketing-builder.js
+
+      - name: Make build script executable
+        run: chmod +x scripts/build_release.sh
+
+      - name: Build release ZIP
+        run: ./scripts/build_release.sh "${GITHUB_REF_NAME}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketing_${{ github.ref_name }}
+          path: release/marketing_${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Marketing Module ${{ github.ref_name }}
+          body: Automated release package for Perfex Marketing Module.
+          files: release/marketing_${{ github.ref_name }}.zip
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
