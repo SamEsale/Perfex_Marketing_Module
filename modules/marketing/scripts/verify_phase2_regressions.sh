@@ -10,6 +10,8 @@ CAMPAIGNS_FILE="modules/marketing/models/Marketing_campaigns_model.php"
 DASHBOARD_FILE="modules/marketing/models/Marketing_dashboard_model.php"
 PUBLIC_LINKS_FILE="modules/marketing/models/Marketing_public_links_model.php"
 ROUTES_FILE="modules/marketing/config/routes.php"
+SCHEMA_FILE="modules/marketing/libraries/Marketing_schema.php"
+BOOTSTRAP_FILE="modules/marketing/marketing.php"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -297,6 +299,7 @@ check_processing_recovery_timeout() {
   reserve_line="$(first_fixed_match "'status' => 'processing'" "$CAMPAIGNS_FILE")"
   recover_line="$(first_fixed_match "'status' => 'queued'" "$CAMPAIGNS_FILE")"
   fallback_line="$(first_fixed_match "dateupdated IS NULL" "$CAMPAIGNS_FILE")"
+  clear_lease_line="$(first_fixed_match "'processing_token' => null" "$CAMPAIGNS_FILE")"
 
   if [[ -z "$timeout_line" ]]; then
     fail \
@@ -314,16 +317,36 @@ check_processing_recovery_timeout() {
     return
   fi
 
-  if [[ -z "$reserve_line" || -z "$recover_line" || -z "$fallback_line" ]]; then
+  if [[ -z "$reserve_line" || -z "$recover_line" || -z "$fallback_line" || -z "$clear_lease_line" ]]; then
     fail \
       "recipient processing lifecycle records timestamps and only recovers stale rows" \
-      "expected processing reserve, queued recovery, and dateupdated null fallback in $CAMPAIGNS_FILE; reserve=${reserve_line:-missing}; recover=${recover_line:-missing}; fallback=${fallback_line:-missing}"
+      "expected processing reserve, queued recovery, dateupdated null fallback, and processing_token clear in $CAMPAIGNS_FILE; reserve=${reserve_line:-missing}; recover=${recover_line:-missing}; fallback=${fallback_line:-missing}; clear_lease=${clear_lease_line:-missing}"
     return
   fi
 
   pass \
     "recipient processing lifecycle records timestamps and only recovers stale rows" \
-    "timeout=$timeout_line | reserve=$reserve_line | fallback=$fallback_line"
+    "timeout=$timeout_line | reserve=$reserve_line | clear_lease=$clear_lease_line"
+}
+
+check_processing_lease_ownership() {
+  local schema_line bootstrap_line reserve_line owner_update_line ownership_where_line
+  schema_line="$(first_fixed_match "'processing_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  bootstrap_line="$(first_match 'MARKETING_SCHEMA_BOOTSTRAP_VERSION' "$BOOTSTRAP_FILE")"
+  reserve_line="$(first_fixed_match "'processing_token' => \$workerLeaseToken !== '' ? \$workerLeaseToken : null" "$CAMPAIGNS_FILE")"
+  owner_update_line="$(first_match 'function[[:space:]]+update_reserved_recipient_status' "$CAMPAIGNS_FILE")"
+  ownership_where_line="$(first_fixed_match "->where('processing_token', \$workerLeaseToken)" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$schema_line" || -z "$bootstrap_line" || -z "$reserve_line" || -z "$owner_update_line" || -z "$ownership_where_line" ]]; then
+    fail \
+      "recipient processing lease token is schema-safe and enforced on finalization" \
+      "expected schema, bootstrap version, reserve token, owned update helper, and ownership where clause; schema=${schema_line:-missing}; bootstrap=${bootstrap_line:-missing}; reserve=${reserve_line:-missing}; helper=${owner_update_line:-missing}; where=${ownership_where_line:-missing}"
+    return
+  fi
+
+  pass \
+    "recipient processing lease token is schema-safe and enforced on finalization" \
+    "schema=$schema_line | reserve=$reserve_line | where=$ownership_where_line"
 }
 
 check_dependencies
@@ -340,6 +363,7 @@ check_tracking_link_dedupe
 check_duplicate_redirect_metric_gate
 check_campaign_eligibility_semantics
 check_processing_recovery_timeout
+check_processing_lease_ownership
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   printf 'FAILED phase2-regressions %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"

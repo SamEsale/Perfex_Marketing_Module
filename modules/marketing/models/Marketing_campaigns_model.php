@@ -510,6 +510,7 @@ class Marketing_campaigns_model extends App_Model
 
         $update = [
             'status' => 'queued',
+            'processing_token' => null,
             'queued_at' => date('Y-m-d H:i:s'),
             'sent_at' => null,
             'failed_at' => null,
@@ -900,6 +901,7 @@ class Marketing_campaigns_model extends App_Model
             $campaignFailed = 0;
             $campaignRecovered = 0;
             $campaignLockKey = '';
+            $workerLeaseToken = $this->generate_recipient_processing_token((int) $campaign['id']);
 
             $campaignLock = $this->acquire_campaign_send_lock((int) $campaign['id']);
             if (!empty($campaignLock['supported']) && empty($campaignLock['acquired'])) {
@@ -1023,7 +1025,7 @@ class Marketing_campaigns_model extends App_Model
                 ]),
             ]);
 
-            $recipients = $this->reserve_next_recipients($campaign['id'], $remaining);
+            $recipients = $this->reserve_next_recipients($campaign['id'], $remaining, $workerLeaseToken);
             if (empty($recipients)) {
                 if ($this->finalize_campaign_if_complete($campaign['id'])) {
                     $summary['campaigns_completed']++;
@@ -1079,9 +1081,14 @@ class Marketing_campaigns_model extends App_Model
 
                 try {
                     if ($this->recipient_is_duplicate_for_send($recipient)) {
-                        $this->update_recipient_status($recipient['id'], 'skipped', [
+                        if (!$this->update_reserved_recipient_status($recipient['id'], $workerLeaseToken, 'skipped', [
                             'failure_reason' => 'duplicate_recipient_skipped',
-                        ]);
+                        ])) {
+                            $this->append_unique_warning($summary['warnings'], 'recipient_lease_conflict');
+                            $this->append_unique_warning($campaignWarnings, 'recipient_lease_conflict');
+                            log_message('warning', 'Marketing recipient lease conflict on skipped update: campaign_id=' . (int) $campaign['id'] . ' recipient_id=' . (int) $recipient['id']);
+                            continue;
+                        }
 
                         $this->create_event([
                             'campaign_id' => $campaign['id'],
@@ -1109,7 +1116,12 @@ class Marketing_campaigns_model extends App_Model
 
                     $suppressionMatch = $this->get_active_suppression_for_recipient($recipient, $deliveryChannel);
                     if ($suppressionMatch['suppressed']) {
-                        $this->mark_recipient_suppressed($campaign, $recipient, $eventProvider, $deliveryChannel, $suppressionMatch);
+                        if (!$this->mark_recipient_suppressed($campaign, $recipient, $eventProvider, $deliveryChannel, $suppressionMatch, $workerLeaseToken)) {
+                            $this->append_unique_warning($summary['warnings'], 'recipient_lease_conflict');
+                            $this->append_unique_warning($campaignWarnings, 'recipient_lease_conflict');
+                            log_message('warning', 'Marketing recipient lease conflict on suppression update: campaign_id=' . (int) $campaign['id'] . ' recipient_id=' . (int) $recipient['id']);
+                            continue;
+                        }
 
                         $summary['suppressed']++;
                         $campaignProcessed++;
@@ -1146,7 +1158,12 @@ class Marketing_campaigns_model extends App_Model
                         'type' => (string) ($result['suppression_type'] ?? 'email'),
                         'reason' => (string) ($result['suppression_reason'] ?? 'suppressed_email'),
                     ];
-                    $this->mark_recipient_suppressed($campaign, $recipient, $eventProvider, $deliveryChannel, $mailSuppressionMatch);
+                    if (!$this->mark_recipient_suppressed($campaign, $recipient, $eventProvider, $deliveryChannel, $mailSuppressionMatch, $workerLeaseToken)) {
+                        $this->append_unique_warning($summary['warnings'], 'recipient_lease_conflict');
+                        $this->append_unique_warning($campaignWarnings, 'recipient_lease_conflict');
+                        log_message('warning', 'Marketing recipient lease conflict on mailer suppression update: campaign_id=' . (int) $campaign['id'] . ' recipient_id=' . (int) $recipient['id']);
+                        continue;
+                    }
                     $summary['suppressed']++;
                 } elseif (!empty($result['success'])) {
                     $recipientUpdate = [
@@ -1161,7 +1178,12 @@ class Marketing_campaigns_model extends App_Model
                         $recipientUpdate['provider_message_id'] = $resultProviderMessageId;
                     }
 
-                    $this->update_recipient_status($recipient['id'], 'sent', $recipientUpdate);
+                    if (!$this->update_reserved_recipient_status($recipient['id'], $workerLeaseToken, 'sent', $recipientUpdate)) {
+                        $this->append_unique_warning($summary['warnings'], 'recipient_lease_conflict');
+                        $this->append_unique_warning($campaignWarnings, 'recipient_lease_conflict');
+                        log_message('warning', 'Marketing recipient lease conflict on sent update: campaign_id=' . (int) $campaign['id'] . ' recipient_id=' . (int) $recipient['id']);
+                        continue;
+                    }
 
                     $this->create_event([
                         'campaign_id' => $campaign['id'],
@@ -1202,7 +1224,12 @@ class Marketing_campaigns_model extends App_Model
                         $failedRecipientUpdate['provider_message_id'] = $resultProviderMessageId;
                     }
 
-                    $this->update_recipient_status($recipient['id'], 'failed', $failedRecipientUpdate);
+                    if (!$this->update_reserved_recipient_status($recipient['id'], $workerLeaseToken, 'failed', $failedRecipientUpdate)) {
+                        $this->append_unique_warning($summary['warnings'], 'recipient_lease_conflict');
+                        $this->append_unique_warning($campaignWarnings, 'recipient_lease_conflict');
+                        log_message('warning', 'Marketing recipient lease conflict on failed update: campaign_id=' . (int) $campaign['id'] . ' recipient_id=' . (int) $recipient['id']);
+                        continue;
+                    }
 
                     $this->create_event([
                         'campaign_id' => $campaign['id'],
@@ -1361,7 +1388,7 @@ class Marketing_campaigns_model extends App_Model
         ]];
     }
 
-    private function reserve_next_recipients($campaignId, $limit)
+    private function reserve_next_recipients($campaignId, $limit, $workerLeaseToken = '')
     {
         $limit = (int) $limit;
         if ($limit <= 0) {
@@ -1385,6 +1412,7 @@ class Marketing_campaigns_model extends App_Model
 
         $update = [
             'status' => 'processing',
+            'processing_token' => $workerLeaseToken !== '' ? $workerLeaseToken : null,
             'dateupdated' => date('Y-m-d H:i:s'),
         ];
         $update = $this->filter_existing_columns($this->recipientsTable, $update);
@@ -1393,10 +1421,13 @@ class Marketing_campaigns_model extends App_Model
         $this->db->where_in('status', self::SENDABLE_RECIPIENT_STATUSES);
         $this->db->update($this->recipientsTable, $update);
 
-        return $this->db->where_in('id', $recipientIds)
-            ->where('status', 'processing')
-            ->get($this->recipientsTable)
-            ->result_array();
+        $this->db->where_in('id', $recipientIds);
+        $this->db->where('status', 'processing');
+        if ($workerLeaseToken !== '' && $this->column_exists($this->recipientsTable, 'processing_token')) {
+            $this->db->where('processing_token', $workerLeaseToken);
+        }
+
+        return $this->db->get($this->recipientsTable)->result_array();
     }
 
     private function acquire_campaign_send_lock($campaignId, $timeout = 0)
@@ -1460,6 +1491,7 @@ class Marketing_campaigns_model extends App_Model
 
         $update = [
             'status' => 'queued',
+            'processing_token' => null,
             'queued_at' => date('Y-m-d H:i:s'),
             'dateupdated' => date('Y-m-d H:i:s'),
         ];
@@ -1487,6 +1519,9 @@ class Marketing_campaigns_model extends App_Model
     private function update_recipient_status($recipientId, $status, array $data = [])
     {
         $data['status'] = $status;
+        if ($this->column_exists($this->recipientsTable, 'processing_token') && !array_key_exists('processing_token', $data) && $status !== 'processing') {
+            $data['processing_token'] = null;
+        }
         if ($this->column_exists($this->recipientsTable, 'dateupdated') && !array_key_exists('dateupdated', $data)) {
             $data['dateupdated'] = date('Y-m-d H:i:s');
         }
@@ -1500,6 +1535,54 @@ class Marketing_campaigns_model extends App_Model
         $this->db->update($this->recipientsTable, $data);
 
         return $this->db->affected_rows() !== 0;
+    }
+
+    private function update_reserved_recipient_status($recipientId, $workerLeaseToken, $status, array $data = [])
+    {
+        $workerLeaseToken = trim((string) $workerLeaseToken);
+        $data['status'] = $status;
+
+        if ($this->column_exists($this->recipientsTable, 'processing_token') && !array_key_exists('processing_token', $data) && $status !== 'processing') {
+            $data['processing_token'] = null;
+        }
+        if ($this->column_exists($this->recipientsTable, 'dateupdated') && !array_key_exists('dateupdated', $data)) {
+            $data['dateupdated'] = date('Y-m-d H:i:s');
+        }
+
+        $data = $this->filter_existing_columns($this->recipientsTable, $data);
+        if (empty($data)) {
+            return false;
+        }
+
+        $this->db->where('id', (int) $recipientId);
+        $this->db->where('status', 'processing');
+        if ($workerLeaseToken !== '' && $this->column_exists($this->recipientsTable, 'processing_token')) {
+            $this->db->where('processing_token', $workerLeaseToken);
+        }
+        $this->db->update($this->recipientsTable, $data);
+
+        return $this->db->affected_rows() !== 0;
+    }
+
+    private function generate_recipient_processing_token($campaignId)
+    {
+        try {
+            $token = bin2hex(random_bytes(16));
+        } catch (Throwable $exception) {
+            $token = substr(hash('sha256', uniqid((string) $campaignId, true) . ':' . microtime(true) . ':' . mt_rand()), 0, 32);
+        }
+
+        return 'cmp' . (int) $campaignId . '_' . $token;
+    }
+
+    private function append_unique_warning(array &$warnings, $warning)
+    {
+        $warning = trim((string) $warning);
+        if ($warning === '' || in_array($warning, $warnings, true)) {
+            return;
+        }
+
+        $warnings[] = $warning;
     }
 
     private function create_event(array $data)
@@ -2640,7 +2723,7 @@ class Marketing_campaigns_model extends App_Model
         $requirements = [
             $this->table => ['id', 'status', 'delivery_channel'],
             $this->listsTable => ['id'],
-            $this->recipientsTable => ['id', 'campaign_id', 'status'],
+            $this->recipientsTable => ['id', 'campaign_id', 'status', 'processing_token'],
             $this->eventsTable => ['event_type'],
             $this->suppressionsTable => ['active', 'normalized_email'],
         ];
@@ -2671,14 +2754,16 @@ class Marketing_campaigns_model extends App_Model
         log_message('error', $this->sanitize_failure_reason($message));
     }
 
-    private function mark_recipient_suppressed(array $campaign, array $recipient, $eventProvider, $deliveryChannel, array $suppressionMatch)
+    private function mark_recipient_suppressed(array $campaign, array $recipient, $eventProvider, $deliveryChannel, array $suppressionMatch, $workerLeaseToken = '')
     {
         $reason = $this->sanitize_failure_reason($suppressionMatch['reason'] ?? 'suppressed_email');
         $type = trim((string) ($suppressionMatch['type'] ?? 'email'));
 
-        $this->update_recipient_status($recipient['id'], 'suppressed', [
+        if (!$this->update_reserved_recipient_status($recipient['id'], $workerLeaseToken, 'suppressed', [
             'failure_reason' => $reason,
-        ]);
+        ])) {
+            return false;
+        }
 
         $this->create_event([
             'campaign_id' => $campaign['id'],
@@ -2699,6 +2784,8 @@ class Marketing_campaigns_model extends App_Model
             . ' channel=' . $deliveryChannel
             . ' suppression=' . $type
         );
+
+        return true;
     }
 
     protected function sanitize_failure_reason($message)
