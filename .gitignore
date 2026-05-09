@@ -1,0 +1,10 @@
+*
+!.gitignore
+!modules/
+!modules/marketing/
+!modules/marketing/**
+
+modules/marketing/release/
+modules/marketing/*.zip
+*.zip
+.DS_Store
