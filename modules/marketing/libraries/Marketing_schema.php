@@ -273,6 +273,7 @@ class Marketing_schema
                     'email' => ['sql' => "VARCHAR(191) NOT NULL DEFAULT ''", 'repairable' => true],
                     'status' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'queued'", 'repairable' => true],
                     'processing_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true],
+                    'outbound_attempt_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true],
                     'queued_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'sent_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'failed_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],

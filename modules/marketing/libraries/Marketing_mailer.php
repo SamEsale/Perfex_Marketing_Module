@@ -139,19 +139,24 @@ class Marketing_mailer
         $campaignId = max(0, (int) ($campaign['id'] ?? 0));
         $recipientId = max(0, (int) ($recipient['id'] ?? 0));
         $domain = $this->build_correlation_domain($fromEmail);
-        try {
-            $entropy = bin2hex(random_bytes(6));
-        } catch (Throwable $exception) {
-            $entropy = substr(hash('sha256', uniqid((string) mt_rand(), true)), 0, 12);
+        $attemptToken = $this->build_safe_header_token((string) ($recipient['outbound_attempt_token'] ?? ''), '');
+        if ($attemptToken === '') {
+            try {
+                $entropy = bin2hex(random_bytes(6));
+            } catch (Throwable $exception) {
+                $entropy = substr(hash('sha256', uniqid((string) mt_rand(), true)), 0, 12);
+            }
+            $seed = $campaignId . ':' . $recipientId . ':' . microtime(true) . ':' . $entropy;
+            $attemptToken = substr(hash('sha256', $seed), 0, 24);
         }
-        $seed = $campaignId . ':' . $recipientId . ':' . microtime(true) . ':' . $entropy;
-        $token = substr(hash('sha256', $seed), 0, 24);
-        $localPart = 'mkt.c' . $campaignId . '.r' . $recipientId . '.t' . gmdate('YmdHis') . '.' . $token;
+        $messageToken = substr($attemptToken, 0, 24);
+        $localPart = 'mkt.c' . $campaignId . '.r' . $recipientId . '.a' . $messageToken;
         $rawMessageId = $localPart . '@' . $domain;
 
         return [
             'campaign_id' => $campaignId,
             'recipient_id' => $recipientId,
+            'outbound_attempt_token' => $attemptToken,
             'correlation_id' => $rawMessageId,
             'message_id' => $rawMessageId,
             'configuration_set' => $this->get_ses_configuration_set(),
@@ -218,12 +223,18 @@ class Marketing_mailer
         $this->ci->email->set_header('X-Marketing-Correlation-ID', $outboundMeta['correlation_id']);
         $this->ci->email->set_header('X-Marketing-Campaign-ID', (string) $outboundMeta['campaign_id']);
         $this->ci->email->set_header('X-Marketing-Recipient-ID', (string) $outboundMeta['recipient_id']);
+        if (!empty($outboundMeta['outbound_attempt_token'])) {
+            $this->ci->email->set_header('X-Marketing-Outbound-Attempt-ID', (string) $outboundMeta['outbound_attempt_token']);
+        }
 
         $headers = [
             'X-Marketing-Correlation-ID' => $outboundMeta['correlation_id'],
             'X-Marketing-Campaign-ID' => (string) $outboundMeta['campaign_id'],
             'X-Marketing-Recipient-ID' => (string) $outboundMeta['recipient_id'],
         ];
+        if (!empty($outboundMeta['outbound_attempt_token'])) {
+            $headers['X-Marketing-Outbound-Attempt-ID'] = (string) $outboundMeta['outbound_attempt_token'];
+        }
 
         if (is_string($replyMarker) && trim($replyMarker) !== '') {
             $this->ci->email->set_header('X-Marketing-Reply-ID', $replyMarker);
@@ -263,6 +274,7 @@ class Marketing_mailer
             'attempt' => (string) ($attempt['label'] ?? 'send'),
             'success' => $success ? '1' : '0',
             'correlation_id' => (string) $outboundMeta['correlation_id'],
+            'outbound_attempt_token' => (string) ($outboundMeta['outbound_attempt_token'] ?? ''),
             'configuration_set_applied' => !empty($headerStatus['configuration_set_applied']) ? '1' : '0',
             'ses_tags_applied' => !empty($headerStatus['ses_tags_applied']) ? '1' : '0',
             'applied_headers' => json_encode($headerStatus['headers'] ?? []),

@@ -374,6 +374,45 @@ check_queue_reservation_transaction_integrity() {
     "helper=$helper_line | begin=$begin_line | mismatch=$conflict_line | warning=$warning_line"
 }
 
+check_outbound_attempt_schema_and_queue_guard() {
+  local schema_line bootstrap_line queue_requirement helper_line header_line
+  schema_line="$(first_fixed_match "'outbound_attempt_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  bootstrap_line="$(first_match 'MARKETING_SCHEMA_BOOTSTRAP_VERSION' "$BOOTSTRAP_FILE")"
+  queue_requirement="$(first_fixed_match "\$this->recipientsTable => ['id', 'campaign_id', 'status', 'processing_token', 'outbound_attempt_token']" "$CAMPAIGNS_FILE")"
+  helper_line="$(first_match 'function[[:space:]]+begin_reserved_outbound_attempt' "$CAMPAIGNS_FILE")"
+  header_line="$(first_fixed_match 'X-Marketing-Outbound-Attempt-ID' "$MAILER_FILE")"
+
+  if [[ -z "$schema_line" || -z "$bootstrap_line" || -z "$queue_requirement" || -z "$helper_line" || -z "$header_line" ]]; then
+    fail \
+      "outbound attempt token is schema-safe, queue-required, and exposed in mail headers" \
+      "expected schema, bootstrap version, queue requirement, attempt helper, and outbound attempt header; schema=${schema_line:-missing}; bootstrap=${bootstrap_line:-missing}; queue=${queue_requirement:-missing}; helper=${helper_line:-missing}; header=${header_line:-missing}"
+    return
+  fi
+
+  pass \
+    "outbound attempt token is schema-safe, queue-required, and exposed in mail headers" \
+    "schema=$schema_line | queue=$queue_requirement | header=$header_line"
+}
+
+check_outbound_attempt_assignment_and_retry_reset() {
+  local assignment_line replay_warning_line retry_clear_line mailer_token_line
+  assignment_line="$(first_fixed_match '$attemptStart = $this->begin_reserved_outbound_attempt($recipient, $workerLeaseToken);' "$CAMPAIGNS_FILE")"
+  replay_warning_line="$(first_fixed_match 'outbound_attempt_replay_blocked' "$CAMPAIGNS_FILE")"
+  retry_clear_line="$(first_fixed_match "'outbound_attempt_token' => null" "$CAMPAIGNS_FILE")"
+  mailer_token_line="$(first_fixed_match "'outbound_attempt_token' => \$attemptToken" "$MAILER_FILE")"
+
+  if [[ -z "$assignment_line" || -z "$replay_warning_line" || -z "$retry_clear_line" || -z "$mailer_token_line" ]]; then
+    fail \
+      "outbound attempt identity is assigned before provider send and reset safely on retry" \
+      "expected pre-send assignment, replay block warning, retry reset, and mailer attempt token usage; assignment=${assignment_line:-missing}; replay=${replay_warning_line:-missing}; retry=${retry_clear_line:-missing}; mailer=${mailer_token_line:-missing}"
+    return
+  fi
+
+  pass \
+    "outbound attempt identity is assigned before provider send and reset safely on retry" \
+    "assignment=$assignment_line | retry=$retry_clear_line | mailer=$mailer_token_line"
+}
+
 check_transient_provider_backoff_safety() {
   local classify_helper transient_flag throttle_flag temp_failure_reason temp_throttle_reason warning_line
   classify_helper="$(first_match 'function[[:space:]]+classify_provider_failure' "$MAILER_FILE")"
@@ -470,6 +509,8 @@ check_campaign_eligibility_semantics
 check_processing_recovery_timeout
 check_processing_lease_ownership
 check_queue_reservation_transaction_integrity
+check_outbound_attempt_schema_and_queue_guard
+check_outbound_attempt_assignment_and_retry_reset
 check_transient_provider_backoff_safety
 check_ses_sns_signature_enforcement
 check_ses_sns_verifier_strictness

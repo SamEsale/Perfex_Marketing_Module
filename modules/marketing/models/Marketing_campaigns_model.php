@@ -511,6 +511,7 @@ class Marketing_campaigns_model extends App_Model
         $update = [
             'status' => 'queued',
             'processing_token' => null,
+            'outbound_attempt_token' => null,
             'queued_at' => date('Y-m-d H:i:s'),
             'sent_at' => null,
             'failed_at' => null,
@@ -1106,6 +1107,40 @@ class Marketing_campaigns_model extends App_Model
                     break;
                 }
 
+                $preSendResult = null;
+                if ($deliveryChannel === 'email') {
+                    $attemptStart = $this->begin_reserved_outbound_attempt($recipient, $workerLeaseToken);
+                    if (empty($attemptStart['success'])) {
+                        if (!empty($attemptStart['blocked'])) {
+                            $warning = (string) ($attemptStart['warning'] ?? 'outbound_attempt_replay_blocked');
+                            $this->append_unique_warning($summary['warnings'], $warning);
+                            $this->append_unique_warning($campaignWarnings, $warning);
+                            log_message(
+                                'warning',
+                                'Marketing outbound attempt blocked before provider send: campaign_id=' . (int) $campaign['id']
+                                . ' recipient_id=' . (int) $recipient['id']
+                                . ' warning=' . $warning
+                            );
+                            if (!empty($attemptStart['recipient']) && is_array($attemptStart['recipient'])) {
+                                $recipient = $attemptStart['recipient'];
+                            }
+                            $preSendResult = [
+                                'success' => false,
+                                'error' => (string) ($attemptStart['error'] ?? $warning),
+                                'transient_failure' => false,
+                                'provider_throttle' => false,
+                            ];
+                        } else {
+                            $this->append_unique_warning($summary['warnings'], 'recipient_lease_conflict');
+                            $this->append_unique_warning($campaignWarnings, 'recipient_lease_conflict');
+                            log_message('warning', 'Marketing recipient lease conflict before outbound attempt assignment: campaign_id=' . (int) $campaign['id'] . ' recipient_id=' . (int) $recipient['id']);
+                            continue;
+                        }
+                    } elseif (!empty($attemptStart['recipient']) && is_array($attemptStart['recipient'])) {
+                        $recipient = $attemptStart['recipient'];
+                    }
+                }
+
                 try {
                     if ($this->recipient_is_duplicate_for_send($recipient)) {
                         if (!$this->update_reserved_recipient_status($recipient['id'], $workerLeaseToken, 'skipped', [
@@ -1162,7 +1197,9 @@ class Marketing_campaigns_model extends App_Model
                         continue;
                     }
 
-                    if ($deliveryChannel === 'whatsapp') {
+                    if ($preSendResult !== null) {
+                        $result = $preSendResult;
+                    } elseif ($deliveryChannel === 'whatsapp') {
                         $result = $this->marketing_whatsapp->send_template_message(
                             (string) ($recipient['destination'] ?? ''),
                             (string) ($campaign['whatsapp_template_name'] ?? ''),
@@ -1703,6 +1740,115 @@ class Marketing_campaigns_model extends App_Model
         return $this->db->affected_rows() !== 0;
     }
 
+    private function begin_reserved_outbound_attempt(array $recipient, $workerLeaseToken)
+    {
+        $recipientId = (int) ($recipient['id'] ?? 0);
+        if ($recipientId <= 0) {
+            return [
+                'success' => false,
+                'blocked' => false,
+                'warning' => 'recipient_lease_conflict',
+                'error' => 'invalid_recipient',
+            ];
+        }
+
+        $current = $this->db->from($this->recipientsTable)
+            ->where('id', $recipientId)
+            ->where('status', 'processing')
+            ->limit(1)
+            ->get()
+            ->row_array();
+
+        if (!$current) {
+            return [
+                'success' => false,
+                'blocked' => false,
+                'warning' => 'recipient_lease_conflict',
+                'error' => 'recipient_not_processing',
+            ];
+        }
+
+        if ($workerLeaseToken !== '' && $this->column_exists($this->recipientsTable, 'processing_token')) {
+            $currentLeaseToken = trim((string) ($current['processing_token'] ?? ''));
+            if ($currentLeaseToken === '' || !hash_equals($currentLeaseToken, trim((string) $workerLeaseToken))) {
+                return [
+                    'success' => false,
+                    'blocked' => false,
+                    'warning' => 'recipient_lease_conflict',
+                    'error' => 'recipient_processing_token_mismatch',
+                    'recipient' => $current,
+                ];
+            }
+        }
+
+        $currentStatus = strtolower(trim((string) ($current['status'] ?? '')));
+        if (in_array($currentStatus, ['sent', 'suppressed', 'skipped'], true) || !empty($current['sent_at'])) {
+            return [
+                'success' => false,
+                'blocked' => true,
+                'warning' => 'completed_send_marker_present',
+                'error' => 'completed_send_marker_present',
+                'recipient' => $current,
+            ];
+        }
+
+        $existingAttemptToken = trim((string) ($current['outbound_attempt_token'] ?? ''));
+        if ($existingAttemptToken !== '') {
+            return [
+                'success' => false,
+                'blocked' => true,
+                'warning' => 'outbound_attempt_replay_blocked',
+                'error' => 'outbound_attempt_replay_blocked',
+                'recipient' => $current,
+            ];
+        }
+
+        $attemptToken = $this->generate_outbound_attempt_token((int) ($current['campaign_id'] ?? 0), $recipientId);
+        $update = $this->filter_existing_columns($this->recipientsTable, [
+            'outbound_attempt_token' => $attemptToken,
+            'dateupdated' => date('Y-m-d H:i:s'),
+        ]);
+
+        if (empty($update)) {
+            return [
+                'success' => false,
+                'blocked' => false,
+                'warning' => 'recipient_lease_conflict',
+                'error' => 'outbound_attempt_update_filtered',
+                'recipient' => $current,
+            ];
+        }
+
+        $this->db->where('id', $recipientId);
+        $this->db->where('status', 'processing');
+        if ($workerLeaseToken !== '' && $this->column_exists($this->recipientsTable, 'processing_token')) {
+            $this->db->where('processing_token', $workerLeaseToken);
+        }
+        $this->db->update($this->recipientsTable, $update);
+
+        if ($this->db->affected_rows() === 0) {
+            return [
+                'success' => false,
+                'blocked' => false,
+                'warning' => 'recipient_lease_conflict',
+                'error' => 'outbound_attempt_assignment_failed',
+                'recipient' => $current,
+            ];
+        }
+
+        $current['outbound_attempt_token'] = $attemptToken;
+        $current['dateupdated'] = $update['dateupdated'] ?? ($current['dateupdated'] ?? null);
+
+        return [
+            'success' => true,
+            'blocked' => false,
+            'warning' => null,
+            'error' => null,
+            'recipient' => $current,
+            'outbound_attempt_token' => $attemptToken,
+        ];
+    }
+
     private function generate_recipient_processing_token($campaignId)
     {
         try {
@@ -1712,6 +1858,17 @@ class Marketing_campaigns_model extends App_Model
         }
 
         return 'cmp' . (int) $campaignId . '_' . $token;
+    }
+
+    private function generate_outbound_attempt_token($campaignId, $recipientId)
+    {
+        try {
+            $token = bin2hex(random_bytes(16));
+        } catch (Throwable $exception) {
+            $token = substr(hash('sha256', uniqid((string) $campaignId . ':' . (string) $recipientId, true) . ':' . microtime(true) . ':' . mt_rand()), 0, 32);
+        }
+
+        return 'out' . (int) $campaignId . '_' . (int) $recipientId . '_' . $token;
     }
 
     private function append_unique_warning(array &$warnings, $warning)
@@ -2862,7 +3019,7 @@ class Marketing_campaigns_model extends App_Model
         $requirements = [
             $this->table => ['id', 'status', 'delivery_channel'],
             $this->listsTable => ['id'],
-            $this->recipientsTable => ['id', 'campaign_id', 'status', 'processing_token'],
+            $this->recipientsTable => ['id', 'campaign_id', 'status', 'processing_token', 'outbound_attempt_token'],
             $this->eventsTable => ['event_type'],
             $this->suppressionsTable => ['active', 'normalized_email'],
         ];
