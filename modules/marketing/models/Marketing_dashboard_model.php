@@ -40,6 +40,7 @@ class Marketing_dashboard_model extends App_Model
     {
         $eventModel = $this->get_events_model();
         $eventSummary = $eventModel->get_normalized_summary();
+        $queueDiagnostics = $this->get_campaigns_model()->get_queue_diagnostics();
         $totalRecipients = $this->db->count_all($this->recipientsTable);
         $sentRecipients = total_rows($this->recipientsTable, ['status' => 'sent']);
         $delivered = (int) $eventSummary['delivered'];
@@ -67,6 +68,7 @@ class Marketing_dashboard_model extends App_Model
             'open_rate'              => $openRate,
             'bounce_rate'            => $bounceRate,
             'click_analytics'        => $this->get_click_analytics(),
+            'queue_diagnostics'      => $queueDiagnostics,
             'recent_campaigns'       => $this->get_recent_campaigns($campaignLimit),
             'recent_activity'        => $this->get_recent_activity($activityLimit),
         ];
@@ -600,5 +602,13 @@ class Marketing_dashboard_model extends App_Model
         $CI->load->model('marketing/Marketing_events_model', 'marketing_events_model');
 
         return $CI->marketing_events_model;
+    }
+
+    protected function get_campaigns_model()
+    {
+        $CI = &get_instance();
+        $CI->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
+
+        return $CI->marketing_campaigns_model;
     }
 }

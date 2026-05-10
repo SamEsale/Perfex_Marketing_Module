@@ -51,7 +51,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 
 - Run `bash modules/marketing/scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 32 checks passed`.
+- Expected success result is `OK phase2-regressions 37 checks passed`.
 
 ## Uninstall Notes
 
@@ -87,6 +87,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - Queue processing now assigns a per-worker recipient lease token. If schema bootstrap is incomplete after deploy, queue processing will fail closed until the recipient lease column is added by the module bootstrap.
 - If queue processing logs `recipient_reservation_failed` or `recipient_reservation_conflict`, treat the batch as unreserved and investigate DB write errors or overlapping workers before retrying.
 - Queue processing now uses a campaign worker lease in addition to recipient reservation. If warnings include `campaign_{id}_worker_locked`, another worker still owns that campaign lease or the previous lease has not yet gone stale.
+- Use the Marketing dashboard queue diagnostics section to inspect current worker leases, stale processing counts, recent recovered rows, and recent queue warning payloads without relying only on application logs.
 - If queue processing warns `outbound_attempt_replay_blocked`, the module detected a prior uncertain outbound attempt for that recipient and intentionally blocked automatic resend. Use failed-recipient retry only after confirming the earlier attempt outcome.
 - If campaign send warnings include `provider_throttle_detected` or `transient_delivery_failure`, treat the current batch as paused by the provider. The module marks the affected recipient with a `temporary_provider_*` failure reason and stops the rest of that batch instead of hammering SES/SMTP.
 - If campaign clicks are not appearing, confirm delivered links were rewritten to `marketing/track/c/{token}` and that the redirect endpoint returns `302`

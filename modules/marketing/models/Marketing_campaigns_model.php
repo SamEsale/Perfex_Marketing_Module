@@ -864,7 +864,8 @@ class Marketing_campaigns_model extends App_Model
 
         $requestedLimit = $limit !== null ? (int) $limit : (int) get_option('marketing_send_per_cron_run');
         $limit = $this->clamp_send_batch_limit($requestedLimit);
-        if ($requestedLimit > self::MAX_SEND_BATCH_LIMIT) {
+        $batchLimitClamped = $requestedLimit > self::MAX_SEND_BATCH_LIMIT;
+        if ($batchLimitClamped) {
             $summary['warnings'][] = 'batch_limit_clamped';
         }
 
@@ -929,6 +930,9 @@ class Marketing_campaigns_model extends App_Model
             $eventProvider = $deliveryChannel === 'whatsapp' ? 'whatsapp_business' : ($campaign['source_type'] ?? 'smtp');
             $summary['campaigns_considered']++;
             $campaignWarnings = [];
+            if ($batchLimitClamped) {
+                $this->append_unique_warning($campaignWarnings, 'batch_limit_clamped');
+            }
             $campaignProcessed = 0;
             $campaignAccepted = 0;
             $campaignFailed = 0;
@@ -940,7 +944,22 @@ class Marketing_campaigns_model extends App_Model
             $campaignLock = $this->acquire_campaign_send_lock((int) $campaign['id']);
             if (!empty($campaignLock['supported']) && empty($campaignLock['acquired'])) {
                 $warning = 'campaign_' . (int) $campaign['id'] . '_locked';
-                $summary['warnings'][] = $warning;
+                $this->append_unique_warning($summary['warnings'], $warning);
+                $this->append_unique_warning($campaignWarnings, $warning);
+                $this->create_event([
+                    'campaign_id' => $campaign['id'],
+                    'event_type' => 'batch_processed',
+                    'provider' => $eventProvider,
+                    'payload_json' => json_encode([
+                        'processed' => 0,
+                        'accepted' => 0,
+                        'failed' => 0,
+                        'recovered' => 0,
+                        'warnings' => $campaignWarnings,
+                        'manual_or_cron' => $manualOrCron,
+                        'delivery_channel' => $deliveryChannel,
+                    ]),
+                ]);
                 log_message('info', 'Marketing campaign send skipped because another worker holds the lock: campaign_id=' . (int) $campaign['id']);
                 continue;
             }
@@ -955,6 +974,20 @@ class Marketing_campaigns_model extends App_Model
                     $leaseWarning = (string) ($campaignLease['warning'] ?? ('campaign_' . (int) $campaign['id'] . '_worker_locked'));
                     $this->append_unique_warning($summary['warnings'], $leaseWarning);
                     $this->append_unique_warning($campaignWarnings, $leaseWarning);
+                    $this->create_event([
+                        'campaign_id' => $campaign['id'],
+                        'event_type' => 'batch_processed',
+                        'provider' => $eventProvider,
+                        'payload_json' => json_encode([
+                            'processed' => 0,
+                            'accepted' => 0,
+                            'failed' => 0,
+                            'recovered' => 0,
+                            'warnings' => $campaignWarnings,
+                            'manual_or_cron' => $manualOrCron,
+                            'delivery_channel' => $deliveryChannel,
+                        ]),
+                    ]);
 
                     log_message(
                         'info',
@@ -963,6 +996,10 @@ class Marketing_campaigns_model extends App_Model
                         . ' reason=' . (string) ($campaignLease['reason'] ?? 'lease_unavailable')
                     );
                     continue;
+                }
+                if (!empty($campaignLease['recovered_stale'])) {
+                    $this->append_unique_warning($summary['warnings'], 'campaign_worker_lease_recovered');
+                    $this->append_unique_warning($campaignWarnings, 'campaign_worker_lease_recovered');
                 }
 
                 if (in_array($campaign['status'], ['paused', 'cancelled', 'failed', 'sent'], true)) {
@@ -1025,6 +1062,10 @@ class Marketing_campaigns_model extends App_Model
 
                 $campaignRecovered = $this->recover_stuck_processing($campaign['id']);
                 $summary['recovered'] += $campaignRecovered;
+                if ($campaignRecovered > 0) {
+                    $this->append_unique_warning($summary['warnings'], 'stale_processing_recovered');
+                    $this->append_unique_warning($campaignWarnings, 'stale_processing_recovered');
+                }
 
                 $queued = $this->count_sendable_recipients($campaign['id']);
                 if ($queued === 0) {
@@ -1444,6 +1485,145 @@ class Marketing_campaigns_model extends App_Model
         }
 
         return $summary;
+    }
+
+    public function get_queue_diagnostics($recentBatchLimit = 10, $recentWarningLimit = 5)
+    {
+        $recentBatchLimit = max(1, min(25, (int) $recentBatchLimit));
+        $recentWarningLimit = max(1, min(10, (int) $recentWarningLimit));
+
+        $queueSchemaCheck = $this->get_queue_schema_check();
+        $diagnostics = [
+            'schema_ready' => $queueSchemaCheck['ready'],
+            'schema_missing' => array_values($queueSchemaCheck['missing']),
+            'campaign_worker_leases_active' => 0,
+            'campaign_worker_leases_stale' => 0,
+            'recipients_processing' => 0,
+            'recipients_processing_stale' => 0,
+            'recipients_queued' => 0,
+            'recipients_failed' => 0,
+            'recent_recovered_total' => 0,
+            'recent_warning_counts' => [],
+        ];
+
+        if ($this->db->table_exists($this->table) && $this->column_exists($this->table, 'queue_worker_token')) {
+            $select = ['id', 'queue_worker_token'];
+            $select[] = $this->column_exists($this->table, 'queue_worker_started_at')
+                ? 'queue_worker_started_at'
+                : 'NULL AS queue_worker_started_at';
+            $select[] = $this->column_exists($this->table, 'queue_worker_heartbeat_at')
+                ? 'queue_worker_heartbeat_at'
+                : 'NULL AS queue_worker_heartbeat_at';
+
+            $leaseRows = $this->db->select(implode(', ', $select), false)
+                ->from($this->table)
+                ->where('queue_worker_token IS NOT NULL', null, false)
+                ->where('queue_worker_token !=', '')
+                ->get()
+                ->result_array();
+
+            $diagnostics['campaign_worker_leases_active'] = count($leaseRows);
+
+            foreach ($leaseRows as $leaseRow) {
+                if ($this->campaign_worker_lease_is_stale($leaseRow)) {
+                    $diagnostics['campaign_worker_leases_stale']++;
+                }
+            }
+        }
+
+        if ($this->db->table_exists($this->recipientsTable) && $this->column_exists($this->recipientsTable, 'status')) {
+            $diagnostics['recipients_queued'] = total_rows($this->recipientsTable, ['status' => 'queued']);
+            $diagnostics['recipients_failed'] = total_rows($this->recipientsTable, ['status' => 'failed']);
+            $diagnostics['recipients_processing'] = total_rows($this->recipientsTable, ['status' => 'processing']);
+
+            if ($this->column_exists($this->recipientsTable, 'dateupdated')) {
+                $cutoffDateTime = date('Y-m-d H:i:s', time() - self::PROCESSING_STALE_TIMEOUT_SECONDS);
+                $this->db->from($this->recipientsTable . ' r');
+                $this->db->where('r.status', 'processing');
+
+                if (
+                    $this->db->table_exists($this->table)
+                    && $this->column_exists($this->recipientsTable, 'campaign_id')
+                    && $this->column_exists($this->table, 'send_started_at')
+                ) {
+                    $this->db->join($this->table . ' c', 'c.id = r.campaign_id', 'left');
+                }
+
+                $this->db->group_start();
+                $this->db->where('r.dateupdated <=', $cutoffDateTime);
+                if (
+                    $this->db->table_exists($this->table)
+                    && $this->column_exists($this->recipientsTable, 'campaign_id')
+                    && $this->column_exists($this->table, 'send_started_at')
+                ) {
+                    $this->db->or_group_start();
+                    $this->db->where('r.dateupdated IS NULL', null, false);
+                    $this->db->where('c.send_started_at <=', $cutoffDateTime);
+                    $this->db->group_end();
+                }
+                $this->db->group_end();
+
+                $diagnostics['recipients_processing_stale'] = (int) $this->db->count_all_results();
+            }
+        }
+
+        if (
+            $this->db->table_exists($this->eventsTable)
+            && $this->column_exists($this->eventsTable, 'event_type')
+            && $this->column_exists($this->eventsTable, 'payload_json')
+        ) {
+            $this->db->select(
+                ($this->column_exists($this->eventsTable, 'campaign_id') ? 'campaign_id' : 'NULL AS campaign_id')
+                . ', '
+                . ($this->column_exists($this->eventsTable, 'event_at') ? 'event_at' : 'NULL AS event_at')
+                . ', payload_json',
+                false
+            );
+            $this->db->from($this->eventsTable);
+            $this->db->where($this->normalized_event_type_sql() . ' = ' . $this->db->escape('batch_processed'), null, false);
+
+            if ($this->column_exists($this->eventsTable, 'event_at')) {
+                $this->db->order_by('event_at', 'DESC');
+            } else {
+                $this->db->order_by('id', 'DESC');
+            }
+
+            $rows = $this->db->limit($recentBatchLimit)->get()->result_array();
+            $warningCounts = [];
+
+            foreach ($rows as $row) {
+                $payload = json_decode((string) ($row['payload_json'] ?? ''), true);
+                if (!is_array($payload)) {
+                    continue;
+                }
+
+                $diagnostics['recent_recovered_total'] += max(0, (int) ($payload['recovered'] ?? 0));
+
+                $warnings = $payload['warnings'] ?? [];
+                if (!is_array($warnings)) {
+                    continue;
+                }
+
+                foreach ($warnings as $warning) {
+                    $warning = trim((string) $warning);
+                    if ($warning === '') {
+                        continue;
+                    }
+
+                    if (!isset($warningCounts[$warning])) {
+                        $warningCounts[$warning] = 0;
+                    }
+                    $warningCounts[$warning]++;
+                }
+            }
+
+            if (!empty($warningCounts)) {
+                arsort($warningCounts);
+                $diagnostics['recent_warning_counts'] = array_slice($warningCounts, 0, $recentWarningLimit, true);
+            }
+        }
+
+        return $diagnostics;
     }
 
     protected function count_sent_events_since($fromDateTime)
@@ -3595,6 +3775,11 @@ class Marketing_campaigns_model extends App_Model
     private function sanitize_targeting_value($value)
     {
         return trim((string) $value);
+    }
+
+    private function normalized_event_type_sql()
+    {
+        return "LOWER(REPLACE(REPLACE(TRIM(event_type), ' ', '_'), '-', '_'))";
     }
 
     private function normalize_targeting_date($value)

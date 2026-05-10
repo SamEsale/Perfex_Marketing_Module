@@ -16,6 +16,8 @@ WEBHOOKS_FILE="modules/marketing/controllers/Webhooks.php"
 SES_SNS_FILE="modules/marketing/libraries/Marketing_ses_sns.php"
 INSTALL_FILE="modules/marketing/install.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
+DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
+MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -577,6 +579,110 @@ check_batch_limit_clamp() {
     "const=$const_line | helper=$helper_line | warning=$warning_line"
 }
 
+check_queue_diagnostics_method() {
+  local helper_line dashboard_usage_line
+  helper_line="$(first_match 'function[[:space:]]+get_queue_diagnostics' "$CAMPAIGNS_FILE")"
+  dashboard_usage_line="$(first_match "'queue_diagnostics'[[:space:]]*=>" "$DASHBOARD_FILE")"
+
+  if [[ -z "$helper_line" || -z "$dashboard_usage_line" ]]; then
+    fail \
+      "queue diagnostics method exists and is surfaced by the dashboard model" \
+      "expected diagnostics helper in $CAMPAIGNS_FILE and dashboard data usage in $DASHBOARD_FILE; helper=${helper_line:-missing}; dashboard=${dashboard_usage_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue diagnostics method exists and is surfaced by the dashboard model" \
+    "helper=$helper_line | dashboard=$dashboard_usage_line"
+}
+
+check_queue_diagnostics_column_guards() {
+  local worker_guard_line processing_guard_line
+  worker_guard_line="$(first_fixed_match "&& \$this->column_exists(\$this->table, 'queue_worker_token')" "$CAMPAIGNS_FILE")"
+  processing_guard_line="$(first_fixed_match "if (\$this->column_exists(\$this->recipientsTable, 'dateupdated')) {" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$worker_guard_line" || -z "$processing_guard_line" ]]; then
+    fail \
+      "queue diagnostics guard optional worker and processing columns before querying" \
+      "expected queue worker token and recipient dateupdated guards in $CAMPAIGNS_FILE; worker=${worker_guard_line:-missing}; processing=${processing_guard_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue diagnostics guard optional worker and processing columns before querying" \
+    "worker=$worker_guard_line | processing=$processing_guard_line"
+}
+
+check_queue_diagnostics_stale_worker_count() {
+  local helper_line stale_count_line
+  helper_line="$(first_match 'function[[:space:]]+get_queue_diagnostics' "$CAMPAIGNS_FILE")"
+  stale_count_line="$(first_fixed_match "['campaign_worker_leases_stale']++;" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$stale_count_line" ]]; then
+    fail \
+      "queue diagnostics count stale campaign worker leases" \
+      "expected diagnostics helper and stale worker lease increment in $CAMPAIGNS_FILE; helper=${helper_line:-missing}; stale=${stale_count_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue diagnostics count stale campaign worker leases" \
+    "helper=$helper_line | stale=$stale_count_line"
+}
+
+check_queue_diagnostics_stale_processing_count() {
+  local stale_metric_line cutoff_line
+  stale_metric_line="$(first_fixed_match "'recipients_processing_stale' => 0" "$CAMPAIGNS_FILE")"
+  cutoff_line="$(first_fixed_match "where('r.dateupdated <=', \$cutoffDateTime);" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$stale_metric_line" || -z "$cutoff_line" ]]; then
+    fail \
+      "queue diagnostics count stale recipient processing rows" \
+      "expected stale processing metric and cutoff query in $CAMPAIGNS_FILE; metric=${stale_metric_line:-missing}; cutoff=${cutoff_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue diagnostics count stale recipient processing rows" \
+    "metric=$stale_metric_line | cutoff=$cutoff_line"
+}
+
+check_dashboard_queue_diagnostics_surface() {
+  local view_heading_line view_warning_line controller_line
+  view_heading_line="$(first_fixed_match 'Queue Diagnostics' "$DASHBOARD_VIEW_FILE")"
+  view_warning_line="$(first_fixed_match "recent_warning_counts" "$DASHBOARD_VIEW_FILE")"
+  controller_line="$(first_fixed_match "\$this->load->view('marketing/dashboard', \$data);" "$MARKETING_CONTROLLER_FILE")"
+
+  if [[ -z "$view_heading_line" || -z "$view_warning_line" || -z "$controller_line" ]]; then
+    fail \
+      "existing dashboard route consumes queue diagnostics without route changes" \
+      "expected queue diagnostics section in dashboard view and existing dashboard controller route; heading=${view_heading_line:-missing}; warnings=${view_warning_line:-missing}; controller=${controller_line:-missing}"
+    return
+  fi
+
+  pass \
+    "existing dashboard route consumes queue diagnostics without route changes" \
+    "heading=$view_heading_line | warnings=$view_warning_line | controller=$controller_line"
+}
+
+check_queue_warning_telemetry_propagation() {
+  local recovered_warning_line lease_warning_line payload_warning_line
+  recovered_warning_line="$(first_fixed_match 'stale_processing_recovered' "$CAMPAIGNS_FILE")"
+  lease_warning_line="$(first_fixed_match 'campaign_worker_lease_recovered' "$CAMPAIGNS_FILE")"
+  payload_warning_line="$(first_fixed_match "'warnings' => \$campaignWarnings" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$recovered_warning_line" || -z "$lease_warning_line" || -z "$payload_warning_line" ]]; then
+    fail \
+      "queue recovery and worker-lease warnings propagate into batch telemetry" \
+      "expected stale processing and worker lease recovery warnings plus batch warning payloads in $CAMPAIGNS_FILE; recovered=${recovered_warning_line:-missing}; lease=${lease_warning_line:-missing}; payload=${payload_warning_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue recovery and worker-lease warnings propagate into batch telemetry" \
+    "recovered=$recovered_warning_line | lease=$lease_warning_line | payload=$payload_warning_line"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_window install_skew ensure_window ensure_skew
   install_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$INSTALL_FILE")"
@@ -741,6 +847,12 @@ check_campaign_worker_lease_acquisition
 check_campaign_worker_lease_release_guard
 check_campaign_worker_lease_stale_recovery
 check_batch_limit_clamp
+check_queue_diagnostics_method
+check_queue_diagnostics_column_guards
+check_queue_diagnostics_stale_worker_count
+check_queue_diagnostics_stale_processing_count
+check_dashboard_queue_diagnostics_surface
+check_queue_warning_telemetry_propagation
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks

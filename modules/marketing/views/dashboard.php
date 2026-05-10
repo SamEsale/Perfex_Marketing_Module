@@ -158,6 +158,96 @@
                                 </div>
                             </div>
                         </div>
+                        <?php
+                        $queueDiagnostics = isset($queue_diagnostics) && is_array($queue_diagnostics) ? $queue_diagnostics : [];
+                        $recentQueueWarnings = isset($queueDiagnostics['recent_warning_counts']) && is_array($queueDiagnostics['recent_warning_counts'])
+                            ? $queueDiagnostics['recent_warning_counts']
+                            : [];
+                        ?>
+                        <div class="row tw-mt-15">
+                            <div class="col-md-12">
+                                <div class="panel_s" style="border:1px solid #e2e8f0;background:#f8fafc;">
+                                    <div class="panel-body">
+                                        <div class="row">
+                                            <div class="col-md-8">
+                                                <h4 class="no-margin">Queue Diagnostics</h4>
+                                                <p class="text-muted mtop10">Live worker, processing, and recovery telemetry from existing queue and event records.</p>
+                                            </div>
+                                            <div class="col-md-4 text-right">
+                                                <?php if (!empty($queueDiagnostics['schema_ready'])) { ?>
+                                                    <span class="label label-success">Schema Ready</span>
+                                                <?php } else { ?>
+                                                    <span class="label label-warning">Schema Partial</span>
+                                                <?php } ?>
+                                            </div>
+                                        </div>
+                                        <div class="row mtop15">
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Worker Leases</span>
+                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['campaign_worker_leases_active'] ?? 0); ?></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Stale Worker Leases</span>
+                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['campaign_worker_leases_stale'] ?? 0); ?></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Processing</span>
+                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_processing'] ?? 0); ?></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Stale Processing</span>
+                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_processing_stale'] ?? 0); ?></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Queued</span>
+                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_queued'] ?? 0); ?></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Failed</span>
+                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_failed'] ?? 0); ?></h3>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mtop15">
+                                            <p class="text-muted no-margin">
+                                                Recent recovered rows: <strong><?= (int) ($queueDiagnostics['recent_recovered_total'] ?? 0); ?></strong>
+                                            </p>
+                                            <?php if (!empty($queueDiagnostics['schema_missing']) && is_array($queueDiagnostics['schema_missing'])) { ?>
+                                                <p class="text-muted mtop10 no-margin">
+                                                    Missing queue schema elements:
+                                                    <?= html_escape(implode(', ', array_slice($queueDiagnostics['schema_missing'], 0, 6))); ?>
+                                                </p>
+                                            <?php } ?>
+                                        </div>
+                                        <div class="mtop15">
+                                            <h5 class="bold no-margin">Recent Queue Warnings</h5>
+                                            <?php if (empty($recentQueueWarnings)) { ?>
+                                                <p class="text-muted mtop10 no-margin">No recent queue warning payloads were found.</p>
+                                            <?php } else { ?>
+                                                <div class="mtop10">
+                                                    <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
+                                                        <span class="label label-default" style="display:inline-block;margin:0 8px 8px 0;">
+                                                            <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
+                                                        </span>
+                                                    <?php } ?>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
