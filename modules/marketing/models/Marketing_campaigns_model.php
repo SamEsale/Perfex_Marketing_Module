@@ -25,6 +25,8 @@ class Marketing_campaigns_model extends App_Model
     private const TARGETING_MARKER_SUFFIX = '-->';
     private const SENDABLE_RECIPIENT_STATUSES = ['queued', 'pending'];
     private const PROCESSING_STALE_TIMEOUT_SECONDS = 1800;
+    private const QUEUE_WORKER_STALE_TIMEOUT_SECONDS = 1800;
+    private const MAX_SEND_BATCH_LIMIT = 100;
     private const COMMERCIAL_PREPARE_THRESHOLD_FALLBACK = 100;
 
     protected $table;
@@ -815,7 +817,7 @@ class Marketing_campaigns_model extends App_Model
         $dailyCap = max(0, (int) get_option('marketing_send_daily_cap'));
 
         return [
-            'per_cron_run' => max(1, (int) get_option('marketing_send_per_cron_run')),
+            'per_cron_run' => $this->clamp_send_batch_limit((int) get_option('marketing_send_per_cron_run')),
             'hourly_cap' => $hourlyCap,
             'daily_cap' => $dailyCap,
             'accepted_this_hour' => $acceptedThisHour,
@@ -860,9 +862,10 @@ class Marketing_campaigns_model extends App_Model
             return $summary;
         }
 
-        $limit = $limit !== null ? (int) $limit : (int) get_option('marketing_send_per_cron_run');
-        if ($limit <= 0) {
-            $limit = 1;
+        $requestedLimit = $limit !== null ? (int) $limit : (int) get_option('marketing_send_per_cron_run');
+        $limit = $this->clamp_send_batch_limit($requestedLimit);
+        if ($requestedLimit > self::MAX_SEND_BATCH_LIMIT) {
+            $summary['warnings'][] = 'batch_limit_clamped';
         }
 
         if (!$this->is_within_send_window()) {
@@ -932,6 +935,7 @@ class Marketing_campaigns_model extends App_Model
             $campaignRecovered = 0;
             $campaignLockKey = '';
             $workerLeaseToken = $this->generate_recipient_processing_token((int) $campaign['id']);
+            $campaignWorkerToken = $this->generate_campaign_worker_token((int) $campaign['id']);
 
             $campaignLock = $this->acquire_campaign_send_lock((int) $campaign['id']);
             if (!empty($campaignLock['supported']) && empty($campaignLock['acquired'])) {
@@ -946,6 +950,20 @@ class Marketing_campaigns_model extends App_Model
             }
 
             try {
+                $campaignLease = $this->acquire_campaign_worker_lease((int) $campaign['id'], $campaignWorkerToken);
+                if (empty($campaignLease['acquired'])) {
+                    $leaseWarning = (string) ($campaignLease['warning'] ?? ('campaign_' . (int) $campaign['id'] . '_worker_locked'));
+                    $this->append_unique_warning($summary['warnings'], $leaseWarning);
+                    $this->append_unique_warning($campaignWarnings, $leaseWarning);
+
+                    log_message(
+                        'info',
+                        'Marketing campaign worker lease unavailable: campaign_id=' . (int) $campaign['id']
+                        . ' warning=' . $leaseWarning
+                        . ' reason=' . (string) ($campaignLease['reason'] ?? 'lease_unavailable')
+                    );
+                    continue;
+                }
 
                 if (in_array($campaign['status'], ['paused', 'cancelled', 'failed', 'sent'], true)) {
                     continue;
@@ -1105,6 +1123,8 @@ class Marketing_campaigns_model extends App_Model
             }
 
             foreach ($recipients as $recipient) {
+                $this->touch_campaign_worker_lease((int) $campaign['id'], $campaignWorkerToken);
+
                 if (!$this->is_within_send_window()) {
                     $recoveredNow = $this->recover_stuck_processing($campaign['id']);
                     $summary['recovered'] += $recoveredNow;
@@ -1416,6 +1436,7 @@ class Marketing_campaigns_model extends App_Model
                     break;
                 }
             } finally {
+                $this->release_campaign_worker_lease((int) $campaign['id'], $campaignWorkerToken);
                 if ($campaignLockKey !== '') {
                     $this->release_campaign_send_lock($campaignLockKey);
                 }
@@ -1721,6 +1742,165 @@ class Marketing_campaigns_model extends App_Model
         return (int) $this->db->affected_rows();
     }
 
+    private function acquire_campaign_worker_lease($campaignId, $workerToken)
+    {
+        $campaignId = (int) $campaignId;
+        $workerToken = trim((string) $workerToken);
+        if ($campaignId <= 0 || $workerToken === '') {
+            return [
+                'acquired' => false,
+                'warning' => 'campaign_worker_lease_failed',
+                'reason' => 'invalid_campaign_worker_lease_request',
+            ];
+        }
+
+        if (
+            !$this->column_exists($this->table, 'queue_worker_token')
+            || !$this->column_exists($this->table, 'queue_worker_started_at')
+            || !$this->column_exists($this->table, 'queue_worker_heartbeat_at')
+        ) {
+            return [
+                'acquired' => false,
+                'warning' => 'campaign_worker_lease_missing',
+                'reason' => 'campaign_worker_lease_columns_missing',
+            ];
+        }
+
+        $campaign = $this->get($campaignId);
+        if (!$campaign) {
+            return [
+                'acquired' => false,
+                'warning' => 'campaign_not_found',
+                'reason' => 'campaign_not_found',
+            ];
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $heartbeatAt = trim((string) ($campaign['queue_worker_heartbeat_at'] ?? ''));
+        $currentToken = trim((string) ($campaign['queue_worker_token'] ?? ''));
+        $staleLease = $this->campaign_worker_lease_is_stale($campaign);
+
+        if ($currentToken !== '' && hash_equals($currentToken, $workerToken)) {
+            $this->touch_campaign_worker_lease($campaignId, $workerToken);
+
+            return [
+                'acquired' => true,
+                'warning' => null,
+                'reason' => null,
+                'recovered_stale' => false,
+            ];
+        }
+
+        if ($currentToken !== '' && !$staleLease) {
+            return [
+                'acquired' => false,
+                'warning' => 'campaign_' . $campaignId . '_worker_locked',
+                'reason' => 'campaign_worker_lease_active',
+                'owner_started_at' => $heartbeatAt !== '' ? $heartbeatAt : ($campaign['queue_worker_started_at'] ?? null),
+            ];
+        }
+
+        $update = $this->filter_existing_columns($this->table, [
+            'queue_worker_token' => $workerToken,
+            'queue_worker_started_at' => $now,
+            'queue_worker_heartbeat_at' => $now,
+            'dateupdated' => $now,
+        ]);
+        if (empty($update)) {
+            return [
+                'acquired' => false,
+                'warning' => 'campaign_worker_lease_failed',
+                'reason' => 'campaign_worker_lease_update_filtered',
+            ];
+        }
+
+        $this->db->trans_begin();
+        $this->db->where('id', $campaignId);
+        $this->db->group_start();
+        $this->db->where('queue_worker_token IS NULL', null, false);
+        $this->db->or_where('queue_worker_token', '');
+        if ($staleLease) {
+            $this->db->or_where('queue_worker_token', $currentToken);
+        }
+        $this->db->group_end();
+        $updated = $this->db->update($this->table, $update);
+
+        if (!$updated || $this->db->trans_status() === false || (int) $this->db->affected_rows() === 0) {
+            $this->db->trans_rollback();
+
+            return [
+                'acquired' => false,
+                'warning' => 'campaign_' . $campaignId . '_worker_locked',
+                'reason' => $staleLease ? 'campaign_worker_lease_takeover_failed' : 'campaign_worker_lease_race_lost',
+            ];
+        }
+
+        $this->db->trans_commit();
+
+        if ($staleLease) {
+            log_message(
+                'warning',
+                'Marketing recovered stale campaign worker lease: campaign_id=' . $campaignId
+                . ' previous_heartbeat=' . ($heartbeatAt !== '' ? $heartbeatAt : 'n/a')
+            );
+        }
+
+        return [
+            'acquired' => true,
+            'warning' => null,
+            'reason' => null,
+            'recovered_stale' => $staleLease,
+        ];
+    }
+
+    private function touch_campaign_worker_lease($campaignId, $workerToken)
+    {
+        $campaignId = (int) $campaignId;
+        $workerToken = trim((string) $workerToken);
+        if ($campaignId <= 0 || $workerToken === '' || !$this->column_exists($this->table, 'queue_worker_heartbeat_at')) {
+            return false;
+        }
+
+        $update = $this->filter_existing_columns($this->table, [
+            'queue_worker_heartbeat_at' => date('Y-m-d H:i:s'),
+            'dateupdated' => date('Y-m-d H:i:s'),
+        ]);
+        if (empty($update)) {
+            return false;
+        }
+
+        $this->db->where('id', $campaignId);
+        $this->db->where('queue_worker_token', $workerToken);
+        $this->db->update($this->table, $update);
+
+        return $this->db->affected_rows() >= 0;
+    }
+
+    private function release_campaign_worker_lease($campaignId, $workerToken)
+    {
+        $campaignId = (int) $campaignId;
+        $workerToken = trim((string) $workerToken);
+        if ($campaignId <= 0 || $workerToken === '' || !$this->column_exists($this->table, 'queue_worker_token')) {
+            return false;
+        }
+
+        $update = $this->filter_existing_columns($this->table, [
+            'queue_worker_token' => null,
+            'queue_worker_started_at' => null,
+            'queue_worker_heartbeat_at' => null,
+            'dateupdated' => date('Y-m-d H:i:s'),
+        ]);
+        if (empty($update)) {
+            return false;
+        }
+
+        $this->db->where('id', $campaignId);
+        $this->db->where('queue_worker_token', $workerToken);
+        $this->db->update($this->table, $update);
+
+        return $this->db->affected_rows() !== 0;
+    }
+
     private function update_recipient_status($recipientId, $status, array $data = [])
     {
         $data['status'] = $status;
@@ -1887,6 +2067,17 @@ class Marketing_campaigns_model extends App_Model
         }
 
         return 'cmp' . (int) $campaignId . '_' . $token;
+    }
+
+    private function generate_campaign_worker_token($campaignId)
+    {
+        try {
+            $token = bin2hex(random_bytes(16));
+        } catch (Throwable $exception) {
+            $token = substr(hash('sha256', uniqid((string) $campaignId, true) . ':' . microtime(true) . ':' . mt_rand()), 0, 32);
+        }
+
+        return 'wrk' . (int) $campaignId . '_' . $token;
     }
 
     private function generate_outbound_attempt_token($campaignId, $recipientId)
@@ -3250,7 +3441,7 @@ class Marketing_campaigns_model extends App_Model
     private function get_queue_schema_check()
     {
         $requirements = [
-            $this->table => ['id', 'status', 'delivery_channel'],
+            $this->table => ['id', 'status', 'delivery_channel', 'queue_worker_token', 'queue_worker_started_at', 'queue_worker_heartbeat_at'],
             $this->listsTable => ['id'],
             $this->recipientsTable => ['id', 'campaign_id', 'status', 'processing_token', 'outbound_attempt_token'],
             $this->eventsTable => ['event_type'],
@@ -3492,6 +3683,38 @@ class Marketing_campaigns_model extends App_Model
         $value = strtolower(trim((string) get_option($key)));
 
         return in_array($value, ['1', 'yes', 'true', 'on'], true);
+    }
+
+    private function clamp_send_batch_limit($limit)
+    {
+        $limit = (int) $limit;
+        if ($limit <= 0) {
+            return 1;
+        }
+
+        return min(self::MAX_SEND_BATCH_LIMIT, $limit);
+    }
+
+    private function campaign_worker_lease_is_stale(array $campaign)
+    {
+        $cutoffTimestamp = time() - self::QUEUE_WORKER_STALE_TIMEOUT_SECONDS;
+        $heartbeatAt = trim((string) ($campaign['queue_worker_heartbeat_at'] ?? ''));
+        if ($heartbeatAt !== '') {
+            $heartbeatTimestamp = strtotime($heartbeatAt);
+            if ($heartbeatTimestamp !== false) {
+                return $heartbeatTimestamp <= $cutoffTimestamp;
+            }
+        }
+
+        $startedAt = trim((string) ($campaign['queue_worker_started_at'] ?? ''));
+        if ($startedAt !== '') {
+            $startedTimestamp = strtotime($startedAt);
+            if ($startedTimestamp !== false) {
+                return $startedTimestamp <= $cutoffTimestamp;
+            }
+        }
+
+        return false;
     }
 
     private function ensure_recipient_click_metric_columns()

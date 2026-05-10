@@ -12,7 +12,7 @@ Requires at least: 3.2.*
 define('MARKETING_MODULE_NAME', 'marketing');
 define('MARKETING_MODULE_VERSION', '1.1.0');
 define('MARKETING_COMMERCIAL_PREPARE_THRESHOLD', 100);
-define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-10-safe-bootstrap-v7');
+define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-10-safe-bootstrap-v8');
 
 hooks()->add_action('admin_init', 'marketing_module_init_menu_items');
 hooks()->add_action('admin_init', 'marketing_register_permissions');

@@ -484,6 +484,99 @@ check_raw_event_logging_after_reconciliation_skip() {
     "payload=$payload_line | add_event=$add_event_line"
 }
 
+check_campaign_worker_lease_schema() {
+  local token_line started_line heartbeat_line bootstrap_line
+  token_line="$(first_fixed_match "'queue_worker_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  started_line="$(first_fixed_match "'queue_worker_started_at' => ['sql' => 'DATETIME NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  heartbeat_line="$(first_fixed_match "'queue_worker_heartbeat_at' => ['sql' => 'DATETIME NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  bootstrap_line="$(first_match 'MARKETING_SCHEMA_BOOTSTRAP_VERSION' "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$token_line" || -z "$started_line" || -z "$heartbeat_line" || -z "$bootstrap_line" ]]; then
+    fail \
+      "campaign worker lease fields are schema-safe and bootstrap-managed" \
+      "expected queue worker token/started/heartbeat columns in $SCHEMA_FILE and bootstrap version in $BOOTSTRAP_FILE; token=${token_line:-missing}; started=${started_line:-missing}; heartbeat=${heartbeat_line:-missing}; bootstrap=${bootstrap_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign worker lease fields are schema-safe and bootstrap-managed" \
+    "token=$token_line | started=$started_line | heartbeat=$heartbeat_line"
+}
+
+check_campaign_worker_lease_acquisition() {
+  local helper_line usage_line reservation_line
+  helper_line="$(first_match 'function[[:space:]]+acquire_campaign_worker_lease' "$CAMPAIGNS_FILE")"
+  usage_line="$(first_fixed_match '$campaignLease = $this->acquire_campaign_worker_lease((int) $campaign[' "$CAMPAIGNS_FILE")"
+  reservation_line="$(first_fixed_match '$reservation = $this->reserve_next_recipients($campaign[' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$usage_line" || -z "$reservation_line" ]]; then
+    fail \
+      "campaign worker lease is acquired before recipient reservation begins" \
+      "expected lease helper and acquisition before reservation in $CAMPAIGNS_FILE; helper=${helper_line:-missing}; usage=${usage_line:-missing}; reservation=${reservation_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign worker lease is acquired before recipient reservation begins" \
+    "helper=$helper_line | usage=$usage_line | reservation=$reservation_line"
+}
+
+check_campaign_worker_lease_release_guard() {
+  local release_helper_line owner_where_line finally_line
+  release_helper_line="$(first_match 'function[[:space:]]+release_campaign_worker_lease' "$CAMPAIGNS_FILE")"
+  owner_where_line="$(first_fixed_match "\$this->db->where('queue_worker_token', \$workerToken);" "$CAMPAIGNS_FILE")"
+  finally_line="$(first_fixed_match '$this->release_campaign_worker_lease((int) $campaign[' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$release_helper_line" || -z "$owner_where_line" || -z "$finally_line" ]]; then
+    fail \
+      "campaign worker lease release is owner-token guarded" \
+      "expected release helper, owner-token where clause, and finally release call in $CAMPAIGNS_FILE; helper=${release_helper_line:-missing}; where=${owner_where_line:-missing}; finally=${finally_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign worker lease release is owner-token guarded" \
+    "helper=$release_helper_line | where=$owner_where_line | finally=$finally_line"
+}
+
+check_campaign_worker_lease_stale_recovery() {
+  local timeout_line helper_line heartbeat_line warning_line
+  timeout_line="$(first_match 'QUEUE_WORKER_STALE_TIMEOUT_SECONDS' "$CAMPAIGNS_FILE")"
+  helper_line="$(first_match 'function[[:space:]]+campaign_worker_lease_is_stale' "$CAMPAIGNS_FILE")"
+  heartbeat_line="$(first_fixed_match 'queue_worker_heartbeat_at' "$CAMPAIGNS_FILE")"
+  warning_line="$(first_fixed_match 'campaign_worker_lease_takeover_failed' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$timeout_line" || -z "$helper_line" || -z "$heartbeat_line" || -z "$warning_line" ]]; then
+    fail \
+      "stale campaign worker leases are detected and recoverable" \
+      "expected worker stale timeout, stale helper, heartbeat tracking, and takeover handling in $CAMPAIGNS_FILE; timeout=${timeout_line:-missing}; helper=${helper_line:-missing}; heartbeat=${heartbeat_line:-missing}; warning=${warning_line:-missing}"
+    return
+  fi
+
+  pass \
+    "stale campaign worker leases are detected and recoverable" \
+    "timeout=$timeout_line | helper=$helper_line | heartbeat=$heartbeat_line"
+}
+
+check_batch_limit_clamp() {
+  local const_line helper_line warning_line rate_line
+  const_line="$(first_match 'MAX_SEND_BATCH_LIMIT' "$CAMPAIGNS_FILE")"
+  helper_line="$(first_match 'function[[:space:]]+clamp_send_batch_limit' "$CAMPAIGNS_FILE")"
+  warning_line="$(first_fixed_match 'batch_limit_clamped' "$CAMPAIGNS_FILE")"
+  rate_line="$(first_fixed_match "'per_cron_run' => \$this->clamp_send_batch_limit((int) get_option('marketing_send_per_cron_run'))" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$const_line" || -z "$helper_line" || -z "$warning_line" || -z "$rate_line" ]]; then
+    fail \
+      "queue batch size is clamped defensively before processing" \
+      "expected batch limit constant, clamp helper, clamp warning, and rate snapshot clamp in $CAMPAIGNS_FILE; const=${const_line:-missing}; helper=${helper_line:-missing}; warning=${warning_line:-missing}; rate=${rate_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue batch size is clamped defensively before processing" \
+    "const=$const_line | helper=$helper_line | warning=$warning_line"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_window install_skew ensure_window ensure_skew
   install_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$INSTALL_FILE")"
@@ -643,6 +736,11 @@ check_event_reconciliation_helper_exists
 check_event_terminal_state_precedence
 check_stale_outbound_identity_guard
 check_raw_event_logging_after_reconciliation_skip
+check_campaign_worker_lease_schema
+check_campaign_worker_lease_acquisition
+check_campaign_worker_lease_release_guard
+check_campaign_worker_lease_stale_recovery
+check_batch_limit_clamp
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks
