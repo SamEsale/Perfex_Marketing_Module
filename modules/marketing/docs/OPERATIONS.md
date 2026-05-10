@@ -28,6 +28,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 ## Safe Installation Flow
 
 1. Upload the `marketing` module ZIP through `Setup -> Modules`.
+   The ZIP archive root must be `marketing/`, and the installed module path must resolve to `modules/marketing/marketing.php`.
 2. Activate the module.
 3. Open `Marketing -> Settings`.
 4. Review `Schema Health`.
@@ -49,9 +50,10 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 
 ## Regression Validation
 
-- Run `bash modules/marketing/scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
+- From the standalone module root, run `bash scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
+- From that same standalone module root, run `bash scripts/verify_release_package.sh` before shipping any commercial ZIP.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 44 checks passed`.
+- Expected success result is `OK phase2-regressions 50 checks passed`.
 
 ## Uninstall Notes
 

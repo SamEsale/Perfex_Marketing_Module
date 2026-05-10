@@ -19,6 +19,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 ## Install
 
 1. Upload the `marketing` module ZIP through `Setup -> Modules`.
+   The ZIP archive root must be `marketing/`, and the installed module path must resolve to `modules/marketing/marketing.php`.
 2. Activate the module.
 3. Open `Marketing -> Settings`.
 4. Review `Schema Health`.
@@ -28,12 +29,16 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 6. Confirm the displayed SES / SNS, inbound email, and WhatsApp webhook URLs are correct for the environment.
 7. Confirm the module click redirect URL base `marketing/track/c/{token}` resolves publicly if email click tracking is enabled.
 8. Confirm the public unsubscribe URL base `marketing/unsubscribe/{token}` resolves publicly.
+9. Before shipping a commercial ZIP, validate it from the standalone module root with:
+   `bash scripts/verify_phase2_regressions.sh`
+   `bash scripts/verify_release_package.sh`
 
 ## Upgrade
 
 1. Back up the database and current module ZIP.
 2. Replace the module ZIP with the new package.
 3. Activate or reload the module.
+   Missing module-owned options are repaired idempotently during activation and admin bootstrap without overwriting existing saved values.
 4. Review `Schema Health`.
    Use `Repair Marketing Schema` only for idempotent reconciliation of missing module-owned schema.
    If duplicate historical tables are reported, resolve them manually on staging first; the module does not rename or drop them.

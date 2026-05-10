@@ -10,14 +10,20 @@ CAMPAIGNS_FILE="modules/marketing/models/Marketing_campaigns_model.php"
 DASHBOARD_FILE="modules/marketing/models/Marketing_dashboard_model.php"
 PUBLIC_LINKS_FILE="modules/marketing/models/Marketing_public_links_model.php"
 ROUTES_FILE="modules/marketing/config/routes.php"
+CSRF_FILE="modules/marketing/config/csrf_exclude_uris.php"
 SCHEMA_FILE="modules/marketing/libraries/Marketing_schema.php"
 BOOTSTRAP_FILE="modules/marketing/marketing.php"
 WEBHOOKS_FILE="modules/marketing/controllers/Webhooks.php"
 SES_SNS_FILE="modules/marketing/libraries/Marketing_ses_sns.php"
 INSTALL_FILE="modules/marketing/install.php"
+UNINSTALL_FILE="modules/marketing/uninstall.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
 DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
 MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
+README_FILE="modules/marketing/README.md"
+INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
+OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
+RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -790,23 +796,150 @@ check_reconciliation_skipped_metric_visible() {
     "code=$reconciliation_line | webhook=$webhook_metric_line | log=$raw_log_line"
 }
 
+check_release_validator_exists() {
+  local shebang_line source_only_line zip_root_line
+  if [[ ! -x "$RELEASE_VALIDATOR_FILE" ]]; then
+    fail \
+      "release package validation script exists and is executable" \
+      "expected executable validator at $RELEASE_VALIDATOR_FILE"
+    return
+  fi
+
+  shebang_line="$(first_fixed_match '#!/usr/bin/env bash' "$RELEASE_VALIDATOR_FILE")"
+  source_only_line="$(first_fixed_match '--source-only' "$RELEASE_VALIDATOR_FILE")"
+  zip_root_line="$(first_fixed_match 'all archive entries must live under marketing/' "$RELEASE_VALIDATOR_FILE")"
+
+  if [[ -z "$shebang_line" || -z "$source_only_line" || -z "$zip_root_line" ]]; then
+    fail \
+      "release package validation script exists and is executable" \
+      "expected bash shebang, source-only mode, and zip-root validation in $RELEASE_VALIDATOR_FILE; shebang=${shebang_line:-missing}; source_only=${source_only_line:-missing}; zip_root=${zip_root_line:-missing}"
+    return
+  fi
+
+  pass \
+    "release package validation script exists and is executable" \
+    "shebang=$shebang_line | source_only=$source_only_line | zip_root=$zip_root_line"
+}
+
+check_module_metadata_header() {
+  local module_line version_line requires_line constant_line
+  module_line="$(first_fixed_match 'Module Name: Marketing' "$BOOTSTRAP_FILE")"
+  version_line="$(first_match '^Version:' "$BOOTSTRAP_FILE")"
+  requires_line="$(first_match '^Requires at least:' "$BOOTSTRAP_FILE")"
+  constant_line="$(first_fixed_match "define('MARKETING_MODULE_NAME', 'marketing');" "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$module_line" || -z "$version_line" || -z "$requires_line" || -z "$constant_line" ]]; then
+    fail \
+      "module metadata header remains present" \
+      "expected module metadata header and module-name constant in $BOOTSTRAP_FILE; module=${module_line:-missing}; version=${version_line:-missing}; requires=${requires_line:-missing}; constant=${constant_line:-missing}"
+    return
+  fi
+
+  pass \
+    "module metadata header remains present" \
+    "module=$module_line | version=$version_line | requires=$requires_line"
+}
+
+check_module_lifecycle_hooks() {
+  local activation_line deactivation_line uninstall_line cron_line csrf_line
+  activation_line="$(first_fixed_match "register_activation_hook(MARKETING_MODULE_NAME, 'marketing_module_activation_hook');" "$BOOTSTRAP_FILE")"
+  deactivation_line="$(first_fixed_match "register_deactivation_hook(MARKETING_MODULE_NAME, 'marketing_module_deactivation_hook');" "$BOOTSTRAP_FILE")"
+  uninstall_line="$(first_fixed_match "register_uninstall_hook(MARKETING_MODULE_NAME, 'marketing_module_uninstall_hook');" "$BOOTSTRAP_FILE")"
+  cron_line="$(first_fixed_match "hooks()->add_action('after_cron_run', 'marketing_cron_process_queue');" "$BOOTSTRAP_FILE")"
+  csrf_line="$(first_fixed_match "hooks()->add_action('app_init', 'marketing_register_csrf_exclusions');" "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$activation_line" || -z "$deactivation_line" || -z "$uninstall_line" || -z "$cron_line" || -z "$csrf_line" ]]; then
+    fail \
+      "lifecycle hooks remain registered" \
+      "expected activation, deactivation, uninstall, cron, and csrf hooks in $BOOTSTRAP_FILE; activation=${activation_line:-missing}; deactivation=${deactivation_line:-missing}; uninstall=${uninstall_line:-missing}; cron=${cron_line:-missing}; csrf=${csrf_line:-missing}"
+    return
+  fi
+
+  pass \
+    "lifecycle hooks remain registered" \
+    "activation=$activation_line | cron=$cron_line | csrf=$csrf_line"
+}
+
+check_required_config_and_public_endpoints() {
+  local ses_route inbound_route whatsapp_route tracking_route unsubscribe_route csrf_ses_line csrf_inbound_line csrf_whatsapp_line
+  ses_route="$(first_fixed_match "\$route['marketing/webhooks/ses_sns'] = 'webhooks/ses_sns';" "$ROUTES_FILE")"
+  inbound_route="$(first_fixed_match "\$route['marketing/webhooks/inbound_email'] = 'webhooks/inbound_email';" "$ROUTES_FILE")"
+  whatsapp_route="$(first_fixed_match "\$route['marketing/webhooks/whatsapp'] = 'webhooks/whatsapp';" "$ROUTES_FILE")"
+  tracking_route="$(first_fixed_match "\$route['marketing/track/c/(:any)'] = 'track/c/\$1';" "$ROUTES_FILE")"
+  unsubscribe_route="$(first_fixed_match "\$route['marketing/unsubscribe/(:any)'] = 'subscriptions/unsubscribe/\$1';" "$ROUTES_FILE")"
+  csrf_ses_line="$(first_fixed_match "'marketing/webhooks/ses_sns'" "$CSRF_FILE")"
+  csrf_inbound_line="$(first_fixed_match "'marketing/webhooks/inbound_email'" "$CSRF_FILE")"
+  csrf_whatsapp_line="$(first_fixed_match "'marketing/webhooks/whatsapp'" "$CSRF_FILE")"
+
+  if [[ -z "$ses_route" || -z "$inbound_route" || -z "$whatsapp_route" || -z "$tracking_route" || -z "$unsubscribe_route" || -z "$csrf_ses_line" || -z "$csrf_inbound_line" || -z "$csrf_whatsapp_line" ]]; then
+    fail \
+      "required config files, public routes, and csrf exclusions remain present" \
+      "expected webhook/tracking/unsubscribe routes and csrf exclusions; ses=${ses_route:-missing}; inbound=${inbound_route:-missing}; whatsapp=${whatsapp_route:-missing}; track=${tracking_route:-missing}; unsubscribe=${unsubscribe_route:-missing}; csrf_ses=${csrf_ses_line:-missing}; csrf_inbound=${csrf_inbound_line:-missing}; csrf_whatsapp=${csrf_whatsapp_line:-missing}"
+    return
+  fi
+
+  pass \
+    "required config files, public routes, and csrf exclusions remain present" \
+    "ses=$ses_route | inbound=$inbound_route | whatsapp=$whatsapp_route"
+}
+
+check_option_repair_idempotence() {
+  local defaults_helper_line option_names_line ensure_helper_line install_usage_line uninstall_usage_line add_only_line
+  defaults_helper_line="$(first_match 'function[[:space:]]+marketing_get_default_options' "$BOOTSTRAP_FILE")"
+  option_names_line="$(first_match 'function[[:space:]]+marketing_get_option_names' "$BOOTSTRAP_FILE")"
+  ensure_helper_line="$(first_match 'function[[:space:]]+marketing_ensure_required_options' "$BOOTSTRAP_FILE")"
+  install_usage_line="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
+  uninstall_usage_line="$(first_fixed_match "marketing_get_option_names()" "$UNINSTALL_FILE")"
+  add_only_line="$(first_fixed_match "if (get_option(\$name) === false) {" "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$defaults_helper_line" || -z "$option_names_line" || -z "$ensure_helper_line" || -z "$install_usage_line" || -z "$uninstall_usage_line" || -z "$add_only_line" ]]; then
+    fail \
+      "install and bootstrap option repair remains idempotent" \
+      "expected centralized defaults, option-name helper, install/uninstall usage, and add-only repair semantics; defaults=${defaults_helper_line:-missing}; names=${option_names_line:-missing}; ensure=${ensure_helper_line:-missing}; install=${install_usage_line:-missing}; uninstall=${uninstall_usage_line:-missing}; add_only=${add_only_line:-missing}"
+    return
+  fi
+
+  pass \
+    "install and bootstrap option repair remains idempotent" \
+    "defaults=$defaults_helper_line | install=$install_usage_line | uninstall=$uninstall_usage_line"
+}
+
+check_release_forbidden_artifact_detection() {
+  local source_check_line zip_check_line readme_line install_line operations_line
+  source_check_line="$(first_fixed_match 'forbidden release artifacts detected in source tree' "$RELEASE_VALIDATOR_FILE")"
+  zip_check_line="$(first_fixed_match 'forbidden artifact present in release zip' "$RELEASE_VALIDATOR_FILE")"
+  readme_line="$(first_fixed_match 'bash scripts/verify_release_package.sh' "$README_FILE")"
+  install_line="$(first_fixed_match 'bash scripts/verify_release_package.sh' "$INSTALLATION_FILE")"
+  operations_line="$(first_fixed_match 'bash scripts/verify_release_package.sh' "$OPERATIONS_FILE")"
+
+  if [[ -z "$source_check_line" || -z "$zip_check_line" || -z "$readme_line" || -z "$install_line" || -z "$operations_line" ]]; then
+    fail \
+      "forbidden release artifacts are detectable and release validation is documented" \
+      "expected source/zip artifact detection in $RELEASE_VALIDATOR_FILE and validator command in docs; source=${source_check_line:-missing}; zip=${zip_check_line:-missing}; readme=${readme_line:-missing}; installation=${install_line:-missing}; operations=${operations_line:-missing}"
+    return
+  fi
+
+  pass \
+    "forbidden release artifacts are detectable and release validation is documented" \
+    "source=$source_check_line | zip=$zip_check_line | readme=$readme_line"
+}
+
 check_ses_sns_replay_window_defaults() {
-  local install_window install_skew ensure_window ensure_skew
-  install_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$INSTALL_FILE")"
-  install_skew="$(first_fixed_match "'marketing_ses_sns_future_skew_seconds' => '300'" "$INSTALL_FILE")"
+  local install_helper ensure_window ensure_skew
+  install_helper="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
   ensure_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$BOOTSTRAP_FILE")"
   ensure_skew="$(first_fixed_match "'marketing_ses_sns_future_skew_seconds' => '300'" "$BOOTSTRAP_FILE")"
 
-  if [[ -z "$install_window" || -z "$install_skew" || -z "$ensure_window" || -z "$ensure_skew" ]]; then
+  if [[ -z "$install_helper" || -z "$ensure_window" || -z "$ensure_skew" ]]; then
     fail \
       "SES SNS replay freshness defaults are seeded safely without overwriting existing values" \
-      "expected replay window and future skew defaults in $INSTALL_FILE and $BOOTSTRAP_FILE; install_window=${install_window:-missing}; install_skew=${install_skew:-missing}; ensure_window=${ensure_window:-missing}; ensure_skew=${ensure_skew:-missing}"
+      "expected centralized install defaults helper in $INSTALL_FILE and replay/future-skew defaults in $BOOTSTRAP_FILE; install_helper=${install_helper:-missing}; ensure_window=${ensure_window:-missing}; ensure_skew=${ensure_skew:-missing}"
     return
   fi
 
   pass \
     "SES SNS replay freshness defaults are seeded safely without overwriting existing values" \
-    "install_window=$install_window | ensure_window=$ensure_window"
+    "install_helper=$install_helper | ensure_window=$ensure_window | ensure_skew=$ensure_skew"
 }
 
 check_ses_sns_timestamp_freshness_validation() {
@@ -894,12 +1027,12 @@ check_ses_sns_verifier_strictness() {
   topic_line="$(first_fixed_match "topic_arn_matches" "$SES_SNS_FILE")"
   cert_region_line="$(first_fixed_match "signing_cert_url_matches_region" "$SES_SNS_FILE")"
   confirm_region_line="$(first_fixed_match "is_valid_sns_action_url(\$subscribeUrl, \$expectedRegion)" "$SES_SNS_FILE")"
-  default_line="$(first_fixed_match "'marketing_ses_verify_signature' => '1'" "$INSTALL_FILE")"
+  default_line="$(first_fixed_match "'marketing_ses_verify_signature' => '1'" "$BOOTSTRAP_FILE")"
 
   if [[ -z "$version_line" || -z "$topic_line" || -z "$cert_region_line" || -z "$confirm_region_line" || -z "$default_line" ]]; then
     fail \
       "SES SNS verifier checks signature version, region, topic ARN, and safe install defaults" \
-      "expected strict verification hooks in $SES_SNS_FILE and default enabled option in $INSTALL_FILE; version=${version_line:-missing}; topic=${topic_line:-missing}; cert_region=${cert_region_line:-missing}; confirm_region=${confirm_region_line:-missing}; default=${default_line:-missing}"
+      "expected strict verification hooks in $SES_SNS_FILE and default enabled option in $BOOTSTRAP_FILE; version=${version_line:-missing}; topic=${topic_line:-missing}; cert_region=${cert_region_line:-missing}; confirm_region=${confirm_region_line:-missing}; default=${default_line:-missing}"
     return
   fi
 
@@ -966,6 +1099,12 @@ check_provider_throttle_not_bounce
 check_normalized_failure_codes_in_telemetry
 check_dashboard_failure_metric_surface
 check_reconciliation_skipped_metric_visible
+check_release_validator_exists
+check_module_metadata_header
+check_module_lifecycle_hooks
+check_required_config_and_public_endpoints
+check_option_repair_idempotence
+check_release_forbidden_artifact_detection
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks

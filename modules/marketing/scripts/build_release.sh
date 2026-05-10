@@ -6,6 +6,7 @@ MODULE_NAME="marketing"
 RELEASE_DIR="$MODULE_DIR/release"
 TMP_DIR="$(mktemp -d)"
 STAGE_DIR="$TMP_DIR/$MODULE_NAME"
+VALIDATOR_SCRIPT="$MODULE_DIR/scripts/verify_release_package.sh"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -16,6 +17,11 @@ VERSION="$(sed -n 's/^Version:[[:space:]]*//p' "$MODULE_DIR/marketing.php" | hea
 if [[ -z "$VERSION" ]]; then
   echo "Unable to determine module version from marketing.php" >&2
   exit 1
+fi
+
+if [[ -x "$VALIDATOR_SCRIPT" ]]; then
+  echo "Validating release source tree..."
+  bash "$VALIDATOR_SCRIPT" --source-only
 fi
 
 echo "Linting PHP files..."
@@ -45,9 +51,16 @@ rsync -a "$MODULE_DIR/" "$STAGE_DIR/" \
   --exclude ".git" \
   --exclude ".DS_Store" \
   --exclude "__MACOSX" \
+  --exclude ".idea" \
+  --exclude ".vscode" \
+  --exclude ".env" \
+  --exclude ".env.*" \
   --exclude "*.bak" \
   --exclude "*~" \
   --exclude "node_modules" \
+  --exclude "tests" \
+  --exclude "tmp" \
+  --exclude "cache" \
   --exclude "release" \
   --exclude "*.zip" \
   --exclude "*/.DS_Store"
@@ -56,5 +69,10 @@ rsync -a "$MODULE_DIR/" "$STAGE_DIR/" \
   cd "$TMP_DIR"
   zip -rq "$RELEASE_DIR/${MODULE_NAME}_v${VERSION}.zip" "$MODULE_NAME"
 )
+
+if [[ -x "$VALIDATOR_SCRIPT" ]]; then
+  echo "Validating generated release ZIP..."
+  bash "$VALIDATOR_SCRIPT" "$RELEASE_DIR/${MODULE_NAME}_v${VERSION}.zip"
+fi
 
 echo "Created $RELEASE_DIR/${MODULE_NAME}_v${VERSION}.zip"

@@ -47,7 +47,8 @@ This project is a module for **Perfex CRM**. It is not standalone software and m
 
 ## Install
 
-1. Build or obtain a ZIP that contains the `marketing/` module root.
+1. Build or obtain a ZIP whose archive root is `marketing/`.
+   After upload, the module must install to `modules/marketing/marketing.php` inside the Perfex CRM working tree.
 2. In Perfex CRM, open `Setup -> Modules`.
 3. Upload the ZIP and activate `Marketing`.
 4. Open `Marketing -> Settings`.
@@ -87,10 +88,18 @@ Configuration order:
 Use the module-local packaging script:
 
 ```bash
-modules/marketing/scripts/build_release.sh
+bash scripts/build_release.sh
 ```
 
 The script lint-checks PHP and JS, scans for common debug artifacts, and creates `release/marketing_vX.Y.Z.zip` without including the full Perfex root.
+The release ZIP root remains `marketing/`, so the uploaded package resolves to `modules/marketing/marketing.php` after installation.
+
+Validate the package before shipping:
+
+```bash
+bash scripts/verify_phase2_regressions.sh
+bash scripts/verify_release_package.sh
+```
 
 ## Documentation
 
