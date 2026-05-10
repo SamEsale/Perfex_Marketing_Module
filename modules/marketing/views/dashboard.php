@@ -160,12 +160,19 @@
                         </div>
                         <?php
                         $queueDiagnostics = isset($queue_diagnostics) && is_array($queue_diagnostics) ? $queue_diagnostics : [];
+                        $queueRateLimit = isset($queueDiagnostics['rate_limit_snapshot']) && is_array($queueDiagnostics['rate_limit_snapshot'])
+                            ? $queueDiagnostics['rate_limit_snapshot']
+                            : [];
                         $recentQueueWarnings = isset($queueDiagnostics['recent_warning_counts']) && is_array($queueDiagnostics['recent_warning_counts'])
                             ? $queueDiagnostics['recent_warning_counts']
                             : [];
                         $recentFailureMetrics = isset($queueDiagnostics['recent_failure_metric_counts']) && is_array($queueDiagnostics['recent_failure_metric_counts'])
                             ? $queueDiagnostics['recent_failure_metric_counts']
                             : [];
+                        $recentOperatorActions = isset($queueDiagnostics['recent_operator_actions']) && is_array($queueDiagnostics['recent_operator_actions'])
+                            ? $queueDiagnostics['recent_operator_actions']
+                            : [];
+                        $canManageQueue = !empty($can_manage_queue);
                         ?>
                         <div class="row tw-mt-15">
                             <div class="col-md-12">
@@ -177,6 +184,11 @@
                                                 <p class="text-muted mtop10">Live worker, processing, and recovery telemetry from existing queue and event records.</p>
                                             </div>
                                             <div class="col-md-4 text-right">
+                                                <?php if (!empty($queueDiagnostics['queue_paused'])) { ?>
+                                                    <span class="label label-warning">Queue Paused</span>
+                                                <?php } else { ?>
+                                                    <span class="label label-success">Queue Active</span>
+                                                <?php } ?>
                                                 <?php if (!empty($queueDiagnostics['schema_ready'])) { ?>
                                                     <span class="label label-success">Schema Ready</span>
                                                 <?php } else { ?>
@@ -217,11 +229,44 @@
                                             </div>
                                             <div class="col-md-2">
                                                 <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Hourly Remaining</span>
+                                                    <h3 class="tw-mt-10"><?= html_escape($queueRateLimit['hourly_remaining'] === null ? '∞' : (string) (int) $queueRateLimit['hourly_remaining']); ?></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
+                                                    <span class="text-muted text-uppercase small">Daily Remaining</span>
+                                                    <h3 class="tw-mt-10"><?= html_escape($queueRateLimit['daily_remaining'] === null ? '∞' : (string) (int) $queueRateLimit['daily_remaining']); ?></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
                                                     <span class="text-muted text-uppercase small">Failed</span>
                                                     <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_failed'] ?? 0); ?></h3>
                                                 </div>
                                             </div>
                                         </div>
+                                        <?php if ($canManageQueue) { ?>
+                                            <div class="mtop15">
+                                                <h5 class="bold no-margin">Operator Controls</h5>
+                                                <div class="marketing-campaign-actions mtop10">
+                                                    <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
+                                                        <input type="hidden" name="queue_action" value="<?= !empty($queueDiagnostics['queue_paused']) ? 'resume' : 'pause'; ?>">
+                                                        <button type="submit" class="btn btn-<?= !empty($queueDiagnostics['queue_paused']) ? 'success' : 'warning'; ?>">
+                                                            <?= !empty($queueDiagnostics['queue_paused']) ? 'Resume Queue' : 'Pause Queue'; ?>
+                                                        </button>
+                                                    <?= form_close(); ?>
+                                                    <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
+                                                        <input type="hidden" name="queue_action" value="recover_stale_worker_leases">
+                                                        <button type="submit" class="btn btn-default">Recover Stale Worker Leases</button>
+                                                    <?= form_close(); ?>
+                                                    <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
+                                                        <input type="hidden" name="queue_action" value="recover_stale_processing">
+                                                        <button type="submit" class="btn btn-default">Recover Stale Processing</button>
+                                                    <?= form_close(); ?>
+                                                </div>
+                                            </div>
+                                        <?php } ?>
                                         <div class="mtop15">
                                             <p class="text-muted no-margin">
                                                 Recent recovered rows: <strong><?= (int) ($queueDiagnostics['recent_recovered_total'] ?? 0); ?></strong>
@@ -258,6 +303,33 @@
                                                             <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
                                                         </span>
                                                     <?php } ?>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                        <div class="mtop15">
+                                            <h5 class="bold no-margin">Recent Operator Actions</h5>
+                                            <?php if (empty($recentOperatorActions)) { ?>
+                                                <p class="text-muted mtop10 no-margin">No recent manual queue operator actions were found.</p>
+                                            <?php } else { ?>
+                                                <div class="table-responsive mtop10">
+                                                    <table class="table table-striped">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Action</th>
+                                                                <th>Staff ID</th>
+                                                                <th>When</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php foreach ($recentOperatorActions as $operatorAction) { ?>
+                                                                <tr>
+                                                                    <td><?= html_escape(ucwords(str_replace('_', ' ', (string) ($operatorAction['action'] ?? '')))); ?></td>
+                                                                    <td><?= (int) ($operatorAction['performed_by'] ?? 0); ?></td>
+                                                                    <td><?= !empty($operatorAction['event_at']) ? html_escape((string) $operatorAction['event_at']) : '-'; ?></td>
+                                                                </tr>
+                                                            <?php } ?>
+                                                        </tbody>
+                                                    </table>
                                                 </div>
                                             <?php } ?>
                                         </div>

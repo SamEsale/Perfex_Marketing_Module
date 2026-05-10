@@ -20,6 +20,7 @@ UNINSTALL_FILE="modules/marketing/uninstall.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
 DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
 MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
+CAMPAIGNS_CONTROLLER_FILE="modules/marketing/controllers/Campaigns.php"
 README_FILE="modules/marketing/README.md"
 INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
@@ -796,6 +797,121 @@ check_reconciliation_skipped_metric_visible() {
     "code=$reconciliation_line | webhook=$webhook_metric_line | log=$raw_log_line"
 }
 
+check_queue_pause_option_seeded() {
+  local default_line install_helper line
+  default_line="$(first_fixed_match "'marketing_queue_paused' => '0'" "$BOOTSTRAP_FILE")"
+  install_helper="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
+  line="$(first_fixed_match "if (get_option(\$name) === false) {" "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$default_line" || -z "$install_helper" || -z "$line" ]]; then
+    fail \
+      "queue pause option is seeded add-only and idempotently" \
+      "expected queue pause default in $BOOTSTRAP_FILE plus centralized install helper and add-only repair semantics; default=${default_line:-missing}; install=${install_helper:-missing}; add_only=${line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue pause option is seeded add-only and idempotently" \
+    "default=$default_line | install=$install_helper | add_only=$line"
+}
+
+check_queue_pause_before_send() {
+  local helper_line guard_line warning_line controller_line
+  helper_line="$(first_match 'function[[:space:]]+is_queue_paused' "$CAMPAIGNS_FILE")"
+  guard_line="$(first_fixed_match 'if ($this->is_queue_paused()) {' "$CAMPAIGNS_FILE")"
+  warning_line="$(first_fixed_match "'queue_paused'" "$CAMPAIGNS_FILE")"
+  controller_line="$(first_fixed_match "Campaign queue is paused. Resume the queue before sending." "$CAMPAIGNS_CONTROLLER_FILE")"
+
+  if [[ -z "$helper_line" || -z "$guard_line" || -z "$warning_line" || -z "$controller_line" ]]; then
+    fail \
+      "queue processing checks pause before reservation or send work begins" \
+      "expected queue pause helper and guard in $CAMPAIGNS_FILE plus deterministic admin warning in $CAMPAIGNS_CONTROLLER_FILE; helper=${helper_line:-missing}; guard=${guard_line:-missing}; warning=${warning_line:-missing}; controller=${controller_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue processing checks pause before reservation or send work begins" \
+    "helper=$helper_line | guard=$guard_line | warning=$warning_line"
+}
+
+check_queue_operator_actions_guarded() {
+  local method_line permission_line post_line form_line
+  method_line="$(first_match 'function[[:space:]]+queue_control' "$MARKETING_CONTROLLER_FILE")"
+  permission_line="$(first_fixed_match "staff_cant('settings', 'marketing')" "$MARKETING_CONTROLLER_FILE")"
+  post_line="$(first_fixed_match "if (!\$this->input->post()) {" "$MARKETING_CONTROLLER_FILE")"
+  form_line="$(first_fixed_match "form_open(admin_url('marketing/queue_control')" "$DASHBOARD_VIEW_FILE")"
+
+  if [[ -z "$method_line" || -z "$permission_line" || -z "$post_line" || -z "$form_line" ]]; then
+    fail \
+      "pause and resume admin actions use permission and POST-safe patterns" \
+      "expected queue_control() with settings permission, POST guard, and dashboard POST forms; method=${method_line:-missing}; permission=${permission_line:-missing}; post=${post_line:-missing}; form=${form_line:-missing}"
+    return
+  fi
+
+  pass \
+    "pause and resume admin actions use permission and POST-safe patterns" \
+    "method=$method_line | permission=$permission_line | post=$post_line"
+}
+
+check_stale_recovery_operator_guard() {
+  local worker_helper recipient_helper worker_action_line recipient_action_line
+  worker_helper="$(first_match 'function[[:space:]]+recover_stale_campaign_worker_leases' "$CAMPAIGNS_FILE")"
+  recipient_helper="$(first_match 'function[[:space:]]+recover_stale_recipient_processing' "$CAMPAIGNS_FILE")"
+  worker_action_line="$(first_fixed_match 'recover_stale_worker_leases' "$MARKETING_CONTROLLER_FILE")"
+  recipient_action_line="$(first_fixed_match 'recover_stale_processing' "$MARKETING_CONTROLLER_FILE")"
+
+  if [[ -z "$worker_helper" || -z "$recipient_helper" || -z "$worker_action_line" || -z "$recipient_action_line" ]]; then
+    fail \
+      "stale recovery admin actions are guarded and non-destructive" \
+      "expected stale-only recovery helpers in $CAMPAIGNS_FILE and explicit queue control actions in $MARKETING_CONTROLLER_FILE; worker_helper=${worker_helper:-missing}; recipient_helper=${recipient_helper:-missing}; worker_action=${worker_action_line:-missing}; recipient_action=${recipient_action_line:-missing}"
+    return
+  fi
+
+  pass \
+    "stale recovery admin actions are guarded and non-destructive" \
+    "worker_helper=$worker_helper | recipient_helper=$recipient_helper | worker_action=$worker_action_line"
+}
+
+check_dashboard_operator_status_surface() {
+  local paused_line controls_line actions_line rate_line
+  paused_line="$(first_fixed_match 'Queue Paused' "$DASHBOARD_VIEW_FILE")"
+  controls_line="$(first_fixed_match 'Operator Controls' "$DASHBOARD_VIEW_FILE")"
+  actions_line="$(first_fixed_match 'Recent Operator Actions' "$DASHBOARD_VIEW_FILE")"
+  rate_line="$(first_fixed_match 'Hourly Remaining' "$DASHBOARD_VIEW_FILE")"
+
+  if [[ -z "$paused_line" || -z "$controls_line" || -z "$actions_line" || -z "$rate_line" ]]; then
+    fail \
+      "dashboard surfaces paused, stale, and operator status compactly" \
+      "expected queue paused label, operator controls, operator audit list, and rate-limit status in $DASHBOARD_VIEW_FILE; paused=${paused_line:-missing}; controls=${controls_line:-missing}; actions=${actions_line:-missing}; rate=${rate_line:-missing}"
+    return
+  fi
+
+  pass \
+    "dashboard surfaces paused, stale, and operator status compactly" \
+    "paused=$paused_line | controls=$controls_line | actions=$actions_line"
+}
+
+check_queue_operator_telemetry_aliases() {
+  local paused_line overlap_line rate_line worker_line recipient_line throttle_line
+  paused_line="$(first_fixed_match "'queue_paused'" "$CAMPAIGNS_FILE")"
+  overlap_line="$(first_fixed_match "'cron_overlap_detected'" "$CAMPAIGNS_FILE")"
+  rate_line="$(first_fixed_match "'rate_limit_exhausted'" "$CAMPAIGNS_FILE")"
+  worker_line="$(first_fixed_match "'stale_worker_recovered'" "$CAMPAIGNS_FILE")"
+  recipient_line="$(first_fixed_match "'stale_recipient_processing_recovered'" "$CAMPAIGNS_FILE")"
+  throttle_line="$(first_fixed_match "'provider_throttle_detected'" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$paused_line" || -z "$overlap_line" || -z "$rate_line" || -z "$worker_line" || -z "$recipient_line" || -z "$throttle_line" ]]; then
+    fail \
+      "queue pause, overlap, stale recovery, rate limit, and provider throttle telemetry warnings are propagated" \
+      "expected queue/operator telemetry aliases in $CAMPAIGNS_FILE; paused=${paused_line:-missing}; overlap=${overlap_line:-missing}; rate=${rate_line:-missing}; worker=${worker_line:-missing}; recipient=${recipient_line:-missing}; throttle=${throttle_line:-missing}"
+    return
+  fi
+
+  pass \
+    "queue pause, overlap, stale recovery, rate limit, and provider throttle telemetry warnings are propagated" \
+    "paused=$paused_line | overlap=$overlap_line | rate=$rate_line"
+}
+
 check_release_validator_exists() {
   local shebang_line source_only_line zip_root_line
   if [[ ! -x "$RELEASE_VALIDATOR_FILE" ]]; then
@@ -1099,6 +1215,12 @@ check_provider_throttle_not_bounce
 check_normalized_failure_codes_in_telemetry
 check_dashboard_failure_metric_surface
 check_reconciliation_skipped_metric_visible
+check_queue_pause_option_seeded
+check_queue_pause_before_send
+check_queue_operator_actions_guarded
+check_stale_recovery_operator_guard
+check_dashboard_operator_status_surface
+check_queue_operator_telemetry_aliases
 check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks

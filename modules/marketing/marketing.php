@@ -213,6 +213,7 @@ function marketing_get_default_options()
 {
     return [
         'marketing_send_enabled' => '0',
+        'marketing_queue_paused' => '0',
         'marketing_send_per_cron_run' => '20',
         'marketing_send_sleep_ms' => '0',
         'marketing_send_hourly_cap' => '0',

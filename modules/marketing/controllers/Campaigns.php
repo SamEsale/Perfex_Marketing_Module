@@ -58,6 +58,7 @@ class Campaigns extends AdminController
                 redirect(admin_url('marketing/campaigns/show/' . $campaignId));
             }
 
+            $this->marketing_campaigns_model->record_operator_action('manual_prepare_recipients_requested', [], $campaignId, get_staff_user_id());
             $summary = $this->marketing_campaigns_model->prepare_recipients($campaignId);
 
             if (is_array($summary) && !empty($summary['license_blocked'])) {
@@ -120,6 +121,12 @@ class Campaigns extends AdminController
                 redirect(admin_url('marketing/campaigns/show/' . $campaignId));
             }
 
+            if ($this->marketing_campaigns_model->is_queue_paused()) {
+                set_alert('warning', 'Campaign queue is paused. Resume the queue before sending.');
+                redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+            }
+
+            $this->marketing_campaigns_model->record_operator_action('manual_process_queue_requested', [], $campaignId, get_staff_user_id());
             $summary = $this->marketing_campaigns_model->process_due_recipients(null, $campaignId);
 
             if (is_array($summary) && (int) ($summary['processed'] ?? 0) === 0) {
@@ -159,6 +166,7 @@ class Campaigns extends AdminController
                 access_denied('marketing');
             }
 
+            $this->marketing_campaigns_model->record_operator_action('manual_reset_campaign_requested', [], $campaignId, get_staff_user_id());
             if ($campaign['status'] === 'sending'
                 && $this->marketing_campaigns_model->count_recipients_by_status($campaignId, 'processing') === 0) {
                 $this->marketing_campaigns_model->update($campaignId, [
@@ -191,6 +199,7 @@ class Campaigns extends AdminController
                 access_denied('marketing');
             }
 
+            $this->marketing_campaigns_model->record_operator_action('manual_retry_failed_requested', [], $campaignId, get_staff_user_id());
             $result = $this->marketing_campaigns_model->retry_failed_recipients($campaignId);
 
             if ($result === false) {
@@ -728,6 +737,15 @@ class Campaigns extends AdminController
             redirect(admin_url('marketing/campaigns'));
         }
 
+        if ($this->marketing_campaigns_model->is_queue_paused()) {
+            set_alert('warning', 'Campaign queue is paused. Resume the queue before sending.');
+            if ($campaign !== null) {
+                redirect(admin_url('marketing/campaigns/show/' . $campaign['id']));
+            }
+
+            redirect(admin_url('marketing/campaigns'));
+        }
+
         if ($campaign !== null) {
             $queuedRecipients = $this->marketing_campaigns_model->count_recipients_by_status($campaign['id'], 'queued');
             if ($queuedRecipients <= 0) {
@@ -752,6 +770,7 @@ class Campaigns extends AdminController
             }
         }
 
+        $this->marketing_campaigns_model->record_operator_action('manual_process_queue_requested', [], $id !== null ? (int) $id : null, get_staff_user_id());
         $summary = $this->marketing_campaigns_model->process_due_recipients($limit, $id);
 
         if ((int) $summary['processed'] > 0) {
@@ -1286,11 +1305,17 @@ class Campaigns extends AdminController
                 case 'send_disabled':
                     $messages[] = _l('marketing_campaign_send_disabled_exact');
                     break;
+                case 'queue_paused':
+                    $messages[] = 'Campaign queue is paused.';
+                    break;
                 case 'hourly_cap_reached':
                     $messages[] = _l('marketing_campaign_hourly_cap_reached');
                     break;
                 case 'daily_cap_reached':
                     $messages[] = _l('marketing_campaign_daily_cap_reached');
+                    break;
+                case 'rate_limit_exhausted':
+                    $messages[] = 'Campaign sending is paused because the configured rate limit is exhausted.';
                     break;
                 case 'license_inactive':
                     $messages[] = _l('marketing_license_inactive_alert');
@@ -1306,6 +1331,16 @@ class Campaigns extends AdminController
                     break;
                 case 'campaign_not_found':
                     $messages[] = _l('marketing_campaign_not_found');
+                    break;
+                case 'cron_overlap_detected':
+                case 'campaign_worker_locked':
+                    $messages[] = 'Another queue worker is already processing this campaign.';
+                    break;
+                case 'stale_worker_recovered':
+                    $messages[] = 'A stale campaign worker lease was recovered safely.';
+                    break;
+                case 'stale_recipient_processing_recovered':
+                    $messages[] = 'Stale recipient processing rows were recovered safely.';
                     break;
                 default:
                     if (strpos($warning, 'campaign_') === 0 && substr($warning, -10) === '_not_ready') {
@@ -1327,6 +1362,8 @@ class Campaigns extends AdminController
         foreach ($warnings as $warning) {
             if ($warning === 'send_disabled') {
                 $messages[] = 'Campaign delivery is disabled in Marketing Settings.';
+            } elseif ($warning === 'queue_paused') {
+                $messages[] = 'Campaign queue is paused. Resume the queue before sending.';
             } elseif ($warning === 'campaign_not_found') {
                 $messages[] = 'Campaign not found.';
             } elseif ($warning === 'campaign_not_processable') {
@@ -1339,6 +1376,14 @@ class Campaigns extends AdminController
                 $messages[] = 'Hourly sending cap reached.';
             } elseif ($warning === 'daily_cap_reached') {
                 $messages[] = 'Daily sending cap reached.';
+            } elseif ($warning === 'rate_limit_exhausted') {
+                $messages[] = 'Campaign sending is paused because the configured rate limit is exhausted.';
+            } elseif ($warning === 'cron_overlap_detected' || $warning === 'campaign_worker_locked') {
+                $messages[] = 'Another queue worker is already processing this campaign.';
+            } elseif ($warning === 'stale_worker_recovered') {
+                $messages[] = 'A stale campaign worker lease was recovered safely.';
+            } elseif ($warning === 'stale_recipient_processing_recovered') {
+                $messages[] = 'Stale recipient processing rows were recovered safely.';
             } elseif (strpos($warning, 'campaign_') === 0 && substr($warning, -10) === '_not_ready') {
                 $messages[] = 'Campaign is not ready to send. Check subject, HTML content, unsubscribe link, image URLs, SMTP settings, and audience.';
             } elseif (strpos($warning, 'campaign_') === 0 && substr($warning, -20) === '_no_queued_recipients') {
