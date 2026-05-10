@@ -1234,6 +1234,8 @@ class Webhooks extends CI_Controller
         return [
             'topic_arn' => trim((string) get_option('marketing_ses_sns_topic_arn')),
             'region' => strtolower(trim((string) get_option('marketing_ses_region'))),
+            'replay_window_seconds' => max(1, (int) get_option('marketing_ses_sns_replay_window_seconds')),
+            'future_skew_seconds' => max(0, (int) get_option('marketing_ses_sns_future_skew_seconds')),
         ];
     }
 

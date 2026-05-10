@@ -54,6 +54,8 @@ class Marketing_ses_sns
         ];
         $expectedTopicArn = trim($this->scalar_string($options['topic_arn'] ?? '', ''));
         $expectedRegion = strtolower(trim($this->scalar_string($options['region'] ?? '', '')));
+        $replayWindowSeconds = max(1, (int) ($options['replay_window_seconds'] ?? 900));
+        $futureSkewSeconds = max(0, (int) ($options['future_skew_seconds'] ?? 300));
 
         $parsed = $this->parse_payload($payload);
         if (!$parsed['valid']) {
@@ -104,6 +106,13 @@ class Marketing_ses_sns
 
         if ($expectedTopicArn !== '' && !$this->topic_arn_matches($message['TopicArn'] ?? '', $expectedTopicArn)) {
             $result['error'] = 'SNS TopicArn does not match the configured SES SNS topic.';
+
+            return $result;
+        }
+
+        $timestampValidation = $this->validate_timestamp_freshness($message['Timestamp'] ?? null, $replayWindowSeconds, $futureSkewSeconds);
+        if (!$timestampValidation['valid']) {
+            $result['error'] = $timestampValidation['error'];
 
             return $result;
         }
@@ -281,6 +290,56 @@ class Marketing_ses_sns
         }
 
         return hash_equals($expectedTopicArn, $actualTopicArn);
+    }
+
+    protected function validate_timestamp_freshness($timestamp, $replayWindowSeconds, $futureSkewSeconds)
+    {
+        $parsedTimestamp = $this->parse_sns_timestamp($timestamp);
+        if ($parsedTimestamp === false) {
+            return [
+                'valid' => false,
+                'error' => 'SNS Timestamp is missing or malformed.',
+            ];
+        }
+
+        $now = time();
+        if ($parsedTimestamp < ($now - max(1, (int) $replayWindowSeconds))) {
+            return [
+                'valid' => false,
+                'error' => 'SNS Timestamp is outside the allowed replay window.',
+            ];
+        }
+
+        if ($parsedTimestamp > ($now + max(0, (int) $futureSkewSeconds))) {
+            return [
+                'valid' => false,
+                'error' => 'SNS Timestamp is too far in the future.',
+            ];
+        }
+
+        return [
+            'valid' => true,
+            'error' => null,
+        ];
+    }
+
+    protected function parse_sns_timestamp($timestamp)
+    {
+        if (is_array($timestamp) || is_object($timestamp)) {
+            return false;
+        }
+
+        $timestamp = trim((string) $timestamp);
+        if ($timestamp === '') {
+            return false;
+        }
+
+        $parsedTimestamp = strtotime($timestamp);
+        if ($parsedTimestamp === false) {
+            return false;
+        }
+
+        return (int) $parsedTimestamp;
     }
 
     protected function is_valid_sns_action_url($url, $expectedRegion = '')

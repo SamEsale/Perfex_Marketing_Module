@@ -215,6 +215,8 @@ function marketing_ensure_required_options()
         'marketing_ses_verify_signature' => '1',
         'marketing_ses_sns_topic_arn' => '',
         'marketing_ses_sns_signing_mode' => 'strict',
+        'marketing_ses_sns_replay_window_seconds' => '900',
+        'marketing_ses_sns_future_skew_seconds' => '300',
         'marketing_ses_region' => '',
         'marketing_license_key_protected' => '',
         'marketing_license_response_hmac_secret' => '',

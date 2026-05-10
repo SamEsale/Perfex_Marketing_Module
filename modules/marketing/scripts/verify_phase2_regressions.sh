@@ -413,6 +413,63 @@ check_outbound_attempt_assignment_and_retry_reset() {
     "assignment=$assignment_line | retry=$retry_clear_line | mailer=$mailer_token_line"
 }
 
+check_ses_sns_replay_window_defaults() {
+  local install_window install_skew ensure_window ensure_skew
+  install_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$INSTALL_FILE")"
+  install_skew="$(first_fixed_match "'marketing_ses_sns_future_skew_seconds' => '300'" "$INSTALL_FILE")"
+  ensure_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$BOOTSTRAP_FILE")"
+  ensure_skew="$(first_fixed_match "'marketing_ses_sns_future_skew_seconds' => '300'" "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$install_window" || -z "$install_skew" || -z "$ensure_window" || -z "$ensure_skew" ]]; then
+    fail \
+      "SES SNS replay freshness defaults are seeded safely without overwriting existing values" \
+      "expected replay window and future skew defaults in $INSTALL_FILE and $BOOTSTRAP_FILE; install_window=${install_window:-missing}; install_skew=${install_skew:-missing}; ensure_window=${ensure_window:-missing}; ensure_skew=${ensure_skew:-missing}"
+    return
+  fi
+
+  pass \
+    "SES SNS replay freshness defaults are seeded safely without overwriting existing values" \
+    "install_window=$install_window | ensure_window=$ensure_window"
+}
+
+check_ses_sns_timestamp_freshness_validation() {
+  local helper_line parse_line malformed_line stale_line future_line
+  helper_line="$(first_match 'function[[:space:]]+validate_timestamp_freshness' "$SES_SNS_FILE")"
+  parse_line="$(first_match 'function[[:space:]]+parse_sns_timestamp' "$SES_SNS_FILE")"
+  malformed_line="$(first_fixed_match 'SNS Timestamp is missing or malformed.' "$SES_SNS_FILE")"
+  stale_line="$(first_fixed_match 'SNS Timestamp is outside the allowed replay window.' "$SES_SNS_FILE")"
+  future_line="$(first_fixed_match 'SNS Timestamp is too far in the future.' "$SES_SNS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$parse_line" || -z "$malformed_line" || -z "$stale_line" || -z "$future_line" ]]; then
+    fail \
+      "SES SNS verifier rejects malformed, stale, and future-skewed timestamps" \
+      "expected timestamp freshness and parsing helpers with malformed/stale/future errors in $SES_SNS_FILE; helper=${helper_line:-missing}; parse=${parse_line:-missing}; malformed=${malformed_line:-missing}; stale=${stale_line:-missing}; future=${future_line:-missing}"
+    return
+  fi
+
+  pass \
+    "SES SNS verifier rejects malformed, stale, and future-skewed timestamps" \
+    "helper=$helper_line | malformed=$malformed_line | stale=$stale_line"
+}
+
+check_ses_sns_replay_options_passed_from_webhooks() {
+  local helper_line window_line skew_line
+  helper_line="$(first_match 'function[[:space:]]+getSesSnsVerificationOptions' "$WEBHOOKS_FILE")"
+  window_line="$(first_fixed_match "'replay_window_seconds' => max(1, (int) get_option('marketing_ses_sns_replay_window_seconds'))" "$WEBHOOKS_FILE")"
+  skew_line="$(first_fixed_match "'future_skew_seconds' => max(0, (int) get_option('marketing_ses_sns_future_skew_seconds'))" "$WEBHOOKS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$window_line" || -z "$skew_line" ]]; then
+    fail \
+      "Webhooks pass replay freshness options into SES SNS verification" \
+      "expected replay window and future skew options in $WEBHOOKS_FILE; helper=${helper_line:-missing}; window=${window_line:-missing}; skew=${skew_line:-missing}"
+    return
+  fi
+
+  pass \
+    "Webhooks pass replay freshness options into SES SNS verification" \
+    "helper=$helper_line | window=$window_line | skew=$skew_line"
+}
+
 check_transient_provider_backoff_safety() {
   local classify_helper transient_flag throttle_flag temp_failure_reason temp_throttle_reason warning_line
   classify_helper="$(first_match 'function[[:space:]]+classify_provider_failure' "$MAILER_FILE")"
@@ -511,6 +568,9 @@ check_processing_lease_ownership
 check_queue_reservation_transaction_integrity
 check_outbound_attempt_schema_and_queue_guard
 check_outbound_attempt_assignment_and_retry_reset
+check_ses_sns_replay_window_defaults
+check_ses_sns_timestamp_freshness_validation
+check_ses_sns_replay_options_passed_from_webhooks
 check_transient_provider_backoff_safety
 check_ses_sns_signature_enforcement
 check_ses_sns_verifier_strictness
