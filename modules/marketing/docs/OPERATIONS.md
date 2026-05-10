@@ -53,7 +53,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - From the standalone module root, run `bash scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - From that same standalone module root, run `bash scripts/verify_release_package.sh` before shipping any commercial ZIP.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 50 checks passed`.
+- Expected success result is `OK phase2-regressions 63 checks passed`.
 
 ## Uninstall Notes
 
@@ -91,6 +91,8 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - Queue processing now uses a campaign worker lease in addition to recipient reservation. If warnings include `campaign_{id}_worker_locked`, another worker still owns that campaign lease or the previous lease has not yet gone stale.
 - Use the Marketing dashboard queue diagnostics section to inspect current worker leases, stale processing counts, recent recovered rows, and recent queue warning payloads without relying only on application logs.
 - That same dashboard diagnostics section now surfaces normalized recent failure metrics such as provider throttling, transient failures, rendering failures, recipient suppressions, and reconciliation-skipped webhook events while keeping raw provider reason text in event payloads.
+- Telemetry retention is explicit-only by default. The dashboard surfaces current event and webhook-log retention windows, the hard 30-day floor, the 500-row per-run cap, and bounded cleanup candidate previews without automatically deleting rows during cron.
+- Retention cleanup must never target campaigns, recipients, suppressions, or public unsubscribe/tracking link records. Only non-critical marketing events and webhook logs are eligible for age-based cleanup.
 - If queue processing warns `outbound_attempt_replay_blocked`, the module detected a prior uncertain outbound attempt for that recipient and intentionally blocked automatic resend. Use failed-recipient retry only after confirming the earlier attempt outcome.
 - If campaign send warnings include `provider_throttle_detected` or `transient_delivery_failure`, treat the current batch as paused by the provider. The module marks the affected recipient with a `temporary_provider_*` failure reason and stops the rest of that batch instead of hammering SES/SMTP.
 - If campaign clicks are not appearing, confirm delivered links were rewritten to `marketing/track/c/{token}` and that the redirect endpoint returns `302`

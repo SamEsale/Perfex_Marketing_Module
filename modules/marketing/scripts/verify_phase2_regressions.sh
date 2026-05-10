@@ -912,6 +912,136 @@ check_queue_operator_telemetry_aliases() {
     "paused=$paused_line | overlap=$overlap_line | rate=$rate_line"
 }
 
+check_retention_options_seeded() {
+  local event_line webhook_line repair_line
+  event_line="$(first_fixed_match "'marketing_event_retention_days' => '180'" "$BOOTSTRAP_FILE")"
+  webhook_line="$(first_fixed_match "'marketing_webhook_log_retention_days' => '180'" "$BOOTSTRAP_FILE")"
+  repair_line="$(first_fixed_match "foreach (marketing_get_default_options() as \$name => \$value)" "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$event_line" || -z "$webhook_line" || -z "$repair_line" ]]; then
+    fail \
+      "retention options are seeded add-only and idempotently through module defaults" \
+      "expected retention defaults and add-only repair helper in $BOOTSTRAP_FILE; event=${event_line:-missing}; webhook=${webhook_line:-missing}; repair=${repair_line:-missing}"
+    return
+  fi
+
+  pass \
+    "retention options are seeded add-only and idempotently through module defaults" \
+    "event=$event_line | webhook=$webhook_line | repair=$repair_line"
+}
+
+check_retention_minimum_floor() {
+  local const_line clamp_line mode_line
+  const_line="$(first_match 'MIN_RETENTION_DAYS' "$EVENTS_FILE")"
+  clamp_line="$(first_fixed_match 'max(self::MIN_RETENTION_DAYS, $days)' "$EVENTS_FILE")"
+  mode_line="$(first_fixed_match "'cleanup_mode' => 'explicit_only'" "$EVENTS_FILE")"
+
+  if [[ -z "$const_line" || -z "$clamp_line" || -z "$mode_line" ]]; then
+    fail \
+      "retention cleanup has a hard minimum retention floor and remains explicit-only" \
+      "expected retention floor constant, clamp, and explicit cleanup mode in $EVENTS_FILE; const=${const_line:-missing}; clamp=${clamp_line:-missing}; mode=${mode_line:-missing}"
+    return
+  fi
+
+  pass \
+    "retention cleanup has a hard minimum retention floor and remains explicit-only" \
+    "const=$const_line | clamp=$clamp_line | mode=$mode_line"
+}
+
+check_retention_delete_limit_bound() {
+  local const_line event_limit_line webhook_limit_line
+  const_line="$(first_match 'MAX_DELETE_PER_RUN' "$EVENTS_FILE")"
+  event_limit_line="$(first_fixed_match '->limit(self::MAX_DELETE_PER_RUN)' "$EVENTS_FILE")"
+  webhook_limit_line="$(first_fixed_match '->limit(self::MAX_DELETE_PER_RUN + 1)' "$EVENTS_FILE")"
+
+  if [[ -z "$const_line" || -z "$event_limit_line" || -z "$webhook_limit_line" ]]; then
+    fail \
+      "retention cleanup is bounded by a per-run delete limit" \
+      "expected delete limit constant and bounded candidate queries in $EVENTS_FILE; const=${const_line:-missing}; event=${event_limit_line:-missing}; webhook=${webhook_limit_line:-missing}"
+    return
+  fi
+
+  pass \
+    "retention cleanup is bounded by a per-run delete limit" \
+    "const=$const_line | event=$event_limit_line | webhook=$webhook_limit_line"
+}
+
+check_retention_excludes_audit_critical_events() {
+  local helper_line bounce_line complaint_line unsubscribe_line operator_line suppressed_line
+  helper_line="$(first_match 'function[[:space:]]+get_audit_critical_event_types' "$EVENTS_FILE")"
+  bounce_line="$(first_fixed_match "'bounce'" "$EVENTS_FILE")"
+  complaint_line="$(first_fixed_match "'complaint'" "$EVENTS_FILE")"
+  unsubscribe_line="$(first_fixed_match "'unsubscribe'" "$EVENTS_FILE")"
+  operator_line="$(first_fixed_match "'operator_action'" "$EVENTS_FILE")"
+  suppressed_line="$(first_fixed_match "'suppressed'" "$EVENTS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$bounce_line" || -z "$complaint_line" || -z "$unsubscribe_line" || -z "$operator_line" || -z "$suppressed_line" ]]; then
+    fail \
+      "retention cleanup excludes audit-critical event types" \
+      "expected audit-critical event helper with bounce, complaint, unsubscribe, operator_action, and suppressed types in $EVENTS_FILE; helper=${helper_line:-missing}; bounce=${bounce_line:-missing}; complaint=${complaint_line:-missing}; unsubscribe=${unsubscribe_line:-missing}; operator=${operator_line:-missing}; suppressed=${suppressed_line:-missing}"
+    return
+  fi
+
+  pass \
+    "retention cleanup excludes audit-critical event types" \
+    "helper=$helper_line | bounce=$bounce_line | operator=$operator_line"
+}
+
+check_retention_cleanup_scope() {
+  local cleanup_helper_line event_delete_line webhook_delete_line public_links_line suppressions_line
+  cleanup_helper_line="$(first_match 'function[[:space:]]+run_retention_cleanup' "$EVENTS_FILE")"
+  event_delete_line="$(first_fixed_match "\$this->db->delete(\$this->table);" "$EVENTS_FILE")"
+  webhook_delete_line="$(first_fixed_match "\$this->db->delete(\$this->webhookLogTable);" "$EVENTS_FILE")"
+  public_links_line="$(first_fixed_match 'marketing_public_links' "$EVENTS_FILE")"
+  suppressions_line="$(first_fixed_match 'marketing_suppressions' "$EVENTS_FILE")"
+
+  if [[ -z "$cleanup_helper_line" || -z "$event_delete_line" || -z "$webhook_delete_line" || -n "$public_links_line" || -n "$suppressions_line" ]]; then
+    fail \
+      "retention cleanup only targets events and webhook logs, not campaigns, recipients, suppressions, or public links" \
+      "expected explicit retention helper plus event/webhook deletes only in $EVENTS_FILE; helper=${cleanup_helper_line:-missing}; event_delete=${event_delete_line:-missing}; webhook_delete=${webhook_delete_line:-missing}; public_links=${public_links_line:-none}; suppressions=${suppressions_line:-none}"
+    return
+  fi
+
+  pass \
+    "retention cleanup only targets events and webhook logs, not campaigns, recipients, suppressions, or public links" \
+    "helper=$cleanup_helper_line | event_delete=$event_delete_line | webhook_delete=$webhook_delete_line"
+}
+
+check_retention_cleanup_not_auto_cron() {
+  local mode_line cron_usage_line
+  mode_line="$(first_fixed_match "'cleanup_mode' => 'explicit_only'" "$EVENTS_FILE")"
+  cron_usage_line="$(first_fixed_match 'run_retention_cleanup(' "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$mode_line" || -n "$cron_usage_line" ]]; then
+    fail \
+      "retention cleanup remains explicit instead of auto-running from cron" \
+      "expected explicit-only cleanup mode and no cleanup invocation in $BOOTSTRAP_FILE; mode=${mode_line:-missing}; cron_usage=${cron_usage_line:-unexpected}"
+    return
+  fi
+
+  pass \
+    "retention cleanup remains explicit instead of auto-running from cron" \
+    "mode=$mode_line"
+}
+
+check_retention_dashboard_surface() {
+  local dashboard_line view_line candidate_line
+  dashboard_line="$(first_match "'retention_diagnostics'[[:space:]]*=>" "$DASHBOARD_FILE")"
+  view_line="$(first_fixed_match 'Telemetry Retention' "$DASHBOARD_VIEW_FILE")"
+  candidate_line="$(first_fixed_match 'events_cleanup_candidate_preview' "$DASHBOARD_VIEW_FILE")"
+
+  if [[ -z "$dashboard_line" || -z "$view_line" || -z "$candidate_line" ]]; then
+    fail \
+      "dashboard diagnostics surface retention status and cleanup candidate previews" \
+      "expected retention diagnostics in $DASHBOARD_FILE and view rendering in $DASHBOARD_VIEW_FILE; dashboard=${dashboard_line:-missing}; view=${view_line:-missing}; candidate=${candidate_line:-missing}"
+    return
+  fi
+
+  pass \
+    "dashboard diagnostics surface retention status and cleanup candidate previews" \
+    "dashboard=$dashboard_line | view=$view_line | candidate=$candidate_line"
+}
+
 check_release_validator_exists() {
   local shebang_line source_only_line zip_root_line
   if [[ ! -x "$RELEASE_VALIDATOR_FILE" ]]; then
@@ -1221,6 +1351,13 @@ check_queue_operator_actions_guarded
 check_stale_recovery_operator_guard
 check_dashboard_operator_status_surface
 check_queue_operator_telemetry_aliases
+check_retention_options_seeded
+check_retention_minimum_floor
+check_retention_delete_limit_bound
+check_retention_excludes_audit_critical_events
+check_retention_cleanup_scope
+check_retention_cleanup_not_auto_cron
+check_retention_dashboard_surface
 check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks

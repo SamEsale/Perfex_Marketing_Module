@@ -69,6 +69,7 @@ class Marketing_dashboard_model extends App_Model
             'bounce_rate'            => $bounceRate,
             'click_analytics'        => $this->get_click_analytics(),
             'queue_diagnostics'      => $queueDiagnostics,
+            'retention_diagnostics'  => $eventModel->get_retention_diagnostics(),
             'recent_campaigns'       => $this->get_recent_campaigns($campaignLimit),
             'recent_activity'        => $this->get_recent_activity($activityLimit),
         ];

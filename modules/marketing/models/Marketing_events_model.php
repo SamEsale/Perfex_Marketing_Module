@@ -5,9 +5,14 @@ defined('BASEPATH') or exit('No direct script access allowed');
 class Marketing_events_model extends App_Model
 {
     const TABLE = 'marketing_events';
+    const WEBHOOK_LOGS_TABLE = 'marketing_webhook_logs';
     const EVENT_LOCK_TIMEOUT = 5;
+    const MIN_RETENTION_DAYS = 30;
+    const MAX_DELETE_PER_RUN = 500;
+    const DEFAULT_RETENTION_DAYS = 180;
 
     protected $table;
+    protected $webhookLogTable;
     protected $tableColumns;
     protected $eventAliases = [
         'sent' => ['sent'],
@@ -36,6 +41,7 @@ class Marketing_events_model extends App_Model
         parent::__construct();
 
         $this->table = db_prefix() . self::TABLE;
+        $this->webhookLogTable = db_prefix() . self::WEBHOOK_LOGS_TABLE;
     }
 
     public function count_all()
@@ -577,6 +583,92 @@ class Marketing_events_model extends App_Model
         return (bool) $this->db->empty_table($this->table);
     }
 
+    public function get_retention_diagnostics()
+    {
+        $eventRetentionDays = $this->get_retention_days('marketing_event_retention_days');
+        $webhookLogRetentionDays = $this->get_retention_days('marketing_webhook_log_retention_days');
+
+        $diagnostics = [
+            'cleanup_mode' => 'explicit_only',
+            'event_retention_days' => $eventRetentionDays,
+            'webhook_log_retention_days' => $webhookLogRetentionDays,
+            'retention_floor_days' => self::MIN_RETENTION_DAYS,
+            'delete_limit_per_run' => self::MAX_DELETE_PER_RUN,
+            'events_cleanup_ready' => false,
+            'webhook_logs_cleanup_ready' => false,
+            'events_cleanup_candidate_preview' => 0,
+            'events_cleanup_candidate_more' => false,
+            'webhook_logs_cleanup_candidate_preview' => 0,
+            'webhook_logs_cleanup_candidate_more' => false,
+            'warnings' => [],
+        ];
+
+        $eventCutoffDateTime = $this->build_retention_cutoff_datetime($eventRetentionDays);
+        if ($eventCutoffDateTime !== null && $this->can_cleanup_events()) {
+            $eventCandidatePreview = $this->count_event_cleanup_candidate_preview($eventCutoffDateTime);
+            $diagnostics['events_cleanup_ready'] = true;
+            $diagnostics['events_cleanup_candidate_preview'] = min(self::MAX_DELETE_PER_RUN, $eventCandidatePreview);
+            $diagnostics['events_cleanup_candidate_more'] = $eventCandidatePreview > self::MAX_DELETE_PER_RUN;
+        } else {
+            $diagnostics['warnings'][] = 'event_cleanup_unavailable';
+        }
+
+        $webhookCutoffDateTime = $this->build_retention_cutoff_datetime($webhookLogRetentionDays);
+        if ($webhookCutoffDateTime !== null && $this->can_cleanup_webhook_logs()) {
+            $webhookCandidatePreview = $this->count_webhook_log_cleanup_candidate_preview($webhookCutoffDateTime);
+            $diagnostics['webhook_logs_cleanup_ready'] = true;
+            $diagnostics['webhook_logs_cleanup_candidate_preview'] = min(self::MAX_DELETE_PER_RUN, $webhookCandidatePreview);
+            $diagnostics['webhook_logs_cleanup_candidate_more'] = $webhookCandidatePreview > self::MAX_DELETE_PER_RUN;
+        } else {
+            $diagnostics['warnings'][] = 'webhook_log_cleanup_unavailable';
+        }
+
+        return $diagnostics;
+    }
+
+    public function run_retention_cleanup($eventRetentionDays = null, $webhookLogRetentionDays = null)
+    {
+        $eventRetentionDays = $this->normalize_retention_days($eventRetentionDays, 'marketing_event_retention_days');
+        $webhookLogRetentionDays = $this->normalize_retention_days($webhookLogRetentionDays, 'marketing_webhook_log_retention_days');
+
+        $summary = [
+            'cleanup_mode' => 'explicit_only',
+            'event_retention_days' => $eventRetentionDays,
+            'webhook_log_retention_days' => $webhookLogRetentionDays,
+            'retention_floor_days' => self::MIN_RETENTION_DAYS,
+            'delete_limit_per_run' => self::MAX_DELETE_PER_RUN,
+            'events_deleted' => 0,
+            'webhook_logs_deleted' => 0,
+            'events_cleanup_candidate_preview' => 0,
+            'events_cleanup_candidate_more' => false,
+            'webhook_logs_cleanup_candidate_preview' => 0,
+            'webhook_logs_cleanup_candidate_more' => false,
+            'warnings' => [],
+        ];
+
+        $eventCutoffDateTime = $this->build_retention_cutoff_datetime($eventRetentionDays);
+        if ($eventCutoffDateTime !== null && $this->can_cleanup_events()) {
+            $eventCandidatePreview = $this->count_event_cleanup_candidate_preview($eventCutoffDateTime);
+            $summary['events_cleanup_candidate_preview'] = min(self::MAX_DELETE_PER_RUN, $eventCandidatePreview);
+            $summary['events_cleanup_candidate_more'] = $eventCandidatePreview > self::MAX_DELETE_PER_RUN;
+            $summary['events_deleted'] = $this->delete_event_cleanup_candidates($eventCutoffDateTime);
+        } else {
+            $summary['warnings'][] = 'event_cleanup_unavailable';
+        }
+
+        $webhookCutoffDateTime = $this->build_retention_cutoff_datetime($webhookLogRetentionDays);
+        if ($webhookCutoffDateTime !== null && $this->can_cleanup_webhook_logs()) {
+            $webhookCandidatePreview = $this->count_webhook_log_cleanup_candidate_preview($webhookCutoffDateTime);
+            $summary['webhook_logs_cleanup_candidate_preview'] = min(self::MAX_DELETE_PER_RUN, $webhookCandidatePreview);
+            $summary['webhook_logs_cleanup_candidate_more'] = $webhookCandidatePreview > self::MAX_DELETE_PER_RUN;
+            $summary['webhook_logs_deleted'] = $this->delete_webhook_log_cleanup_candidates($webhookCutoffDateTime);
+        } else {
+            $summary['warnings'][] = 'webhook_log_cleanup_unavailable';
+        }
+
+        return $summary;
+    }
+
     protected function apply_event_match_filters(array $criteria)
     {
         $provider = trim((string) ($criteria['provider'] ?? ''));
@@ -751,5 +843,161 @@ class Marketing_events_model extends App_Model
         $error = $this->db->error();
 
         return trim((string) ($error['message'] ?? ''));
+    }
+
+    protected function get_retention_days($optionName)
+    {
+        return $this->normalize_retention_days(get_option($optionName), $optionName);
+    }
+
+    protected function normalize_retention_days($value, $optionName = null)
+    {
+        $days = (int) $value;
+        if ($days <= 0 && $optionName !== null) {
+            $days = (int) get_option($optionName);
+        }
+        if ($days <= 0) {
+            $days = self::DEFAULT_RETENTION_DAYS;
+        }
+
+        return max(self::MIN_RETENTION_DAYS, $days);
+    }
+
+    protected function build_retention_cutoff_datetime($retentionDays)
+    {
+        $retentionDays = max(self::MIN_RETENTION_DAYS, (int) $retentionDays);
+        if ($retentionDays <= 0) {
+            return null;
+        }
+
+        return date('Y-m-d H:i:s', time() - ($retentionDays * 86400));
+    }
+
+    protected function can_cleanup_events()
+    {
+        return $this->db->table_exists($this->table)
+            && $this->column_exists('id')
+            && $this->column_exists('event_type')
+            && ($this->column_exists('event_at') || $this->column_exists('datecreated'));
+    }
+
+    protected function can_cleanup_webhook_logs()
+    {
+        return $this->db->table_exists($this->webhookLogTable)
+            && $this->db->field_exists('id', $this->webhookLogTable)
+            && $this->db->field_exists('datecreated', $this->webhookLogTable);
+    }
+
+    protected function count_event_cleanup_candidate_preview($cutoffDateTime)
+    {
+        $this->db->select('id', false)
+            ->from($this->table)
+            ->limit(self::MAX_DELETE_PER_RUN + 1);
+        $this->apply_event_cleanup_filters($cutoffDateTime);
+
+        return count($this->db->get()->result_array());
+    }
+
+    protected function count_webhook_log_cleanup_candidate_preview($cutoffDateTime)
+    {
+        $this->db->select('id', false)
+            ->from($this->webhookLogTable)
+            ->where('datecreated <=', $cutoffDateTime)
+            ->order_by('id', 'ASC')
+            ->limit(self::MAX_DELETE_PER_RUN + 1);
+
+        return count($this->db->get()->result_array());
+    }
+
+    protected function delete_event_cleanup_candidates($cutoffDateTime)
+    {
+        $candidateIds = $this->get_event_cleanup_candidate_ids($cutoffDateTime);
+        if (empty($candidateIds)) {
+            return 0;
+        }
+
+        $this->db->where_in('id', $candidateIds);
+        $this->db->delete($this->table);
+
+        return (int) $this->db->affected_rows();
+    }
+
+    protected function delete_webhook_log_cleanup_candidates($cutoffDateTime)
+    {
+        $candidateIds = $this->get_webhook_log_cleanup_candidate_ids($cutoffDateTime);
+        if (empty($candidateIds)) {
+            return 0;
+        }
+
+        $this->db->where_in('id', $candidateIds);
+        $this->db->delete($this->webhookLogTable);
+
+        return (int) $this->db->affected_rows();
+    }
+
+    protected function get_event_cleanup_candidate_ids($cutoffDateTime)
+    {
+        $this->db->select('id', false)
+            ->from($this->table)
+            ->limit(self::MAX_DELETE_PER_RUN)
+            ->order_by('id', 'ASC');
+        $this->apply_event_cleanup_filters($cutoffDateTime);
+
+        return array_map('intval', array_column($this->db->get()->result_array(), 'id'));
+    }
+
+    protected function get_webhook_log_cleanup_candidate_ids($cutoffDateTime)
+    {
+        $rows = $this->db->select('id', false)
+            ->from($this->webhookLogTable)
+            ->where('datecreated <=', $cutoffDateTime)
+            ->order_by('id', 'ASC')
+            ->limit(self::MAX_DELETE_PER_RUN)
+            ->get()
+            ->result_array();
+
+        return array_map('intval', array_column($rows, 'id'));
+    }
+
+    protected function apply_event_cleanup_filters($cutoffDateTime)
+    {
+        $escapedEventTypes = [];
+        foreach ($this->get_audit_critical_event_types() as $eventType) {
+            $escapedEventTypes[] = $this->db->escape($eventType);
+        }
+
+        if (!empty($escapedEventTypes)) {
+            $this->db->where(
+                $this->normalized_event_type_sql() . ' NOT IN (' . implode(', ', $escapedEventTypes) . ')',
+                null,
+                false
+            );
+        }
+
+        if ($this->column_exists('event_at')) {
+            $this->db->where('event_at <=', $cutoffDateTime);
+        } else {
+            $this->db->where('datecreated <=', $cutoffDateTime);
+        }
+    }
+
+    protected function get_audit_critical_event_types()
+    {
+        return [
+            'bounce',
+            'complaint',
+            'unsubscribe',
+            'suppressed',
+            'operator_action',
+            'subscription',
+            'subscription_confirmation',
+            'unsubscribe_confirmation',
+            'reply',
+            'reply_lead_created',
+            'reply_lead_existing',
+            'reply_lead_failed',
+            'reply_lead_skipped',
+            'retry_triggered',
+        ];
     }
 }

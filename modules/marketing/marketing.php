@@ -218,6 +218,8 @@ function marketing_get_default_options()
         'marketing_send_sleep_ms' => '0',
         'marketing_send_hourly_cap' => '0',
         'marketing_send_daily_cap' => '0',
+        'marketing_event_retention_days' => '180',
+        'marketing_webhook_log_retention_days' => '180',
         'marketing_send_start_hour' => '00:00',
         'marketing_send_end_hour' => '23:59',
         'marketing_default_from_name' => '',

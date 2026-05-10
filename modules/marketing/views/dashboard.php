@@ -172,6 +172,9 @@
                         $recentOperatorActions = isset($queueDiagnostics['recent_operator_actions']) && is_array($queueDiagnostics['recent_operator_actions'])
                             ? $queueDiagnostics['recent_operator_actions']
                             : [];
+                        $retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)
+                            ? $retention_diagnostics
+                            : [];
                         $canManageQueue = !empty($can_manage_queue);
                         ?>
                         <div class="row tw-mt-15">
@@ -332,6 +335,33 @@
                                                     </table>
                                                 </div>
                                             <?php } ?>
+                                        </div>
+                                        <div class="mtop15">
+                                            <h5 class="bold no-margin">Telemetry Retention</h5>
+                                            <p class="text-muted mtop10 no-margin">
+                                                Cleanup mode:
+                                                <strong><?= html_escape((string) ($retentionDiagnostics['cleanup_mode'] ?? 'explicit_only')); ?></strong>.
+                                                Event retention:
+                                                <strong><?= (int) ($retentionDiagnostics['event_retention_days'] ?? 0); ?>d</strong>.
+                                                Webhook log retention:
+                                                <strong><?= (int) ($retentionDiagnostics['webhook_log_retention_days'] ?? 0); ?>d</strong>.
+                                            </p>
+                                            <p class="text-muted mtop10 no-margin">
+                                                Hard floor:
+                                                <strong><?= (int) ($retentionDiagnostics['retention_floor_days'] ?? 0); ?>d</strong>.
+                                                Per-run delete cap:
+                                                <strong><?= (int) ($retentionDiagnostics['delete_limit_per_run'] ?? 0); ?></strong>.
+                                            </p>
+                                            <div class="mtop10">
+                                                <span class="label label-default" style="display:inline-block;margin:0 8px 8px 0;">
+                                                    Event Cleanup Candidates:
+                                                    <?= (int) ($retentionDiagnostics['events_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['events_cleanup_candidate_more']) ? '+' : ''; ?>
+                                                </span>
+                                                <span class="label label-default" style="display:inline-block;margin:0 8px 8px 0;">
+                                                    Webhook Log Candidates:
+                                                    <?= (int) ($retentionDiagnostics['webhook_logs_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['webhook_logs_cleanup_candidate_more']) ? '+' : ''; ?>
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
