@@ -683,6 +683,113 @@ check_queue_warning_telemetry_propagation() {
     "recovered=$recovered_warning_line | lease=$lease_warning_line | payload=$payload_warning_line"
 }
 
+check_provider_failure_normalization_helper() {
+  local helper_line mailer_helper_line
+  helper_line="$(first_match 'function[[:space:]]+normalize_provider_failure_metric_code' "$CAMPAIGNS_FILE")"
+  mailer_helper_line="$(first_match 'function[[:space:]]+classify_provider_failure' "$MAILER_FILE")"
+
+  if [[ -z "$helper_line" || -z "$mailer_helper_line" ]]; then
+    fail \
+      "provider failure normalization helper exists centrally and builds on outbound failure classification" \
+      "expected normalization helper in $CAMPAIGNS_FILE and classifier in $MAILER_FILE; helper=${helper_line:-missing}; mailer=${mailer_helper_line:-missing}"
+    return
+  fi
+
+  pass \
+    "provider failure normalization helper exists centrally and builds on outbound failure classification" \
+    "helper=$helper_line | mailer=$mailer_helper_line"
+}
+
+check_provider_failure_categories_distinguishable() {
+  local transient_line throttle_line permanent_line rendering_line
+  transient_line="$(first_fixed_match 'provider_transient_failure' "$CAMPAIGNS_FILE")"
+  throttle_line="$(first_fixed_match 'provider_throttle' "$CAMPAIGNS_FILE")"
+  permanent_line="$(first_fixed_match 'provider_permanent_failure' "$CAMPAIGNS_FILE")"
+  rendering_line="$(first_fixed_match 'provider_rendering_failure' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$transient_line" || -z "$throttle_line" || -z "$permanent_line" || -z "$rendering_line" ]]; then
+    fail \
+      "transient, throttle, permanent, and rendering provider failures are distinguishable" \
+      "expected normalized provider failure categories in $CAMPAIGNS_FILE; transient=${transient_line:-missing}; throttle=${throttle_line:-missing}; permanent=${permanent_line:-missing}; rendering=${rendering_line:-missing}"
+    return
+  fi
+
+  pass \
+    "transient, throttle, permanent, and rendering provider failures are distinguishable" \
+    "transient=$transient_line | throttle=$throttle_line | rendering=$rendering_line"
+}
+
+check_provider_throttle_not_bounce() {
+  local throttle_warning_line bounce_code_line complaint_code_line
+  throttle_warning_line="$(first_fixed_match 'provider_throttle_detected' "$CAMPAIGNS_FILE")"
+  bounce_code_line="$(first_fixed_match 'recipient_bounced' "$CAMPAIGNS_FILE")"
+  complaint_code_line="$(first_fixed_match 'recipient_complained' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$throttle_warning_line" || -z "$bounce_code_line" || -z "$complaint_code_line" ]]; then
+    fail \
+      "provider throttle remains a batch-level backoff signal rather than a bounce or complaint" \
+      "expected throttle warning plus separate bounce and complaint normalized codes in $CAMPAIGNS_FILE; throttle=${throttle_warning_line:-missing}; bounce=${bounce_code_line:-missing}; complaint=${complaint_code_line:-missing}"
+    return
+  fi
+
+  pass \
+    "provider throttle remains a batch-level backoff signal rather than a bounce or complaint" \
+    "throttle=$throttle_warning_line | bounce=$bounce_code_line | complaint=$complaint_code_line"
+}
+
+check_normalized_failure_codes_in_telemetry() {
+  local queue_payload_line webhook_payload_line batch_metrics_line
+  queue_payload_line="$(first_fixed_match "'normalized_failure_code' => \$normalizedFailureCode" "$CAMPAIGNS_FILE")"
+  webhook_payload_line="$(first_fixed_match "'normalized_failure_code' => \$this->marketing_campaigns_model->normalize_provider_failure_metric_code([" "$WEBHOOKS_FILE")"
+  batch_metrics_line="$(first_fixed_match "'failure_metrics' => \$campaignFailureMetrics" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$queue_payload_line" || -z "$webhook_payload_line" || -z "$batch_metrics_line" ]]; then
+    fail \
+      "normalized warning and failure codes are stored in queue and webhook telemetry" \
+      "expected normalized failure codes in queue payloads, webhook payload metadata, and batch telemetry; queue=${queue_payload_line:-missing}; webhook=${webhook_payload_line:-missing}; batch=${batch_metrics_line:-missing}"
+    return
+  fi
+
+  pass \
+    "normalized warning and failure codes are stored in queue and webhook telemetry" \
+    "queue=$queue_payload_line | webhook=$webhook_payload_line | batch=$batch_metrics_line"
+}
+
+check_dashboard_failure_metric_surface() {
+  local diagnostics_line view_line
+  diagnostics_line="$(first_fixed_match "'recent_failure_metric_counts' => []" "$CAMPAIGNS_FILE")"
+  view_line="$(first_fixed_match 'Recent Failure Metrics' "$DASHBOARD_VIEW_FILE")"
+
+  if [[ -z "$diagnostics_line" || -z "$view_line" ]]; then
+    fail \
+      "dashboard diagnostics surface normalized recent provider failure metrics" \
+      "expected recent failure metric diagnostics in $CAMPAIGNS_FILE and dashboard surface in $DASHBOARD_VIEW_FILE; diagnostics=${diagnostics_line:-missing}; view=${view_line:-missing}"
+    return
+  fi
+
+  pass \
+    "dashboard diagnostics surface normalized recent provider failure metrics" \
+    "diagnostics=$diagnostics_line | view=$view_line"
+}
+
+check_reconciliation_skipped_metric_visible() {
+  local reconciliation_line webhook_metric_line raw_log_line
+  reconciliation_line="$(first_fixed_match 'recipient_reconciliation_skipped' "$CAMPAIGNS_FILE")"
+  webhook_metric_line="$(first_fixed_match "'reconciliation_skipped' => !empty(\$reconciliation['skipped'])" "$WEBHOOKS_FILE")"
+  raw_log_line="$(first_fixed_match '$storeResult = $this->marketing_events_model->add_event_idempotent([' "$WEBHOOKS_FILE")"
+
+  if [[ -z "$reconciliation_line" || -z "$webhook_metric_line" || -z "$raw_log_line" ]]; then
+    fail \
+      "reconciliation-skipped events are metric-visible while raw event logging remains mutation-safe" \
+      "expected reconciliation skip metric code in $CAMPAIGNS_FILE and webhook payload/logging in $WEBHOOKS_FILE; code=${reconciliation_line:-missing}; webhook=${webhook_metric_line:-missing}; log=${raw_log_line:-missing}"
+    return
+  fi
+
+  pass \
+    "reconciliation-skipped events are metric-visible while raw event logging remains mutation-safe" \
+    "code=$reconciliation_line | webhook=$webhook_metric_line | log=$raw_log_line"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_window install_skew ensure_window ensure_skew
   install_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$INSTALL_FILE")"
@@ -743,8 +850,8 @@ check_ses_sns_replay_options_passed_from_webhooks() {
 check_transient_provider_backoff_safety() {
   local classify_helper transient_flag throttle_flag temp_failure_reason temp_throttle_reason warning_line
   classify_helper="$(first_match 'function[[:space:]]+classify_provider_failure' "$MAILER_FILE")"
-  transient_flag="$(first_fixed_match "'transient_failure' => !\$success ? \$this->classify_provider_failure(\$failureReason)['transient'] : false" "$MAILER_FILE")"
-  throttle_flag="$(first_fixed_match "'provider_throttle' => !\$success ? \$this->classify_provider_failure(\$failureReason)['throttle'] : false" "$MAILER_FILE")"
+  transient_flag="$(first_fixed_match "'transient_failure' => !\$success ? \$failureClassification['transient'] : false" "$MAILER_FILE")"
+  throttle_flag="$(first_fixed_match "'provider_throttle' => !\$success ? \$failureClassification['throttle'] : false" "$MAILER_FILE")"
   temp_failure_reason="$(first_fixed_match 'temporary_provider_failure:' "$CAMPAIGNS_FILE")"
   temp_throttle_reason="$(first_fixed_match 'temporary_provider_throttle:' "$CAMPAIGNS_FILE")"
   warning_line="$(first_fixed_match 'provider_throttle_detected' "$CAMPAIGNS_FILE")"
@@ -853,6 +960,12 @@ check_queue_diagnostics_stale_worker_count
 check_queue_diagnostics_stale_processing_count
 check_dashboard_queue_diagnostics_surface
 check_queue_warning_telemetry_propagation
+check_provider_failure_normalization_helper
+check_provider_failure_categories_distinguishable
+check_provider_throttle_not_bounce
+check_normalized_failure_codes_in_telemetry
+check_dashboard_failure_metric_surface
+check_reconciliation_skipped_metric_visible
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks

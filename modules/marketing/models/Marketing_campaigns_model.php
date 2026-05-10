@@ -24,6 +24,18 @@ class Marketing_campaigns_model extends App_Model
     private const TARGETING_MARKER_PREFIX = '<!--marketing_targeting_rules:';
     private const TARGETING_MARKER_SUFFIX = '-->';
     private const SENDABLE_RECIPIENT_STATUSES = ['queued', 'pending'];
+    private const FAILURE_METRIC_CODES = [
+        'provider_transient_failure',
+        'provider_throttle',
+        'provider_permanent_failure',
+        'provider_rendering_failure',
+        'recipient_bounced',
+        'recipient_complained',
+        'recipient_suppressed',
+        'recipient_unsubscribed',
+        'recipient_skipped',
+        'recipient_reconciliation_skipped',
+    ];
     private const PROCESSING_STALE_TIMEOUT_SECONDS = 1800;
     private const QUEUE_WORKER_STALE_TIMEOUT_SECONDS = 1800;
     private const MAX_SEND_BATCH_LIMIT = 100;
@@ -937,6 +949,7 @@ class Marketing_campaigns_model extends App_Model
             $campaignAccepted = 0;
             $campaignFailed = 0;
             $campaignRecovered = 0;
+            $campaignFailureMetrics = [];
             $campaignLockKey = '';
             $workerLeaseToken = $this->generate_recipient_processing_token((int) $campaign['id']);
             $campaignWorkerToken = $this->generate_campaign_worker_token((int) $campaign['id']);
@@ -955,6 +968,7 @@ class Marketing_campaigns_model extends App_Model
                         'accepted' => 0,
                         'failed' => 0,
                         'recovered' => 0,
+                        'failure_metrics' => $campaignFailureMetrics,
                         'warnings' => $campaignWarnings,
                         'manual_or_cron' => $manualOrCron,
                         'delivery_channel' => $deliveryChannel,
@@ -983,6 +997,7 @@ class Marketing_campaigns_model extends App_Model
                             'accepted' => 0,
                             'failed' => 0,
                             'recovered' => 0,
+                            'failure_metrics' => $campaignFailureMetrics,
                             'warnings' => $campaignWarnings,
                             'manual_or_cron' => $manualOrCron,
                             'delivery_channel' => $deliveryChannel,
@@ -1052,6 +1067,7 @@ class Marketing_campaigns_model extends App_Model
                             'accepted' => 0,
                             'failed' => 0,
                             'recovered' => 0,
+                            'failure_metrics' => $campaignFailureMetrics,
                             'warnings' => $campaignWarnings,
                             'manual_or_cron' => $manualOrCron,
                             'delivery_channel' => $deliveryChannel,
@@ -1081,6 +1097,7 @@ class Marketing_campaigns_model extends App_Model
                             'accepted' => 0,
                             'failed' => 0,
                             'recovered' => $campaignRecovered,
+                            'failure_metrics' => $campaignFailureMetrics,
                             'warnings' => $campaignWarnings,
                             'manual_or_cron' => $manualOrCron,
                             'delivery_channel' => $deliveryChannel,
@@ -1133,6 +1150,7 @@ class Marketing_campaigns_model extends App_Model
                         'accepted' => 0,
                         'failed' => 0,
                         'recovered' => $campaignRecovered,
+                        'failure_metrics' => $campaignFailureMetrics,
                         'warnings' => $campaignWarnings,
                         'manual_or_cron' => $manualOrCron,
                         'delivery_channel' => $deliveryChannel,
@@ -1155,6 +1173,7 @@ class Marketing_campaigns_model extends App_Model
                         'accepted' => 0,
                         'failed' => 0,
                         'recovered' => $campaignRecovered,
+                        'failure_metrics' => $campaignFailureMetrics,
                         'warnings' => $campaignWarnings,
                         'manual_or_cron' => $manualOrCron,
                         'delivery_channel' => $deliveryChannel,
@@ -1249,10 +1268,12 @@ class Marketing_campaigns_model extends App_Model
                             'event_type' => 'skipped',
                             'provider' => $eventProvider,
                             'payload_json' => json_encode([
+                                'normalized_failure_code' => 'recipient_skipped',
                                 'reason' => 'duplicate_recipient_skipped',
                                 'delivery_channel' => $deliveryChannel,
                             ]),
                         ]);
+                        $this->increment_metric_count($campaignFailureMetrics, 'recipient_skipped');
 
                         $summary['skipped']++;
                         $campaignProcessed++;
@@ -1276,6 +1297,13 @@ class Marketing_campaigns_model extends App_Model
                         }
 
                         $summary['suppressed']++;
+                        $normalizedSuppressionCode = $this->normalize_provider_failure_metric_code([
+                            'suppressed' => true,
+                            'suppression_reason' => $suppressionMatch['reason'] ?? null,
+                        ]);
+                        if ($normalizedSuppressionCode !== null) {
+                            $this->increment_metric_count($campaignFailureMetrics, $normalizedSuppressionCode);
+                        }
                         $campaignProcessed++;
                         $summary['processed']++;
                         $remaining--;
@@ -1319,6 +1347,13 @@ class Marketing_campaigns_model extends App_Model
                         continue;
                     }
                     $summary['suppressed']++;
+                    $normalizedSuppressionCode = $this->normalize_provider_failure_metric_code([
+                        'suppressed' => true,
+                        'suppression_reason' => $mailSuppressionMatch['reason'] ?? null,
+                    ]);
+                    if ($normalizedSuppressionCode !== null) {
+                        $this->increment_metric_count($campaignFailureMetrics, $normalizedSuppressionCode);
+                    }
                 } elseif (!empty($result['success'])) {
                     $recipientUpdate = [
                         'sent_at' => date('Y-m-d H:i:s'),
@@ -1367,6 +1402,14 @@ class Marketing_campaigns_model extends App_Model
                     $failureReason = $this->sanitize_failure_reason($result['error'] ?? 'send_failed');
                     $isTransientFailure = $deliveryChannel === 'email' && !empty($result['transient_failure']);
                     $isProviderThrottle = $deliveryChannel === 'email' && !empty($result['provider_throttle']);
+                    $normalizedFailureCode = $this->normalize_provider_failure_metric_code([
+                        'event_type' => 'failed',
+                        'provider_failure_code' => $result['provider_failure_code'] ?? null,
+                        'provider_throttle' => $isProviderThrottle,
+                        'transient_failure' => $isTransientFailure,
+                        'provider_rendering_failure' => !empty($result['provider_rendering_failure']),
+                        'failure_reason' => $failureReason,
+                    ]);
                     if ($isProviderThrottle) {
                         $failureReason = 'temporary_provider_throttle: ' . $failureReason;
                     } elseif ($isTransientFailure) {
@@ -1401,6 +1444,7 @@ class Marketing_campaigns_model extends App_Model
                         'provider_message_id' => $resultProviderMessageId,
                         'email' => $recipient['email'],
                         'payload_json' => json_encode([
+                            'normalized_failure_code' => $normalizedFailureCode,
                             'failure_reason' => $failureReason,
                             'delivery_channel' => $deliveryChannel,
                             'destination' => $recipient['destination'] ?? null,
@@ -1422,6 +1466,9 @@ class Marketing_campaigns_model extends App_Model
 
                     $summary['failed']++;
                     $campaignFailed++;
+                    if ($normalizedFailureCode !== null) {
+                        $this->increment_metric_count($campaignFailureMetrics, $normalizedFailureCode);
+                    }
 
                     if ($isProviderThrottle || $isTransientFailure) {
                         $warning = $isProviderThrottle ? 'provider_throttle_detected' : 'transient_delivery_failure';
@@ -1467,6 +1514,7 @@ class Marketing_campaigns_model extends App_Model
                     'accepted' => $campaignAccepted,
                     'failed' => $campaignFailed,
                     'recovered' => $campaignRecovered,
+                    'failure_metrics' => $campaignFailureMetrics,
                     'warnings' => $campaignWarnings,
                     'manual_or_cron' => $manualOrCron,
                     'delivery_channel' => $deliveryChannel,
@@ -1504,6 +1552,7 @@ class Marketing_campaigns_model extends App_Model
             'recipients_failed' => 0,
             'recent_recovered_total' => 0,
             'recent_warning_counts' => [],
+            'recent_failure_metric_counts' => [],
         ];
 
         if ($this->db->table_exists($this->table) && $this->column_exists($this->table, 'queue_worker_token')) {
@@ -1620,6 +1669,41 @@ class Marketing_campaigns_model extends App_Model
             if (!empty($warningCounts)) {
                 arsort($warningCounts);
                 $diagnostics['recent_warning_counts'] = array_slice($warningCounts, 0, $recentWarningLimit, true);
+            }
+        }
+
+        if (
+            $this->db->table_exists($this->eventsTable)
+            && $this->column_exists($this->eventsTable, 'payload_json')
+        ) {
+            $eventMetricRows = $this->db->select('payload_json', false)
+                ->from($this->eventsTable)
+                ->order_by($this->column_exists($this->eventsTable, 'event_at') ? 'event_at' : 'id', 'DESC')
+                ->limit(max(20, $recentBatchLimit * 5))
+                ->get()
+                ->result_array();
+
+            $eventMetricCounts = $diagnostics['recent_failure_metric_counts'];
+            foreach ($eventMetricRows as $row) {
+                $payload = json_decode((string) ($row['payload_json'] ?? ''), true);
+                if (!is_array($payload)) {
+                    continue;
+                }
+
+                $normalizedFailureCode = trim((string) ($payload['normalized_failure_code'] ?? ($payload['_failure_metrics']['normalized_failure_code'] ?? '')));
+                if (!$this->is_valid_failure_metric_code($normalizedFailureCode)) {
+                    continue;
+                }
+
+                if (!isset($eventMetricCounts[$normalizedFailureCode])) {
+                    $eventMetricCounts[$normalizedFailureCode] = 0;
+                }
+                $eventMetricCounts[$normalizedFailureCode]++;
+            }
+
+            if (!empty($eventMetricCounts)) {
+                arsort($eventMetricCounts);
+                $diagnostics['recent_failure_metric_counts'] = array_slice($eventMetricCounts, 0, $recentWarningLimit, true);
             }
         }
 
@@ -2333,6 +2417,7 @@ class Marketing_campaigns_model extends App_Model
                 'mutated' => false,
                 'skipped' => true,
                 'reason' => 'recipient_not_found',
+                'normalized_failure_code' => 'recipient_reconciliation_skipped',
             ];
         }
 
@@ -2346,6 +2431,7 @@ class Marketing_campaigns_model extends App_Model
                 'mutated' => false,
                 'skipped' => true,
                 'reason' => $reconciliation['reason'] ?? 'recipient_event_rejected',
+                'normalized_failure_code' => 'recipient_reconciliation_skipped',
                 'status_before' => $currentStatus,
                 'status_after' => $currentStatus,
             ];
@@ -2425,6 +2511,7 @@ class Marketing_campaigns_model extends App_Model
             'mutated' => $recordUpdated || $countersUpdated,
             'skipped' => false,
             'reason' => null,
+            'normalized_failure_code' => $this->normalize_provider_failure_metric_code($event),
             'status_before' => $currentStatus,
             'status_after' => $statusAfter,
         ];
@@ -2604,6 +2691,67 @@ class Marketing_campaigns_model extends App_Model
         ];
 
         return $map[$eventType] ?? ('SES ' . str_replace('_', ' ', $eventType));
+    }
+
+    public function normalize_provider_failure_metric_code(array $context)
+    {
+        $explicitCode = trim((string) ($context['provider_failure_code'] ?? ''));
+        if ($this->is_valid_failure_metric_code($explicitCode)) {
+            return $explicitCode;
+        }
+
+        if (!empty($context['reconciliation_skipped']) || ($context['normalized_failure_code'] ?? '') === 'recipient_reconciliation_skipped') {
+            return 'recipient_reconciliation_skipped';
+        }
+
+        if (!empty($context['suppressed'])) {
+            $suppressionReason = strtolower(trim((string) ($context['suppression_reason'] ?? ($context['reason'] ?? ''))));
+            if (strpos($suppressionReason, 'unsubscribe') !== false || strpos($suppressionReason, 'unsubscribed') !== false) {
+                return 'recipient_unsubscribed';
+            }
+            if (strpos($suppressionReason, 'complain') !== false) {
+                return 'recipient_complained';
+            }
+            if (strpos($suppressionReason, 'bounce') !== false) {
+                return 'recipient_bounced';
+            }
+
+            return 'recipient_suppressed';
+        }
+
+        if (!empty($context['skipped']) || strtolower(trim((string) ($context['event_type'] ?? ''))) === 'skipped') {
+            return 'recipient_skipped';
+        }
+
+        $eventType = strtolower(trim((string) ($context['event_type'] ?? '')));
+        switch ($eventType) {
+            case 'bounce':
+                return 'recipient_bounced';
+            case 'complaint':
+                return 'recipient_complained';
+            case 'unsubscribe':
+            case 'unsubscribed':
+                return 'recipient_unsubscribed';
+            case 'rendering_failure':
+            case 'rendering_failed':
+                return 'provider_rendering_failure';
+        }
+
+        if (!empty($context['provider_throttle'])) {
+            return 'provider_throttle';
+        }
+        if (!empty($context['transient_failure'])) {
+            return 'provider_transient_failure';
+        }
+        if (!empty($context['provider_rendering_failure'])) {
+            return 'provider_rendering_failure';
+        }
+
+        if (in_array($eventType, ['failed', 'rejected'], true) || !empty($context['failure_reason'])) {
+            return 'provider_permanent_failure';
+        }
+
+        return null;
     }
 
     private function finalize_campaign_if_complete($campaignId)
@@ -3658,6 +3806,10 @@ class Marketing_campaigns_model extends App_Model
     {
         $reason = $this->sanitize_failure_reason($suppressionMatch['reason'] ?? 'suppressed_email');
         $type = trim((string) ($suppressionMatch['type'] ?? 'email'));
+        $normalizedFailureCode = $this->normalize_provider_failure_metric_code([
+            'suppressed' => true,
+            'suppression_reason' => $reason,
+        ]);
 
         if (!$this->update_reserved_recipient_status($recipient['id'], $workerLeaseToken, 'suppressed', [
             'failure_reason' => $reason,
@@ -3672,6 +3824,7 @@ class Marketing_campaigns_model extends App_Model
             'event_type' => 'suppressed',
             'provider' => $eventProvider,
             'payload_json' => json_encode([
+                'normalized_failure_code' => $normalizedFailureCode,
                 'reason' => $reason,
                 'delivery_channel' => $deliveryChannel,
             ]),
@@ -3780,6 +3933,27 @@ class Marketing_campaigns_model extends App_Model
     private function normalized_event_type_sql()
     {
         return "LOWER(REPLACE(REPLACE(TRIM(event_type), ' ', '_'), '-', '_'))";
+    }
+
+    private function increment_metric_count(array &$counts, $code, $amount = 1)
+    {
+        $code = trim((string) $code);
+        if (!$this->is_valid_failure_metric_code($code)) {
+            return;
+        }
+
+        if (!isset($counts[$code])) {
+            $counts[$code] = 0;
+        }
+
+        $counts[$code] += max(0, (int) $amount);
+    }
+
+    private function is_valid_failure_metric_code($code)
+    {
+        $code = trim((string) $code);
+
+        return $code !== '' && in_array($code, self::FAILURE_METRIC_CODES, true);
     }
 
     private function normalize_targeting_date($value)

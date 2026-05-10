@@ -346,6 +346,15 @@ class Webhooks extends CI_Controller
                 'campaign_id' => $campaignId,
                 'outbound_attempt_token' => $event['outbound_attempt_token'] ?? null,
             ];
+            $message['_failure_metrics'] = [
+                'normalized_failure_code' => $this->marketing_campaigns_model->normalize_provider_failure_metric_code([
+                    'event_type' => $event['event_type'] ?? null,
+                    'reconciliation_skipped' => !empty($reconciliation['skipped']),
+                    'normalized_failure_code' => $reconciliation['normalized_failure_code'] ?? null,
+                ]),
+                'reconciliation_skipped' => !empty($reconciliation['skipped']),
+                'reconciliation_reason' => $reconciliation['reason'] ?? null,
+            ];
             $event['payload_json'] = $this->safeJsonEncode($message);
 
             if (in_array($event['event_type'], ['bounce', 'complaint'], true) && !empty($event['email'])) {

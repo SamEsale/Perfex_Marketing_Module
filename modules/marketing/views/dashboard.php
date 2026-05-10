@@ -163,6 +163,9 @@
                         $recentQueueWarnings = isset($queueDiagnostics['recent_warning_counts']) && is_array($queueDiagnostics['recent_warning_counts'])
                             ? $queueDiagnostics['recent_warning_counts']
                             : [];
+                        $recentFailureMetrics = isset($queueDiagnostics['recent_failure_metric_counts']) && is_array($queueDiagnostics['recent_failure_metric_counts'])
+                            ? $queueDiagnostics['recent_failure_metric_counts']
+                            : [];
                         ?>
                         <div class="row tw-mt-15">
                             <div class="col-md-12">
@@ -239,6 +242,20 @@
                                                     <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
                                                         <span class="label label-default" style="display:inline-block;margin:0 8px 8px 0;">
                                                             <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
+                                                        </span>
+                                                    <?php } ?>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                        <div class="mtop15">
+                                            <h5 class="bold no-margin">Recent Failure Metrics</h5>
+                                            <?php if (empty($recentFailureMetrics)) { ?>
+                                                <p class="text-muted mtop10 no-margin">No normalized provider or recipient failure metrics were found recently.</p>
+                                            <?php } else { ?>
+                                                <div class="mtop10">
+                                                    <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
+                                                        <span class="label label-primary" style="display:inline-block;margin:0 8px 8px 0;">
+                                                            <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
                                                         </span>
                                                     <?php } ?>
                                                 </div>

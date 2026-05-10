@@ -348,7 +348,27 @@ class Marketing_mailer
             return [
                 'transient' => false,
                 'throttle' => false,
+                'rendering' => false,
+                'normalized_failure_code' => 'provider_permanent_failure',
             ];
+        }
+
+        $renderingPatterns = [
+            '/rendering[_\s-]*failure/i',
+            '/rendering[_\s-]*failed/i',
+            '/template\s+render(?:ing)?\s+failed/i',
+            '/unable\s+to\s+render/i',
+        ];
+
+        foreach ($renderingPatterns as $pattern) {
+            if (preg_match($pattern, $message) === 1) {
+                return [
+                    'transient' => false,
+                    'throttle' => false,
+                    'rendering' => true,
+                    'normalized_failure_code' => 'provider_rendering_failure',
+                ];
+            }
         }
 
         $throttlePatterns = [
@@ -364,6 +384,8 @@ class Marketing_mailer
                 return [
                     'transient' => true,
                     'throttle' => true,
+                    'rendering' => false,
+                    'normalized_failure_code' => 'provider_throttle',
                 ];
             }
         }
@@ -385,6 +407,8 @@ class Marketing_mailer
                 return [
                     'transient' => true,
                     'throttle' => false,
+                    'rendering' => false,
+                    'normalized_failure_code' => 'provider_transient_failure',
                 ];
             }
         }
@@ -392,6 +416,8 @@ class Marketing_mailer
         return [
             'transient' => false,
             'throttle' => false,
+            'rendering' => false,
+            'normalized_failure_code' => 'provider_permanent_failure',
         ];
     }
 
@@ -639,6 +665,15 @@ class Marketing_mailer
             }
         }
 
+        $failureClassification = !$success
+            ? $this->classify_provider_failure($failureReason)
+            : [
+                'transient' => false,
+                'throttle' => false,
+                'rendering' => false,
+                'normalized_failure_code' => null,
+            ];
+
         return [
             'success' => $success,
             'message_id' => $outboundMeta['message_id'],
@@ -647,8 +682,10 @@ class Marketing_mailer
             'configuration_set' => $outboundMeta['configuration_set'],
             'configuration_set_applied' => $headerStatus['configuration_set_applied'],
             'ses_tags_applied' => $headerStatus['ses_tags_applied'],
-            'transient_failure' => !$success ? $this->classify_provider_failure($failureReason)['transient'] : false,
-            'provider_throttle' => !$success ? $this->classify_provider_failure($failureReason)['throttle'] : false,
+            'transient_failure' => !$success ? $failureClassification['transient'] : false,
+            'provider_throttle' => !$success ? $failureClassification['throttle'] : false,
+            'provider_rendering_failure' => !$success ? $failureClassification['rendering'] : false,
+            'provider_failure_code' => !$success ? ($failureClassification['normalized_failure_code'] ?? null) : null,
             'error' => $failureReason,
         ];
     }
