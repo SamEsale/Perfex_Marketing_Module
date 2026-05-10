@@ -15,6 +15,7 @@ BOOTSTRAP_FILE="modules/marketing/marketing.php"
 WEBHOOKS_FILE="modules/marketing/controllers/Webhooks.php"
 SES_SNS_FILE="modules/marketing/libraries/Marketing_ses_sns.php"
 INSTALL_FILE="modules/marketing/install.php"
+MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -373,6 +374,27 @@ check_queue_reservation_transaction_integrity() {
     "helper=$helper_line | begin=$begin_line | mismatch=$conflict_line | warning=$warning_line"
 }
 
+check_transient_provider_backoff_safety() {
+  local classify_helper transient_flag throttle_flag temp_failure_reason temp_throttle_reason warning_line
+  classify_helper="$(first_match 'function[[:space:]]+classify_provider_failure' "$MAILER_FILE")"
+  transient_flag="$(first_fixed_match "'transient_failure' => !\$success ? \$this->classify_provider_failure(\$failureReason)['transient'] : false" "$MAILER_FILE")"
+  throttle_flag="$(first_fixed_match "'provider_throttle' => !\$success ? \$this->classify_provider_failure(\$failureReason)['throttle'] : false" "$MAILER_FILE")"
+  temp_failure_reason="$(first_fixed_match 'temporary_provider_failure:' "$CAMPAIGNS_FILE")"
+  temp_throttle_reason="$(first_fixed_match 'temporary_provider_throttle:' "$CAMPAIGNS_FILE")"
+  warning_line="$(first_fixed_match 'provider_throttle_detected' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$classify_helper" || -z "$transient_flag" || -z "$throttle_flag" || -z "$temp_failure_reason" || -z "$temp_throttle_reason" || -z "$warning_line" ]]; then
+    fail \
+      "transient provider failures are classified and stop the current batch conservatively" \
+      "expected failure classifier in $MAILER_FILE and temporary provider warning flow in $CAMPAIGNS_FILE; helper=${classify_helper:-missing}; transient=${transient_flag:-missing}; throttle=${throttle_flag:-missing}; temp_failure=${temp_failure_reason:-missing}; temp_throttle=${temp_throttle_reason:-missing}; warning=${warning_line:-missing}"
+    return
+  fi
+
+  pass \
+    "transient provider failures are classified and stop the current batch conservatively" \
+    "helper=$classify_helper | transient=$transient_flag | warning=$warning_line"
+}
+
 check_ses_sns_signature_enforcement() {
   local require_helper production_line verify_call options_helper options_usage
   require_helper="$(first_match 'function[[:space:]]+shouldRequireSesSnsSignatureVerification' "$WEBHOOKS_FILE")"
@@ -448,6 +470,7 @@ check_campaign_eligibility_semantics
 check_processing_recovery_timeout
 check_processing_lease_ownership
 check_queue_reservation_transaction_integrity
+check_transient_provider_backoff_safety
 check_ses_sns_signature_enforcement
 check_ses_sns_verifier_strictness
 check_sns_message_id_idempotency

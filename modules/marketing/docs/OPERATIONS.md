@@ -51,7 +51,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 
 - Run `bash modules/marketing/scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 17 checks passed`.
+- Expected success result is `OK phase2-regressions 18 checks passed`.
 
 ## Uninstall Notes
 
@@ -86,6 +86,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - If recipients remain in `processing`, allow the stale-processing timeout to elapse before manual retry or reset. Active `processing` rows are no longer requeued immediately on the next queue run.
 - Queue processing now assigns a per-worker recipient lease token. If schema bootstrap is incomplete after deploy, queue processing will fail closed until the recipient lease column is added by the module bootstrap.
 - If queue processing logs `recipient_reservation_failed` or `recipient_reservation_conflict`, treat the batch as unreserved and investigate DB write errors or overlapping workers before retrying.
+- If campaign send warnings include `provider_throttle_detected` or `transient_delivery_failure`, treat the current batch as paused by the provider. The module marks the affected recipient with a `temporary_provider_*` failure reason and stops the rest of that batch instead of hammering SES/SMTP.
 - If campaign clicks are not appearing, confirm delivered links were rewritten to `marketing/track/c/{token}` and that the redirect endpoint returns `302`
 - If unsubscribe actions are not taking effect, confirm the recipient hit the module unsubscribe URL and that a suppression row was created or refreshed
 - If SES / SNS events do not appear, confirm the webhook URL, provider-side subscription configuration, and that production deliveries are signed by AWS SNS.

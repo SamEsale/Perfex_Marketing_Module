@@ -326,6 +326,60 @@ class Marketing_mailer
         return mb_substr($message, 0, 300);
     }
 
+    protected function classify_provider_failure($message)
+    {
+        $message = strtolower(trim((string) $message));
+        if ($message === '' || $message === 'send_failed') {
+            return [
+                'transient' => false,
+                'throttle' => false,
+            ];
+        }
+
+        $throttlePatterns = [
+            '/throttl(?:e|ed|ing)/i',
+            '/rate\s+exceed(?:ed|s)?/i',
+            '/maximum\s+sending\s+rate\s+exceeded/i',
+            '/too\s+many\s+requests/i',
+            '/slow\s+down/i',
+        ];
+
+        foreach ($throttlePatterns as $pattern) {
+            if (preg_match($pattern, $message) === 1) {
+                return [
+                    'transient' => true,
+                    'throttle' => true,
+                ];
+            }
+        }
+
+        $transientPatterns = [
+            '/\b421\b/',
+            '/\b450\b/',
+            '/\b451\b/',
+            '/\b452\b/',
+            '/temporar(?:y|ily)\s+(?:unavailable|failure|error|problem)/i',
+            '/connection\s+temporar(?:y|ily)\s+unavailable/i',
+            '/try\s+again\s+later/i',
+            '/timed?\s*out/i',
+            '/timeout/i',
+        ];
+
+        foreach ($transientPatterns as $pattern) {
+            if (preg_match($pattern, $message) === 1) {
+                return [
+                    'transient' => true,
+                    'throttle' => false,
+                ];
+            }
+        }
+
+        return [
+            'transient' => false,
+            'throttle' => false,
+        ];
+    }
+
     protected function build_reply_marker(array $campaign, array $recipient)
     {
         $campaignId = isset($campaign['id']) ? (int) $campaign['id'] : 0;
@@ -578,6 +632,8 @@ class Marketing_mailer
             'configuration_set' => $outboundMeta['configuration_set'],
             'configuration_set_applied' => $headerStatus['configuration_set_applied'],
             'ses_tags_applied' => $headerStatus['ses_tags_applied'],
+            'transient_failure' => !$success ? $this->classify_provider_failure($failureReason)['transient'] : false,
+            'provider_throttle' => !$success ? $this->classify_provider_failure($failureReason)['throttle'] : false,
             'error' => $failureReason,
         ];
     }

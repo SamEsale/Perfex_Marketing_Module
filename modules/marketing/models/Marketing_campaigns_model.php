@@ -1238,6 +1238,13 @@ class Marketing_campaigns_model extends App_Model
                     $campaignAccepted++;
                 } else {
                     $failureReason = $this->sanitize_failure_reason($result['error'] ?? 'send_failed');
+                    $isTransientFailure = $deliveryChannel === 'email' && !empty($result['transient_failure']);
+                    $isProviderThrottle = $deliveryChannel === 'email' && !empty($result['provider_throttle']);
+                    if ($isProviderThrottle) {
+                        $failureReason = 'temporary_provider_throttle: ' . $failureReason;
+                    } elseif ($isTransientFailure) {
+                        $failureReason = 'temporary_provider_failure: ' . $failureReason;
+                    }
                     $failedRecipientUpdate = [
                         'failed_at' => date('Y-m-d H:i:s'),
                         'failure_reason' => $failureReason,
@@ -1288,11 +1295,28 @@ class Marketing_campaigns_model extends App_Model
 
                     $summary['failed']++;
                     $campaignFailed++;
+
+                    if ($isProviderThrottle || $isTransientFailure) {
+                        $warning = $isProviderThrottle ? 'provider_throttle_detected' : 'transient_delivery_failure';
+                        $this->append_unique_warning($summary['warnings'], $warning);
+                        $this->append_unique_warning($campaignWarnings, $warning);
+                        log_message(
+                            'warning',
+                            'Marketing campaign batch paused after temporary provider failure: campaign_id=' . (int) $campaign['id']
+                            . ' recipient_id=' . (int) $recipient['id']
+                            . ' channel=' . $deliveryChannel
+                            . ' warning=' . $warning
+                        );
+                    }
                 }
 
                 $summary['processed']++;
                 $campaignProcessed++;
                 $remaining--;
+
+                if (($deliveryChannel === 'email' && !empty($result['provider_throttle'])) || ($deliveryChannel === 'email' && !empty($result['transient_failure']))) {
+                    break;
+                }
 
                 if ($remaining <= 0) {
                     break;
