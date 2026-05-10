@@ -515,6 +515,8 @@ class Marketing_campaigns_model extends App_Model
             'queued_at' => date('Y-m-d H:i:s'),
             'sent_at' => null,
             'failed_at' => null,
+            'message_id' => null,
+            'provider_message_id' => null,
             'failure_reason' => null,
             'last_event_at' => null,
             'dateupdated' => date('Y-m-d H:i:s'),
@@ -606,6 +608,14 @@ class Marketing_campaigns_model extends App_Model
             }
         }
 
+        $outboundAttemptToken = trim((string) ($context['outbound_attempt_token'] ?? ''));
+        if ($outboundAttemptToken !== '') {
+            $recipient = $this->find_recipient_by_outbound_attempt_token($outboundAttemptToken, $campaignId);
+            if (!empty($recipient)) {
+                return $recipient;
+            }
+        }
+
         $identifiers = [];
         foreach ([
             $context['correlation_id'] ?? null,
@@ -652,6 +662,25 @@ class Marketing_campaigns_model extends App_Model
         }
 
         return null;
+    }
+
+    protected function find_recipient_by_outbound_attempt_token($outboundAttemptToken, $campaignId = 0)
+    {
+        $outboundAttemptToken = trim((string) $outboundAttemptToken);
+        if ($outboundAttemptToken === '' || !$this->column_exists($this->recipientsTable, 'outbound_attempt_token')) {
+            return null;
+        }
+
+        $this->db->from($this->recipientsTable);
+        if ((int) $campaignId > 0) {
+            $this->db->where('campaign_id', (int) $campaignId);
+        }
+        $this->db->where('outbound_attempt_token', $outboundAttemptToken);
+
+        return $this->db->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
     }
 
     protected function find_recipient_by_message_identifier($identifier, $campaignId = 0)
@@ -1928,33 +1957,67 @@ class Marketing_campaigns_model extends App_Model
     {
         $recipient = $this->get_recipient_by_id($recipientId);
         if (!$recipient) {
-            return false;
+            return [
+                'matched' => false,
+                'mutated' => false,
+                'skipped' => true,
+                'reason' => 'recipient_not_found',
+            ];
         }
 
         $eventType = strtolower(trim((string) ($event['event_type'] ?? '')));
         $eventAt = !empty($event['event_at']) ? (string) $event['event_at'] : date('Y-m-d H:i:s');
         $currentStatus = strtolower((string) ($recipient['status'] ?? ''));
+        $reconciliation = $this->build_recipient_event_reconciliation($recipient, $event);
+        if (empty($reconciliation['allow_mutation'])) {
+            return [
+                'matched' => true,
+                'mutated' => false,
+                'skipped' => true,
+                'reason' => $reconciliation['reason'] ?? 'recipient_event_rejected',
+                'status_before' => $currentStatus,
+                'status_after' => $currentStatus,
+            ];
+        }
+
         $shouldUpdateLastEventAt = !array_key_exists('update_last_event_at', $event) || !empty($event['update_last_event_at']);
         $update = [];
+        $countersUpdated = false;
+
+        if (!empty($reconciliation['adopt_message_id']) && empty($recipient['message_id'])) {
+            $messageId = $this->normalize_message_identifier(
+                $event['message_id'] ?? ($event['correlation_id'] ?? ($event['header_message_id'] ?? null))
+            );
+            if ($messageId !== null) {
+                $update['message_id'] = $messageId;
+            }
+        }
+
+        if (!empty($reconciliation['adopt_provider_message_id']) && empty($recipient['provider_message_id'])) {
+            $providerMessageId = $this->normalize_message_identifier($event['provider_message_id'] ?? null);
+            if ($providerMessageId !== null) {
+                $update['provider_message_id'] = $providerMessageId;
+            }
+        }
 
         if ($shouldUpdateLastEventAt) {
             $update['last_event_at'] = $eventAt;
         }
 
         if ($eventType === 'delivered') {
-            if ($currentStatus === 'queued') {
+            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true)) {
                 $update['status'] = 'sent';
             }
-            $this->increment_recipient_counts($recipientId, ['delivered_count' => 1]);
+            $countersUpdated = $this->increment_recipient_counts($recipientId, ['delivered_count' => 1]) || $countersUpdated;
         } elseif ($eventType === 'open') {
-            if ($currentStatus === 'queued') {
+            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true)) {
                 $update['status'] = 'sent';
             }
-            $this->increment_recipient_counts($recipientId, ['open_count' => 1]);
+            $countersUpdated = $this->increment_recipient_counts($recipientId, ['open_count' => 1]) || $countersUpdated;
         } elseif ($eventType === 'click') {
             $this->ensure_recipient_click_metric_columns();
 
-            if ($currentStatus === 'queued') {
+            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true)) {
                 $update['status'] = 'sent';
             }
             $countMetric = array_key_exists('count_metric', $event)
@@ -1967,7 +2030,7 @@ class Marketing_campaigns_model extends App_Model
                 if ($countUniqueMetric && $this->column_exists($this->recipientsTable, 'unique_click_count')) {
                     $counters['unique_click_count'] = 1;
                 }
-                $this->increment_recipient_counts($recipientId, $counters);
+                $countersUpdated = $this->increment_recipient_counts($recipientId, $counters) || $countersUpdated;
             }
 
             if ($countMetric && !empty($event['url']) && $this->column_exists($this->recipientsTable, 'last_clicked_url')) {
@@ -1983,7 +2046,177 @@ class Marketing_campaigns_model extends App_Model
             $update['failure_reason'] = $this->build_event_failure_reason($event);
         }
 
-        return $this->update_recipient_record($recipientId, $update);
+        $recordUpdated = !empty($update) ? $this->update_recipient_record($recipientId, $update) : false;
+        $statusAfter = strtolower((string) ($update['status'] ?? $currentStatus));
+
+        return [
+            'matched' => true,
+            'mutated' => $recordUpdated || $countersUpdated,
+            'skipped' => false,
+            'reason' => null,
+            'status_before' => $currentStatus,
+            'status_after' => $statusAfter,
+        ];
+    }
+
+    protected function build_recipient_event_reconciliation(array $recipient, array $event)
+    {
+        $eventType = strtolower(trim((string) ($event['event_type'] ?? '')));
+        $currentStatus = strtolower(trim((string) ($recipient['status'] ?? '')));
+        $identityCheck = $this->event_matches_active_outbound_identity($recipient, $event);
+
+        if (empty($identityCheck['matched'])) {
+            return [
+                'allow_mutation' => false,
+                'reason' => $identityCheck['reason'] ?? 'provider_identity_mismatch',
+                'adopt_message_id' => false,
+                'adopt_provider_message_id' => false,
+            ];
+        }
+
+        if (in_array($eventType, ['delivered', 'open', 'click'], true)) {
+            if ($this->recipient_status_blocks_engagement_events($currentStatus)) {
+                return [
+                    'allow_mutation' => false,
+                    'reason' => 'terminal_status_blocks_event',
+                    'adopt_message_id' => false,
+                    'adopt_provider_message_id' => false,
+                ];
+            }
+
+            if ($this->recipient_contact_state_blocks_engagement_events($recipient)) {
+                return [
+                    'allow_mutation' => false,
+                    'reason' => 'contact_state_blocks_engagement',
+                    'adopt_message_id' => false,
+                    'adopt_provider_message_id' => false,
+                ];
+            }
+        }
+
+        if (in_array($eventType, ['bounce', 'complaint', 'rejected', 'rendering_failure', 'rendering_failed', 'failed'], true)
+            && in_array($currentStatus, ['suppressed', 'skipped'], true)) {
+            return [
+                'allow_mutation' => false,
+                'reason' => 'terminal_status_blocks_failure',
+                'adopt_message_id' => false,
+                'adopt_provider_message_id' => false,
+            ];
+        }
+
+        $canAdoptIdentifiers = in_array((string) ($identityCheck['source'] ?? ''), ['outbound_attempt_token', 'message_identifier'], true);
+
+        return [
+            'allow_mutation' => true,
+            'reason' => null,
+            'adopt_message_id' => $canAdoptIdentifiers,
+            'adopt_provider_message_id' => $canAdoptIdentifiers,
+        ];
+    }
+
+    protected function event_matches_active_outbound_identity(array $recipient, array $event)
+    {
+        $recipientAttemptToken = trim((string) ($recipient['outbound_attempt_token'] ?? ''));
+        $eventAttemptToken = trim((string) ($event['outbound_attempt_token'] ?? ''));
+
+        if ($eventAttemptToken !== '') {
+            if ($recipientAttemptToken === '') {
+                return [
+                    'matched' => false,
+                    'reason' => 'outbound_attempt_token_mismatch',
+                    'source' => 'outbound_attempt_token',
+                ];
+            }
+
+            if (!hash_equals($recipientAttemptToken, $eventAttemptToken)) {
+                return [
+                    'matched' => false,
+                    'reason' => 'outbound_attempt_token_mismatch',
+                    'source' => 'outbound_attempt_token',
+                ];
+            }
+
+            return [
+                'matched' => true,
+                'reason' => null,
+                'source' => 'outbound_attempt_token',
+            ];
+        }
+
+        $recipientIdentifiers = array_values(array_filter(array_unique([
+            $this->normalize_message_identifier($recipient['provider_message_id'] ?? null),
+            $this->normalize_message_identifier($recipient['message_id'] ?? null),
+        ])));
+        $eventIdentifiers = array_values(array_filter(array_unique([
+            $this->normalize_message_identifier($event['provider_message_id'] ?? null),
+            $this->normalize_message_identifier($event['message_id'] ?? null),
+            $this->normalize_message_identifier($event['correlation_id'] ?? null),
+            $this->normalize_message_identifier($event['header_message_id'] ?? null),
+        ])));
+
+        if (!empty($recipientIdentifiers) && !empty($eventIdentifiers)) {
+            foreach ($eventIdentifiers as $eventIdentifier) {
+                if (in_array($eventIdentifier, $recipientIdentifiers, true)) {
+                    return [
+                        'matched' => true,
+                        'reason' => null,
+                        'source' => 'message_identifier',
+                    ];
+                }
+            }
+
+            return [
+                'matched' => false,
+                'reason' => 'provider_message_identity_mismatch',
+                'source' => 'message_identifier',
+            ];
+        }
+
+        if ($recipientAttemptToken !== '' && !empty($eventIdentifiers)) {
+            return [
+                'matched' => false,
+                'reason' => 'provider_message_identity_mismatch',
+                'source' => 'message_identifier',
+            ];
+        }
+
+        return [
+            'matched' => true,
+            'reason' => null,
+            'source' => 'best_effort',
+        ];
+    }
+
+    protected function recipient_status_blocks_engagement_events($status)
+    {
+        $status = strtolower(trim((string) $status));
+
+        return in_array($status, ['failed', 'suppressed', 'skipped'], true);
+    }
+
+    protected function recipient_contact_state_blocks_engagement_events(array $recipient)
+    {
+        $contactId = (int) ($recipient['marketing_contact_id'] ?? 0);
+        if ($contactId <= 0 || !$this->db->table_exists($this->contactsTable)) {
+            return false;
+        }
+
+        $contact = $this->db->select('status, consent_status')
+            ->from($this->contactsTable)
+            ->where('id', $contactId)
+            ->limit(1)
+            ->get()
+            ->row_array();
+
+        if (empty($contact)) {
+            return false;
+        }
+
+        $contactStatus = strtolower(trim((string) ($contact['status'] ?? '')));
+        $consentStatus = strtolower(trim((string) ($contact['consent_status'] ?? '')));
+
+        return in_array($contactStatus, ['unsubscribed', 'suppressed', 'bounced', 'complained'], true)
+            || $consentStatus === 'unsubscribed';
     }
 
     public function build_event_failure_reason(array $event)

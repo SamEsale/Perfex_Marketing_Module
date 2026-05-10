@@ -289,6 +289,7 @@ class Webhooks extends CI_Controller
                     'recipient_id' => $event['recipient_id'] ?? null,
                     'correlation_id' => $event['correlation_id'] ?? null,
                     'header_message_id' => $event['header_message_id'] ?? null,
+                    'outbound_attempt_token' => $event['outbound_attempt_token'] ?? null,
                     'prefer_campaign_email' => ($event['event_type'] ?? '') === 'delivered',
                 ]
             );
@@ -296,23 +297,29 @@ class Webhooks extends CI_Controller
             $campaignId = !empty($event['campaign_id']) ? (int) $event['campaign_id'] : null;
             $recipientId = !empty($event['recipient_id']) ? (int) $event['recipient_id'] : null;
             $contactId = null;
+            $reconciliation = [
+                'matched' => false,
+                'mutated' => false,
+                'skipped' => false,
+                'reason' => 'recipient_not_found',
+            ];
 
             if ($recipient) {
                 $recipientId = $recipient['id'];
                 $campaignId = $recipient['campaign_id'];
                 $contactId = $recipient['marketing_contact_id'];
 
-                $providerMessageId = $this->normalizeMessageIdentifier($event['provider_message_id'] ?? null);
-                if ($providerMessageId !== null && $providerMessageId !== $this->normalizeMessageIdentifier($recipient['provider_message_id'] ?? null)) {
-                    $this->marketing_campaigns_model->update_recipient_record($recipientId, [
-                        'provider_message_id' => $providerMessageId,
-                    ]);
-                }
-
-                $this->marketing_campaigns_model->apply_recipient_event($recipientId, array_merge($event, [
+                $reconciliation = $this->marketing_campaigns_model->apply_recipient_event($recipientId, array_merge($event, [
                     'provider' => 'ses_sns',
                 ]));
-                log_message('info', 'Marketing SES/SNS recipient updated: recipient_id=' . $recipientId . ' campaign_id=' . $campaignId . ' event=' . $event['event_type']);
+                log_message(
+                    !empty($reconciliation['mutated']) ? 'info' : 'warning',
+                    'Marketing SES/SNS recipient reconciliation: recipient_id=' . $recipientId
+                    . ' campaign_id=' . $campaignId
+                    . ' event=' . $event['event_type']
+                    . ' mutated=' . (!empty($reconciliation['mutated']) ? '1' : '0')
+                    . ' reason=' . ($reconciliation['reason'] ?? 'none')
+                );
             } else {
                 $contact = $this->findContactByEmail($event['email'] ?? null);
                 if ($contact) {
@@ -329,6 +336,17 @@ class Webhooks extends CI_Controller
                     . ' config_set=' . ($event['configuration_set'] ?? 'n/a')
                 );
             }
+
+            $message['_recipient_reconciliation'] = [
+                'matched' => !empty($reconciliation['matched']),
+                'mutated' => !empty($reconciliation['mutated']),
+                'skipped' => !empty($reconciliation['skipped']),
+                'reason' => $reconciliation['reason'] ?? null,
+                'recipient_id' => $recipientId,
+                'campaign_id' => $campaignId,
+                'outbound_attempt_token' => $event['outbound_attempt_token'] ?? null,
+            ];
+            $event['payload_json'] = $this->safeJsonEncode($message);
 
             if (in_array($event['event_type'], ['bounce', 'complaint'], true) && !empty($event['email'])) {
                 $suppressionId = $this->marketing_suppressions_model->upsert_suppression(
@@ -740,6 +758,7 @@ class Webhooks extends CI_Controller
             'provider_message_id' => $mailMetadata['provider_message_id'] ?? null,
             'header_message_id'   => $mailMetadata['header_message_id'] ?? null,
             'correlation_id'      => $mailMetadata['correlation_message_id'] ?? null,
+            'outbound_attempt_token' => $mailMetadata['outbound_attempt_token'] ?? null,
             'campaign_id'         => $mailMetadata['campaign_id'] ?? null,
             'recipient_id'        => $mailMetadata['recipient_id'] ?? null,
             'configuration_set'   => $mailMetadata['configuration_set'] ?? null,
@@ -907,6 +926,10 @@ class Webhooks extends CI_Controller
             ?: $this->extractSesTagValue($tags, ['correlation_id'])
             ?: $headerMessageId
         );
+        $outboundAttemptToken = trim((string) (
+            $this->extractSesTagValue($tags, ['outbound_attempt_token'])
+            ?: $this->extractSesHeaderValue($headers, ['X-Marketing-Outbound-Attempt-ID'])
+        ));
         $campaignId = $this->extractPositiveInt(
             $this->extractSesTagValue($tags, ['campaign_id', 'campaign'])
             ?: $this->extractSesHeaderValue($headers, ['X-Marketing-Campaign-ID'])
@@ -924,6 +947,7 @@ class Webhooks extends CI_Controller
             'provider_message_id' => $providerMessageId,
             'header_message_id' => $headerMessageId,
             'correlation_message_id' => $correlationId,
+            'outbound_attempt_token' => $outboundAttemptToken !== '' ? $outboundAttemptToken : null,
             'campaign_id' => $campaignId > 0 ? $campaignId : null,
             'recipient_id' => $recipientId > 0 ? $recipientId : null,
             'configuration_set' => $configurationSet !== '' ? $configurationSet : null,

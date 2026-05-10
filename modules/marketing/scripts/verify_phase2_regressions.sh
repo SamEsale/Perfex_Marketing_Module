@@ -413,6 +413,77 @@ check_outbound_attempt_assignment_and_retry_reset() {
     "assignment=$assignment_line | retry=$retry_clear_line | mailer=$mailer_token_line"
 }
 
+check_event_reconciliation_helper_exists() {
+  local helper_line contact_guard_line
+  helper_line="$(first_match 'function[[:space:]]+build_recipient_event_reconciliation' "$CAMPAIGNS_FILE")"
+  contact_guard_line="$(first_match 'function[[:space:]]+recipient_contact_state_blocks_engagement_events' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$contact_guard_line" ]]; then
+    fail \
+      "recipient provider-event reconciliation is centralized in the campaigns model" \
+      "expected reconciliation and contact-state guards in $CAMPAIGNS_FILE; helper=${helper_line:-missing}; contact_guard=${contact_guard_line:-missing}"
+    return
+  fi
+
+  pass \
+    "recipient provider-event reconciliation is centralized in the campaigns model" \
+    "helper=$helper_line | contact_guard=$contact_guard_line"
+}
+
+check_event_terminal_state_precedence() {
+  local status_guard_line block_reason_line failure_block_line
+  status_guard_line="$(first_fixed_match "['failed', 'suppressed', 'skipped']" "$CAMPAIGNS_FILE")"
+  block_reason_line="$(first_fixed_match 'terminal_status_blocks_event' "$CAMPAIGNS_FILE")"
+  failure_block_line="$(first_fixed_match 'terminal_status_blocks_failure' "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$status_guard_line" || -z "$block_reason_line" || -z "$failure_block_line" ]]; then
+    fail \
+      "delivery, open, and click cannot overwrite stronger terminal recipient states" \
+      "expected terminal status precedence guards in $CAMPAIGNS_FILE; statuses=${status_guard_line:-missing}; engagement=${block_reason_line:-missing}; failure=${failure_block_line:-missing}"
+    return
+  fi
+
+  pass \
+    "delivery, open, and click cannot overwrite stronger terminal recipient states" \
+    "statuses=$status_guard_line | engagement=$block_reason_line | failure=$failure_block_line"
+}
+
+check_stale_outbound_identity_guard() {
+  local match_helper_line attempt_mismatch_line provider_mismatch_line webhook_extract_line
+  match_helper_line="$(first_match 'function[[:space:]]+event_matches_active_outbound_identity' "$CAMPAIGNS_FILE")"
+  attempt_mismatch_line="$(first_fixed_match 'outbound_attempt_token_mismatch' "$CAMPAIGNS_FILE")"
+  provider_mismatch_line="$(first_fixed_match 'provider_message_identity_mismatch' "$CAMPAIGNS_FILE")"
+  webhook_extract_line="$(first_fixed_match 'X-Marketing-Outbound-Attempt-ID' "$WEBHOOKS_FILE")"
+
+  if [[ -z "$match_helper_line" || -z "$attempt_mismatch_line" || -z "$provider_mismatch_line" || -z "$webhook_extract_line" ]]; then
+    fail \
+      "stale outbound attempt or provider message identity is checked before recipient mutation" \
+      "expected identity reconciliation guards in $CAMPAIGNS_FILE and SES metadata extraction in $WEBHOOKS_FILE; helper=${match_helper_line:-missing}; attempt=${attempt_mismatch_line:-missing}; provider=${provider_mismatch_line:-missing}; webhook=${webhook_extract_line:-missing}"
+    return
+  fi
+
+  pass \
+    "stale outbound attempt or provider message identity is checked before recipient mutation" \
+    "helper=$match_helper_line | attempt=$attempt_mismatch_line | provider=$provider_mismatch_line"
+}
+
+check_raw_event_logging_after_reconciliation_skip() {
+  local payload_line add_event_line
+  payload_line="$(first_fixed_match "_recipient_reconciliation" "$WEBHOOKS_FILE")"
+  add_event_line="$(first_fixed_match '$storeResult = $this->marketing_events_model->add_event_idempotent([' "$WEBHOOKS_FILE")"
+
+  if [[ -z "$payload_line" || -z "$add_event_line" ]]; then
+    fail \
+      "raw SES SNS events are still logged even when recipient mutation is skipped" \
+      "expected reconciliation audit metadata and idempotent event storage in $WEBHOOKS_FILE; payload=${payload_line:-missing}; add_event=${add_event_line:-missing}"
+    return
+  fi
+
+  pass \
+    "raw SES SNS events are still logged even when recipient mutation is skipped" \
+    "payload=$payload_line | add_event=$add_event_line"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_window install_skew ensure_window ensure_skew
   install_window="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => '900'" "$INSTALL_FILE")"
@@ -568,6 +639,10 @@ check_processing_lease_ownership
 check_queue_reservation_transaction_integrity
 check_outbound_attempt_schema_and_queue_guard
 check_outbound_attempt_assignment_and_retry_reset
+check_event_reconciliation_helper_exists
+check_event_terminal_state_precedence
+check_stale_outbound_identity_guard
+check_raw_event_logging_after_reconciliation_skip
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks

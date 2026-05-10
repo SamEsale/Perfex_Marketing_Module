@@ -160,7 +160,10 @@ class Marketing_mailer
             'correlation_id' => $rawMessageId,
             'message_id' => $rawMessageId,
             'configuration_set' => $this->get_ses_configuration_set(),
-            'ses_tags_header' => 'campaign_id=' . $campaignId . ', recipient_id=' . $recipientId . ', module=marketing',
+            'ses_tags_header' => 'campaign_id=' . $campaignId
+                . ', recipient_id=' . $recipientId
+                . ', outbound_attempt_token=' . $attemptToken
+                . ', module=marketing',
         ];
     }
 

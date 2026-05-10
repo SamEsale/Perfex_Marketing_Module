@@ -51,7 +51,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 
 - Run `bash modules/marketing/scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 23 checks passed`.
+- Expected success result is `OK phase2-regressions 27 checks passed`.
 
 ## Uninstall Notes
 
@@ -93,6 +93,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - If SES / SNS events do not appear, confirm the webhook URL, provider-side subscription configuration, and that production deliveries are signed by AWS SNS.
 - If SES / SNS signature verification fails, confirm the signed webhook message `TopicArn` matches the configured topic when you use a dedicated topic, and confirm the configured SES region matches the SNS certificate and subscribe URLs.
 - Signed SES / SNS messages must also arrive within the configured replay window. Production defaults are `900` seconds max age and `300` seconds future skew tolerance.
+- SES / SNS recipient reconciliation now prefers outbound attempt identity and provider message identity over email fallback. Older SES events may still be logged for audit, but stale events should not mutate the active recipient state.
 - If SES click telemetry is absent but module click tracking works, treat the issue as SES configuration-set publishing rather than outbound send failure
 - If Reply-to-Lead does not create or reuse leads, confirm inbound webhook delivery and Reply-to-Lead settings
 - If WhatsApp verification fails, confirm the stored verify token and the displayed webhook URL
