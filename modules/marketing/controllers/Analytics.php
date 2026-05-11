@@ -247,6 +247,9 @@ class Analytics extends AdminController
             if (!$this->rendered_html_has_visible_content($html)) {
                 throw new RuntimeException('analytics primary view returned empty visible output');
             }
+            if (!$this->rendered_html_has_primary_analytics_markers($html)) {
+                throw new RuntimeException('analytics primary view missing expected Perfex analytics markers');
+            }
             return $this->send_html_response($html);
         } catch (Throwable $exception) {
             $this->log_analytics_runtime_failure('Marketing analytics view render failed: ', $exception);
@@ -308,11 +311,7 @@ class Analytics extends AdminController
             throw $caughtException;
         }
 
-        if (trim($capturedOutput) !== '') {
-            throw new RuntimeException('analytics render emitted unexpected direct output');
-        }
-
-        return is_string($html) ? $html : (string) $html;
+        return $this->combine_rendered_html_fragments($capturedOutput, $html);
     }
 
     protected function clean_output_buffers_to_level($baselineOutputLevel)
@@ -346,6 +345,30 @@ class Analytics extends AdminController
         return;
     }
 
+    protected function combine_rendered_html_fragments($capturedOutput, $html)
+    {
+        $capturedOutput = (string) $capturedOutput;
+        $html = is_string($html) ? $html : (string) $html;
+
+        if ($capturedOutput === '') {
+            return $html;
+        }
+
+        if ($html === '') {
+            return $capturedOutput;
+        }
+
+        if (strpos($capturedOutput, $html) !== false) {
+            return $capturedOutput;
+        }
+
+        if (strpos($html, $capturedOutput) !== false) {
+            return $html;
+        }
+
+        return $capturedOutput . $html;
+    }
+
     protected function build_minimal_fallback_html(array $data)
     {
         $title = html_escape((string) ($data['title'] ?? 'Marketing Analytics'));
@@ -374,6 +397,27 @@ class Analytics extends AdminController
         $visibleText = preg_replace('/\s+/', ' ', $visibleText);
 
         return trim((string) $visibleText) !== '';
+    }
+
+    protected function rendered_html_has_primary_analytics_markers($html)
+    {
+        if (!is_string($html) || $html === '') {
+            return false;
+        }
+
+        $requiredMarkers = [
+            '<div id="wrapper">',
+            'marketing-analytics-section-title',
+            'marketing-metric-card',
+        ];
+
+        foreach ($requiredMarkers as $marker) {
+            if (strpos($html, $marker) === false) {
+                return false;
+            }
+        }
+
+        return strpos($html, 'Marketing Analytics Safe Fallback') === false;
     }
 
     protected function log_analytics_runtime_failure($prefix, Throwable $exception)
