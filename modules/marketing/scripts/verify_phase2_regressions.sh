@@ -1378,6 +1378,52 @@ check_whatsapp_token_preserve_and_redaction() {
     "preserve=$preserve_line | save=$save_line | redact=$redact_line"
 }
 
+check_whatsapp_active_social_scope() {
+  local route_line settings_line test_line model_const_line model_filter_line helper_line
+  route_line="$(first_fixed_match "\$route['marketing/webhooks/whatsapp'] = 'webhooks/whatsapp';" "$ROUTES_FILE")"
+  settings_line="$(first_fixed_match 'marketing_whatsapp_enabled' "$SETTINGS_VIEW_FILE")"
+  test_line="$(first_fixed_match 'marketing_whatsapp_test_heading' "$SETTINGS_VIEW_FILE")"
+  model_const_line="$(first_fixed_match "const ACTIVE_SOCIAL_CHANNELS = ['whatsapp_business', 'whatsapp'];" "modules/marketing/models/Marketing_integrations_model.php")"
+  model_filter_line="$(first_fixed_match "where_in('channel', self::ACTIVE_SOCIAL_CHANNELS)" "modules/marketing/models/Marketing_integrations_model.php")"
+  helper_line="$(first_match 'function[[:space:]]+get_active_social_integrations' "modules/marketing/models/Marketing_integrations_model.php")"
+
+  if [[ -z "$route_line" || -z "$settings_line" || -z "$test_line" || -z "$model_const_line" || -z "$model_filter_line" || -z "$helper_line" ]]; then
+    fail \
+      "WhatsApp remains the only active social integration surface and legacy channel rows are hidden from active integration queries" \
+      "expected WhatsApp route/settings/test markers plus ACTIVE_SOCIAL_CHANNELS filtering in modules/marketing/models/Marketing_integrations_model.php; route=${route_line:-missing}; settings=${settings_line:-missing}; test=${test_line:-missing}; const=${model_const_line:-missing}; filter=${model_filter_line:-missing}; helper=${helper_line:-missing}"
+    return
+  fi
+
+  pass \
+    "WhatsApp remains the only active social integration surface and legacy channel rows are hidden from active integration queries" \
+    "route=$route_line | settings=$settings_line | const=$model_const_line"
+}
+
+check_no_facebook_linkedin_active_ui_or_release_docs() {
+  local settings_fb settings_li dashboard_fb dashboard_li readme_fb readme_li install_fb install_li ops_fb ops_li
+  settings_fb="$(first_match 'Facebook|facebook' "$SETTINGS_VIEW_FILE")"
+  settings_li="$(first_match 'LinkedIn|linkedin' "$SETTINGS_VIEW_FILE")"
+  dashboard_fb="$(first_match 'Facebook|facebook' "$DASHBOARD_VIEW_FILE")"
+  dashboard_li="$(first_match 'LinkedIn|linkedin' "$DASHBOARD_VIEW_FILE")"
+  readme_fb="$(first_match 'Facebook|facebook' "$README_FILE")"
+  readme_li="$(first_match 'LinkedIn|linkedin' "$README_FILE")"
+  install_fb="$(first_match 'Facebook|facebook' "$INSTALLATION_FILE")"
+  install_li="$(first_match 'LinkedIn|linkedin' "$INSTALLATION_FILE")"
+  ops_fb="$(first_match 'Facebook|facebook' "$OPERATIONS_FILE")"
+  ops_li="$(first_match 'LinkedIn|linkedin' "$OPERATIONS_FILE")"
+
+  if [[ -n "$settings_fb" || -n "$settings_li" || -n "$dashboard_fb" || -n "$dashboard_li" || -n "$readme_fb" || -n "$readme_li" || -n "$install_fb" || -n "$install_li" || -n "$ops_fb" || -n "$ops_li" ]]; then
+    fail \
+      "Facebook and LinkedIn do not appear in active settings/dashboard UI or release-facing docs" \
+      "expected no Facebook/LinkedIn references in settings, dashboard, README, INSTALLATION, or OPERATIONS; settings_fb=${settings_fb:-none}; settings_li=${settings_li:-none}; dashboard_fb=${dashboard_fb:-none}; dashboard_li=${dashboard_li:-none}; readme_fb=${readme_fb:-none}; readme_li=${readme_li:-none}; install_fb=${install_fb:-none}; install_li=${install_li:-none}; ops_fb=${ops_fb:-none}; ops_li=${ops_li:-none}"
+    return
+  fi
+
+  pass \
+    "Facebook and LinkedIn do not appear in active settings/dashboard UI or release-facing docs" \
+    "settings/dashboard/release docs are WhatsApp-only"
+}
+
 check_release_validator_exists() {
   local shebang_line source_only_line zip_root_line
   if [[ ! -x "$RELEASE_VALIDATOR_FILE" ]]; then
@@ -1710,6 +1756,8 @@ check_dashboard_operator_ui_structure
 check_whatsapp_send_auth_diagnostics
 check_whatsapp_test_alert_safety
 check_whatsapp_token_preserve_and_redaction
+check_whatsapp_active_social_scope
+check_no_facebook_linkedin_active_ui_or_release_docs
 check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks

@@ -14,7 +14,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 - Deploy to staging before production
 - Back up the database and the current module package
 - Confirm your Perfex cron setup is working
-- WhatsApp Business is the only built-in social channel integration in this package. Facebook and LinkedIn surfaces are intentionally removed from the Marketing module UI.
+- WhatsApp Business is the only built-in social channel integration in this package.
 
 ## Install
 

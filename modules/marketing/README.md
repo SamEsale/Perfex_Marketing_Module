@@ -38,7 +38,7 @@ This project is a module for **Perfex CRM**. It is not standalone software and m
 
 - Perfex cron is required for campaign execution
 - Deploy to staging before production whenever possible
-- Facebook and LinkedIn integrations are intentionally removed from the Marketing module UI in this package. WhatsApp Business remains the only built-in social channel integration.
+- WhatsApp Business is the only built-in social channel integration in this package.
 - WhatsApp sending requires:
   - a Meta-approved WhatsApp Business app
   - an active Phone Number ID

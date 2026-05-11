@@ -22,7 +22,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - SMTP / SES settings must be valid before email sending
 - Module click tracking requires the public route `marketing/track/c/{token}` to be reachable from recipient devices
 - Module unsubscribe handling requires the public route `marketing/unsubscribe/{token}` to be reachable from recipient devices
-- WhatsApp Business is the only built-in social channel integration in this package. Facebook and LinkedIn surfaces are intentionally removed from the module UI.
+- WhatsApp Business is the only built-in social channel integration in this package.
 - WhatsApp sending requires a Meta-approved WhatsApp Business app, an active Phone Number ID, a valid non-expired access token, and approved templates
 
 ## Safe Installation Flow
@@ -53,7 +53,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - From the standalone module root, run `bash scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - From that same standalone module root, run `bash scripts/verify_release_package.sh` before shipping any commercial ZIP.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 79 checks passed`.
+- Expected success result is `OK phase2-regressions 81 checks passed`.
 
 ## Uninstall Notes
 
