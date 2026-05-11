@@ -1045,22 +1045,24 @@ check_retention_dashboard_surface() {
 }
 
 check_no_destructive_event_history_clear() {
-  local controller_warning_line controller_flag_line model_guard_line view_button_line
-  controller_warning_line="$(first_fixed_match 'Destructive event history clearing is disabled. Use bounded retention cleanup only.' "$ANALYTICS_CONTROLLER_FILE")"
-  controller_flag_line="$(first_fixed_match "\$data['can_clear_event_history'] = false;" "$ANALYTICS_CONTROLLER_FILE")"
+  local controller_post_line controller_model_line controller_flag_line model_guard_line safe_button_line destructive_button_line
+  controller_post_line="$(first_fixed_match "if (\$this->input->post('run_retention_cleanup')) {" "$ANALYTICS_CONTROLLER_FILE")"
+  controller_model_line="$(first_fixed_match '$summary = $this->marketing_events_model->run_retention_cleanup();' "$ANALYTICS_CONTROLLER_FILE")"
+  controller_flag_line="$(first_fixed_match "\$data['can_run_retention_cleanup'] = staff_can('settings', 'marketing');" "$ANALYTICS_CONTROLLER_FILE")"
   model_guard_line="$(first_fixed_match 'return false;' "$EVENTS_FILE")"
-  view_button_line="$(first_fixed_match 'marketing_clear_event_history' "$ANALYTICS_VIEW_FILE")"
+  safe_button_line="$(first_fixed_match 'Run Retention Cleanup' "$ANALYTICS_VIEW_FILE")"
+  destructive_button_line="$(first_fixed_match 'marketing_clear_event_history' "$ANALYTICS_VIEW_FILE")"
 
-  if [[ -z "$controller_warning_line" || -z "$controller_flag_line" || -z "$model_guard_line" || -n "$view_button_line" ]]; then
+  if [[ -z "$controller_post_line" || -z "$controller_model_line" || -z "$controller_flag_line" || -z "$model_guard_line" || -z "$safe_button_line" || -n "$destructive_button_line" ]]; then
     fail \
-      "destructive event history clearing is disabled in favor of bounded retention" \
-      "expected disabled alert and hidden flag in analytics controller, fail-closed model method, and no analytics clear button; controller_warning=${controller_warning_line:-missing}; controller_flag=${controller_flag_line:-missing}; model=${model_guard_line:-missing}; view_button=${view_button_line:-unexpected}"
+      "analytics exposes only safe bounded retention cleanup and keeps destructive history clearing disabled" \
+      "expected retention cleanup POST path, bounded model call, permission flag, fail-closed clear_event_history(), visible safe button, and no destructive clear button; post=${controller_post_line:-missing}; model_call=${controller_model_line:-missing}; flag=${controller_flag_line:-missing}; model=${model_guard_line:-missing}; safe_button=${safe_button_line:-missing}; destructive_button=${destructive_button_line:-unexpected}"
     return
   fi
 
   pass \
-    "destructive event history clearing is disabled in favor of bounded retention" \
-    "controller_warning=$controller_warning_line | controller_flag=$controller_flag_line | model=$model_guard_line"
+    "analytics exposes only safe bounded retention cleanup and keeps destructive history clearing disabled" \
+    "post=$controller_post_line | model_call=$controller_model_line | safe_button=$safe_button_line"
 }
 
 check_release_validator_exists() {

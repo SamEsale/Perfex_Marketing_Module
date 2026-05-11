@@ -18,12 +18,37 @@ class Analytics extends AdminController
 
     public function index()
     {
-        if ($this->input->post('clear_marketing_events')) {
+        if ($this->input->post('run_retention_cleanup')) {
             if (staff_cant('settings', 'marketing')) {
                 access_denied('marketing');
             }
 
-            set_alert('warning', 'Destructive event history clearing is disabled. Use bounded retention cleanup only.');
+            try {
+                $summary = $this->marketing_events_model->run_retention_cleanup();
+                $eventsDeleted = (int) ($summary['events_deleted'] ?? 0);
+                $webhookLogsDeleted = (int) ($summary['webhook_logs_deleted'] ?? 0);
+                $warnings = isset($summary['warnings']) && is_array($summary['warnings'])
+                    ? array_values(array_filter(array_map('trim', $summary['warnings'])))
+                    : [];
+
+                if ($eventsDeleted > 0 || $webhookLogsDeleted > 0) {
+                    set_alert(
+                        'success',
+                        'Retention cleanup completed. Deleted ' . $eventsDeleted
+                        . ' telemetry event row(s) and ' . $webhookLogsDeleted . ' webhook log row(s).'
+                    );
+                } elseif (!empty($warnings)) {
+                    set_alert(
+                        'warning',
+                        'Retention cleanup did not delete rows. Warnings: ' . implode(', ', $warnings) . '.'
+                    );
+                } else {
+                    set_alert('info', 'Retention cleanup completed. No eligible telemetry rows were deleted.');
+                }
+            } catch (Throwable $exception) {
+                log_message('error', 'Marketing retention cleanup failed from analytics: ' . marketing_sanitize_log_message($exception->getMessage()));
+                set_alert('danger', 'Retention cleanup failed. No telemetry rows were deleted.');
+            }
 
             redirect(admin_url('marketing/analytics'));
         }
@@ -46,7 +71,7 @@ class Analytics extends AdminController
         $data['title']      = _l('marketing_analytics');
         $data['stats']      = $this->marketing_dashboard_model->get_analytics_summary();
         $data['recent']     = $this->marketing_events_model->get_events_paginated($perPage, $offset);
-        $data['can_clear_event_history'] = false;
+        $data['can_run_retention_cleanup'] = staff_can('settings', 'marketing');
         $data['events_pagination'] = [
             'page' => $page,
             'per_page' => $perPage,

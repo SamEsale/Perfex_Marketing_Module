@@ -145,6 +145,14 @@
                                 <h4 class="no-margin"><?= _l('marketing_analytics'); ?></h4>
                                 <p class="text-muted mtop10"><?= _l('marketing_analytics_placeholder'); ?></p>
                             </div>
+                            <?php if (!empty($can_run_retention_cleanup)) { ?>
+                                <div class="tw-flex-shrink-0">
+                                    <?= form_open(admin_url('marketing/analytics'), ['class' => 'inline-block']); ?>
+                                        <input type="hidden" name="run_retention_cleanup" value="1">
+                                        <button type="submit" class="btn btn-default">Run Retention Cleanup</button>
+                                    <?= form_close(); ?>
+                                </div>
+                            <?php } ?>
                         </div>
                         <hr />
                         <div class="marketing-analytics-section">
@@ -234,9 +242,6 @@
                                 </table>
                             </div>
                             <div class="clearfix mtop15">
-                                <div class="pull-left text-muted">
-                                    <?= sprintf('Showing %d to %d of %d event records', (($events_pagination['page'] - 1) * $events_pagination['per_page']) + 1, min($events_pagination['page'] * $events_pagination['per_page'], $events_pagination['total']), $events_pagination['total']); ?>
-                                </div>
                                 <?php if ($events_pagination['total_pages'] > 1) { ?>
                                     <ul class="pagination no-margin pull-right">
                                         <li class="<?= $events_pagination['page'] <= 1 ? 'disabled' : ''; ?>">
