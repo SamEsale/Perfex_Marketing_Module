@@ -580,7 +580,7 @@ class Marketing_events_model extends App_Model
 
     public function clear_event_history()
     {
-        return (bool) $this->db->empty_table($this->table);
+        return false;
     }
 
     public function get_retention_diagnostics()

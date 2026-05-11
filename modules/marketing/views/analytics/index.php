@@ -145,14 +145,6 @@
                                 <h4 class="no-margin"><?= _l('marketing_analytics'); ?></h4>
                                 <p class="text-muted mtop10"><?= _l('marketing_analytics_placeholder'); ?></p>
                             </div>
-                            <?php if (!empty($can_clear_event_history)) { ?>
-                                <div class="tw-flex-shrink-0">
-                                    <?= form_open(admin_url('marketing/analytics'), ['class' => 'inline-block', 'onsubmit' => "return confirm('" . html_escape(_l('marketing_clear_event_history_confirm')) . "');"]); ?>
-                                        <input type="hidden" name="clear_marketing_events" value="1">
-                                        <button type="submit" class="btn btn-danger"><?= _l('marketing_clear_event_history'); ?></button>
-                                    <?= form_close(); ?>
-                                </div>
-                            <?php } ?>
                         </div>
                         <hr />
                         <div class="marketing-analytics-section">

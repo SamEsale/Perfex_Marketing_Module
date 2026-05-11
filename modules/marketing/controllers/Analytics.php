@@ -19,15 +19,11 @@ class Analytics extends AdminController
     public function index()
     {
         if ($this->input->post('clear_marketing_events')) {
-            if (staff_cant('delete', 'marketing')) {
+            if (staff_cant('settings', 'marketing')) {
                 access_denied('marketing');
             }
 
-            if ($this->marketing_events_model->clear_event_history()) {
-                set_alert('success', _l('marketing_event_history_cleared'));
-            } else {
-                set_alert('warning', _l('marketing_event_history_clear_failed'));
-            }
+            set_alert('warning', 'Destructive event history clearing is disabled. Use bounded retention cleanup only.');
 
             redirect(admin_url('marketing/analytics'));
         }
@@ -50,7 +46,7 @@ class Analytics extends AdminController
         $data['title']      = _l('marketing_analytics');
         $data['stats']      = $this->marketing_dashboard_model->get_analytics_summary();
         $data['recent']     = $this->marketing_events_model->get_events_paginated($perPage, $offset);
-        $data['can_clear_event_history'] = staff_can('delete', 'marketing');
+        $data['can_clear_event_history'] = false;
         $data['events_pagination'] = [
             'page' => $page,
             'per_page' => $perPage,

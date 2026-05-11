@@ -21,10 +21,12 @@ MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
 DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
 MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
 CAMPAIGNS_CONTROLLER_FILE="modules/marketing/controllers/Campaigns.php"
+ANALYTICS_CONTROLLER_FILE="modules/marketing/controllers/Analytics.php"
 README_FILE="modules/marketing/README.md"
 INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
+ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -1042,6 +1044,25 @@ check_retention_dashboard_surface() {
     "dashboard=$dashboard_line | view=$view_line | candidate=$candidate_line"
 }
 
+check_no_destructive_event_history_clear() {
+  local controller_warning_line controller_flag_line model_guard_line view_button_line
+  controller_warning_line="$(first_fixed_match 'Destructive event history clearing is disabled. Use bounded retention cleanup only.' "$ANALYTICS_CONTROLLER_FILE")"
+  controller_flag_line="$(first_fixed_match "\$data['can_clear_event_history'] = false;" "$ANALYTICS_CONTROLLER_FILE")"
+  model_guard_line="$(first_fixed_match 'return false;' "$EVENTS_FILE")"
+  view_button_line="$(first_fixed_match 'marketing_clear_event_history' "$ANALYTICS_VIEW_FILE")"
+
+  if [[ -z "$controller_warning_line" || -z "$controller_flag_line" || -z "$model_guard_line" || -n "$view_button_line" ]]; then
+    fail \
+      "destructive event history clearing is disabled in favor of bounded retention" \
+      "expected disabled alert and hidden flag in analytics controller, fail-closed model method, and no analytics clear button; controller_warning=${controller_warning_line:-missing}; controller_flag=${controller_flag_line:-missing}; model=${model_guard_line:-missing}; view_button=${view_button_line:-unexpected}"
+    return
+  fi
+
+  pass \
+    "destructive event history clearing is disabled in favor of bounded retention" \
+    "controller_warning=$controller_warning_line | controller_flag=$controller_flag_line | model=$model_guard_line"
+}
+
 check_release_validator_exists() {
   local shebang_line source_only_line zip_root_line
   if [[ ! -x "$RELEASE_VALIDATOR_FILE" ]]; then
@@ -1358,6 +1379,7 @@ check_retention_excludes_audit_critical_events
 check_retention_cleanup_scope
 check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
+check_no_destructive_event_history_clear
 check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks
