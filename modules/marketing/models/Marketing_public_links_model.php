@@ -517,126 +517,132 @@ class Marketing_public_links_model extends App_Model
 
     protected function get_click_aggregate_candidate_rows($cutoffDateTime, $limit)
     {
-        if (!$this->can_reset_click_aggregates()) {
-            return [];
-        }
+        $this->reset_public_links_query_builder();
 
-        $select = ['pl.id'];
-        foreach ([
-            'click_count',
-            'human_click_count',
-            'unique_click_count',
-            'last_clicked_at',
-            'last_human_clicked_at',
-            'last_used_at',
-            'datecreated',
-            'dateupdated',
-            'campaign_id',
-        ] as $column) {
-            if ($this->db->field_exists($column, $this->table)) {
-                $select[] = 'pl.' . $column;
+        try {
+            if (!$this->can_reset_click_aggregates()) {
+                return [];
             }
-        }
 
-        if (
-            $this->db->table_exists($this->campaignsTable)
-            && $this->db->field_exists('campaign_id', $this->table)
-            && $this->db->field_exists('id', $this->campaignsTable)
-            && $this->db->field_exists('status', $this->campaignsTable)
-        ) {
-            $select[] = 'c.status AS campaign_status';
-            $this->db->join($this->campaignsTable . ' c', 'c.id = pl.campaign_id', 'left');
-        } else {
-            $select[] = 'NULL AS campaign_status';
-        }
-
-        $this->db->select(implode(', ', $select), false)
-            ->from($this->table . ' pl')
-            ->where('pl.token_type', self::TYPE_CLICK);
-
-        if ($this->db->field_exists('is_active', $this->table)) {
-            $this->db->where('pl.is_active', 1);
-        }
-
-        if (
-            $this->db->table_exists($this->campaignsTable)
-            && $this->db->field_exists('campaign_id', $this->table)
-            && $this->db->field_exists('id', $this->campaignsTable)
-            && $this->db->field_exists('status', $this->campaignsTable)
-        ) {
-            $this->db->group_start();
-            $this->db->where('c.status IS NULL', null, false);
-            $this->db->or_where_not_in('c.status', self::ACTIVE_CAMPAIGN_STATUSES);
-            $this->db->group_end();
-        }
-
-        if ($this->db->field_exists('last_human_clicked_at', $this->table)) {
-            $this->db->group_start();
-            $this->db->where('pl.last_human_clicked_at <=', $cutoffDateTime);
-            $this->db->or_where('pl.last_human_clicked_at IS NULL', null, false);
-            $this->db->group_end();
-        }
-
-        if ($this->db->field_exists('last_clicked_at', $this->table)) {
-            $this->db->group_start();
-            $this->db->where('pl.last_clicked_at <=', $cutoffDateTime);
-            $this->db->or_where('pl.last_clicked_at IS NULL', null, false);
-            $this->db->group_end();
-        }
-
-        if ($this->db->field_exists('last_used_at', $this->table)) {
-            $this->db->group_start();
-            $this->db->where('pl.last_used_at <=', $cutoffDateTime);
-            $this->db->or_where('pl.last_used_at IS NULL', null, false);
-            $this->db->group_end();
-        } elseif ($this->db->field_exists('dateupdated', $this->table)) {
-            // Fall back to generic row age only when click/use timestamps are unavailable.
-            $this->db->group_start();
-            $this->db->where('pl.dateupdated <=', $cutoffDateTime);
-            $this->db->or_where('pl.dateupdated IS NULL', null, false);
-            $this->db->group_end();
-        }
-
-        if ($this->db->field_exists('datecreated', $this->table)) {
-            $this->db->where('pl.datecreated <=', $cutoffDateTime);
-        }
-
-        $this->db->group_start();
-        $hasActivityFilter = false;
-        foreach (['click_count', 'human_click_count', 'unique_click_count'] as $counterColumn) {
-            if ($this->db->field_exists($counterColumn, $this->table)) {
-                if ($hasActivityFilter) {
-                    $this->db->or_where('pl.' . $counterColumn . ' >', 0, false);
-                } else {
-                    $this->db->where('pl.' . $counterColumn . ' >', 0, false);
-                    $hasActivityFilter = true;
+            $select = ['pl.id'];
+            foreach ([
+                'click_count',
+                'human_click_count',
+                'unique_click_count',
+                'last_clicked_at',
+                'last_human_clicked_at',
+                'last_used_at',
+                'datecreated',
+                'dateupdated',
+                'campaign_id',
+            ] as $column) {
+                if ($this->db->field_exists($column, $this->table)) {
+                    $select[] = 'pl.' . $column;
                 }
             }
-        }
-        foreach (['last_clicked_at', 'last_human_clicked_at'] as $dateColumn) {
-            if ($this->db->field_exists($dateColumn, $this->table)) {
-                if ($hasActivityFilter) {
-                    $this->db->or_where('pl.' . $dateColumn . ' IS NOT NULL', null, false);
-                } else {
-                    $this->db->where('pl.' . $dateColumn . ' IS NOT NULL', null, false);
-                    $hasActivityFilter = true;
+
+            if (
+                $this->db->table_exists($this->campaignsTable)
+                && $this->db->field_exists('campaign_id', $this->table)
+                && $this->db->field_exists('id', $this->campaignsTable)
+                && $this->db->field_exists('status', $this->campaignsTable)
+            ) {
+                $select[] = 'c.status AS campaign_status';
+                $this->db->join($this->campaignsTable . ' c', 'c.id = pl.campaign_id', 'left');
+            } else {
+                $select[] = 'NULL AS campaign_status';
+            }
+
+            $this->db->select(implode(', ', $select), false)
+                ->from($this->table . ' pl')
+                ->where('pl.token_type', self::TYPE_CLICK);
+
+            if ($this->db->field_exists('is_active', $this->table)) {
+                $this->db->where('pl.is_active', 1);
+            }
+
+            if (
+                $this->db->table_exists($this->campaignsTable)
+                && $this->db->field_exists('campaign_id', $this->table)
+                && $this->db->field_exists('id', $this->campaignsTable)
+                && $this->db->field_exists('status', $this->campaignsTable)
+            ) {
+                $this->db->group_start();
+                $this->db->where('c.status IS NULL', null, false);
+                $this->db->or_where_not_in('c.status', self::ACTIVE_CAMPAIGN_STATUSES);
+                $this->db->group_end();
+            }
+
+            if ($this->db->field_exists('last_human_clicked_at', $this->table)) {
+                $this->db->group_start();
+                $this->db->where('pl.last_human_clicked_at <=', $cutoffDateTime);
+                $this->db->or_where('pl.last_human_clicked_at IS NULL', null, false);
+                $this->db->group_end();
+            }
+
+            if ($this->db->field_exists('last_clicked_at', $this->table)) {
+                $this->db->group_start();
+                $this->db->where('pl.last_clicked_at <=', $cutoffDateTime);
+                $this->db->or_where('pl.last_clicked_at IS NULL', null, false);
+                $this->db->group_end();
+            }
+
+            if ($this->db->field_exists('last_used_at', $this->table)) {
+                $this->db->group_start();
+                $this->db->where('pl.last_used_at <=', $cutoffDateTime);
+                $this->db->or_where('pl.last_used_at IS NULL', null, false);
+                $this->db->group_end();
+            } elseif ($this->db->field_exists('dateupdated', $this->table)) {
+                // Fall back to generic row age only when click/use timestamps are unavailable.
+                $this->db->group_start();
+                $this->db->where('pl.dateupdated <=', $cutoffDateTime);
+                $this->db->or_where('pl.dateupdated IS NULL', null, false);
+                $this->db->group_end();
+            }
+
+            if ($this->db->field_exists('datecreated', $this->table)) {
+                $this->db->where('pl.datecreated <=', $cutoffDateTime);
+            }
+
+            $this->db->group_start();
+            $hasActivityFilter = false;
+            foreach (['click_count', 'human_click_count', 'unique_click_count'] as $counterColumn) {
+                if ($this->db->field_exists($counterColumn, $this->table)) {
+                    if ($hasActivityFilter) {
+                        $this->db->or_where('pl.' . $counterColumn . ' >', 0, false);
+                    } else {
+                        $this->db->where('pl.' . $counterColumn . ' >', 0, false);
+                        $hasActivityFilter = true;
+                    }
                 }
             }
-        }
-        if (!$hasActivityFilter) {
-            $this->db->where('1 = 0', null, false);
-        }
-        $this->db->group_end();
+            foreach (['last_clicked_at', 'last_human_clicked_at'] as $dateColumn) {
+                if ($this->db->field_exists($dateColumn, $this->table)) {
+                    if ($hasActivityFilter) {
+                        $this->db->or_where('pl.' . $dateColumn . ' IS NOT NULL', null, false);
+                    } else {
+                        $this->db->where('pl.' . $dateColumn . ' IS NOT NULL', null, false);
+                        $hasActivityFilter = true;
+                    }
+                }
+            }
+            if (!$hasActivityFilter) {
+                $this->db->where('1 = 0', null, false);
+            }
+            $this->db->group_end();
 
-        if ($this->db->field_exists('last_used_at', $this->table)) {
-            $this->db->order_by('pl.last_used_at', 'ASC');
-        } elseif ($this->db->field_exists('dateupdated', $this->table)) {
-            $this->db->order_by('pl.dateupdated', 'ASC');
-        } else {
-            $this->db->order_by('pl.id', 'ASC');
-        }
+            if ($this->db->field_exists('last_used_at', $this->table)) {
+                $this->db->order_by('pl.last_used_at', 'ASC');
+            } elseif ($this->db->field_exists('dateupdated', $this->table)) {
+                $this->db->order_by('pl.dateupdated', 'ASC');
+            } else {
+                $this->db->order_by('pl.id', 'ASC');
+            }
 
-        return $this->db->limit(max(1, (int) $limit))->get()->result_array();
+            return $this->db->limit(max(1, (int) $limit))->get()->result_array();
+        } finally {
+            $this->reset_public_links_query_builder();
+        }
     }
 
     protected function row_has_click_aggregate_activity(array $row)
@@ -664,5 +670,12 @@ class Marketing_public_links_model extends App_Model
         }
 
         return array_intersect_key($data, array_flip($columns));
+    }
+
+    protected function reset_public_links_query_builder()
+    {
+        if (is_object($this->db) && method_exists($this->db, 'reset_query')) {
+            $this->db->reset_query();
+        }
     }
 }

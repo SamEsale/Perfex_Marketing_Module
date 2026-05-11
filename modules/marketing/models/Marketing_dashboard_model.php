@@ -373,147 +373,165 @@ class Marketing_dashboard_model extends App_Model
             'unique_clicks' => 0,
         ];
 
-        if (
-            !$this->db->table_exists($this->publicLinksTable)
-            || !$this->db->field_exists('token_type', $this->publicLinksTable)
-        ) {
+        $this->reset_dashboard_query_builder();
+
+        try {
+            if (
+                !$this->db->table_exists($this->publicLinksTable)
+                || !$this->db->field_exists('token_type', $this->publicLinksTable)
+            ) {
+                return $summary;
+            }
+
+            $select = [];
+            if ($this->db->field_exists('human_click_count', $this->publicLinksTable)) {
+                $select[] = 'COALESCE(SUM(human_click_count), 0) AS human_clicks';
+            } else {
+                $select[] = '0 AS human_clicks';
+            }
+            if ($this->db->field_exists('unique_click_count', $this->publicLinksTable)) {
+                $select[] = 'COALESCE(SUM(unique_click_count), 0) AS unique_clicks';
+            } else {
+                $select[] = '0 AS unique_clicks';
+            }
+
+            $row = $this->db->select(implode(', ', $select), false)
+                ->from($this->publicLinksTable)
+                ->where('token_type', 'click')
+                ->get()
+                ->row_array();
+
+            $summary['human_clicks'] = (int) ($row['human_clicks'] ?? 0);
+            $summary['unique_clicks'] = (int) ($row['unique_clicks'] ?? 0);
+
             return $summary;
+        } finally {
+            $this->reset_dashboard_query_builder();
         }
-
-        $select = [];
-        if ($this->db->field_exists('human_click_count', $this->publicLinksTable)) {
-            $select[] = 'COALESCE(SUM(human_click_count), 0) AS human_clicks';
-        } else {
-            $select[] = '0 AS human_clicks';
-        }
-        if ($this->db->field_exists('unique_click_count', $this->publicLinksTable)) {
-            $select[] = 'COALESCE(SUM(unique_click_count), 0) AS unique_clicks';
-        } else {
-            $select[] = '0 AS unique_clicks';
-        }
-
-        $row = $this->db->select(implode(', ', $select), false)
-            ->from($this->publicLinksTable)
-            ->where('token_type', 'click')
-            ->get()
-            ->row_array();
-
-        $summary['human_clicks'] = (int) ($row['human_clicks'] ?? 0);
-        $summary['unique_clicks'] = (int) ($row['unique_clicks'] ?? 0);
-
-        return $summary;
     }
 
     protected function get_top_clicked_links_from_public_links($topLimit)
     {
-        if (
-            !$this->db->table_exists($this->publicLinksTable)
-            || !$this->db->field_exists('token_type', $this->publicLinksTable)
-            || !$this->db->field_exists('original_url', $this->publicLinksTable)
-        ) {
-            return $this->get_top_clicked_links_from_event_fallback($topLimit);
-        }
+        $this->reset_dashboard_query_builder();
 
-        $humanCountExpr = $this->db->field_exists('human_click_count', $this->publicLinksTable)
-            ? 'COALESCE(SUM(pl.human_click_count), 0)'
-            : '0';
-        $uniqueCountExpr = $this->db->field_exists('unique_click_count', $this->publicLinksTable)
-            ? 'COALESCE(SUM(pl.unique_click_count), 0)'
-            : '0';
-
-        $rows = $this->db->select('pl.original_url AS url, ' . $humanCountExpr . ' AS count, ' . $uniqueCountExpr . ' AS unique_count', false)
-            ->from($this->publicLinksTable . ' pl')
-            ->where('pl.token_type', 'click');
-
-        if ($this->db->field_exists('is_active', $this->publicLinksTable)) {
-            $this->db->where('pl.is_active', 1);
-        }
-
-        $rows = $this->db
-            ->where('pl.original_url IS NOT NULL', null, false)
-            ->where('pl.original_url !=', '')
-            ->group_by('pl.original_url')
-            ->order_by('count', 'DESC')
-            ->order_by('unique_count', 'DESC')
-            ->limit(max(1, (int) $topLimit))
-            ->get()
-            ->result_array();
-
-        $links = [];
-        foreach ($rows as $row) {
-            $url = trim((string) ($row['url'] ?? ''));
-            if ($url === '' || $this->is_internal_tracking_url($url) || (int) ($row['count'] ?? 0) <= 0) {
-                continue;
+        try {
+            if (
+                !$this->db->table_exists($this->publicLinksTable)
+                || !$this->db->field_exists('token_type', $this->publicLinksTable)
+                || !$this->db->field_exists('original_url', $this->publicLinksTable)
+            ) {
+                return $this->get_top_clicked_links_from_event_fallback($topLimit);
             }
 
-            $links[] = [
-                'url' => $url,
-                'count' => (int) ($row['count'] ?? 0),
-                'unique_count' => (int) ($row['unique_count'] ?? 0),
-            ];
-        }
+            $humanCountExpr = $this->db->field_exists('human_click_count', $this->publicLinksTable)
+                ? 'COALESCE(SUM(pl.human_click_count), 0)'
+                : '0';
+            $uniqueCountExpr = $this->db->field_exists('unique_click_count', $this->publicLinksTable)
+                ? 'COALESCE(SUM(pl.unique_click_count), 0)'
+                : '0';
 
-        if (!empty($links)) {
-            return $links;
-        }
+            $rows = $this->db->select('pl.original_url AS url, ' . $humanCountExpr . ' AS count, ' . $uniqueCountExpr . ' AS unique_count', false)
+                ->from($this->publicLinksTable . ' pl')
+                ->where('pl.token_type', 'click');
 
-        return $this->get_top_clicked_links_from_event_fallback($topLimit);
+            if ($this->db->field_exists('is_active', $this->publicLinksTable)) {
+                $this->db->where('pl.is_active', 1);
+            }
+
+            $rows = $this->db
+                ->where('pl.original_url IS NOT NULL', null, false)
+                ->where('pl.original_url !=', '')
+                ->group_by('pl.original_url')
+                ->order_by('count', 'DESC')
+                ->order_by('unique_count', 'DESC')
+                ->limit(max(1, (int) $topLimit))
+                ->get()
+                ->result_array();
+
+            $links = [];
+            foreach ($rows as $row) {
+                $url = trim((string) ($row['url'] ?? ''));
+                if ($url === '' || $this->is_internal_tracking_url($url) || (int) ($row['count'] ?? 0) <= 0) {
+                    continue;
+                }
+
+                $links[] = [
+                    'url' => $url,
+                    'count' => (int) ($row['count'] ?? 0),
+                    'unique_count' => (int) ($row['unique_count'] ?? 0),
+                ];
+            }
+
+            if (!empty($links)) {
+                return $links;
+            }
+
+            return $this->get_top_clicked_links_from_event_fallback($topLimit);
+        } finally {
+            $this->reset_dashboard_query_builder();
+        }
     }
 
     protected function get_top_clicked_links_from_event_fallback($topLimit)
     {
-        if (
-            !$this->db->table_exists($this->eventsTable)
-            || !$this->db->field_exists('provider', $this->eventsTable)
-            || !$this->db->field_exists('event_type', $this->eventsTable)
-        ) {
-            return [];
-        }
+        $this->reset_dashboard_query_builder();
 
-        $rows = $this->db->select(
-            ($this->db->field_exists('url', $this->eventsTable) ? 'url' : 'NULL AS url')
-            . ', '
-            . ($this->db->field_exists('payload_json', $this->eventsTable) ? 'payload_json' : 'NULL AS payload_json'),
-            false
-        )
-            ->from($this->eventsTable);
-
-        $this->db->where('provider', 'module');
-
-        $this->apply_normalized_event_type_filter($this->db, ['click', 'clicked']);
-
-        if ($this->db->field_exists('event_at', $this->eventsTable)) {
-            $this->db->order_by('event_at', 'DESC');
-        } elseif ($this->db->field_exists('id', $this->eventsTable)) {
-            $this->db->order_by('id', 'DESC');
-        }
-
-        $rows = $this->db->get()->result_array();
-
-        $counts = [];
-        foreach ($rows as $row) {
-            $url = $this->extract_click_url($row);
-            if ($url === null) {
-                continue;
+        try {
+            if (
+                !$this->db->table_exists($this->eventsTable)
+                || !$this->db->field_exists('provider', $this->eventsTable)
+                || !$this->db->field_exists('event_type', $this->eventsTable)
+            ) {
+                return [];
             }
 
-            if (!isset($counts[$url])) {
-                $counts[$url] = 0;
+            $rows = $this->db->select(
+                ($this->db->field_exists('url', $this->eventsTable) ? 'url' : 'NULL AS url')
+                . ', '
+                . ($this->db->field_exists('payload_json', $this->eventsTable) ? 'payload_json' : 'NULL AS payload_json'),
+                false
+            )
+                ->from($this->eventsTable);
+
+            $this->db->where('provider', 'module');
+
+            $this->apply_normalized_event_type_filter($this->db, ['click', 'clicked']);
+
+            if ($this->db->field_exists('event_at', $this->eventsTable)) {
+                $this->db->order_by('event_at', 'DESC');
+            } elseif ($this->db->field_exists('id', $this->eventsTable)) {
+                $this->db->order_by('id', 'DESC');
             }
-            $counts[$url]++;
-        }
 
-        arsort($counts);
-        $links = [];
-        foreach (array_slice($counts, 0, max(1, (int) $topLimit), true) as $url => $count) {
-            $links[] = [
-                'url' => $url,
-                'count' => (int) $count,
-                'unique_count' => 0,
-            ];
-        }
+            $rows = $this->db->get()->result_array();
 
-        return $links;
+            $counts = [];
+            foreach ($rows as $row) {
+                $url = $this->extract_click_url($row);
+                if ($url === null) {
+                    continue;
+                }
+
+                if (!isset($counts[$url])) {
+                    $counts[$url] = 0;
+                }
+                $counts[$url]++;
+            }
+
+            arsort($counts);
+            $links = [];
+            foreach (array_slice($counts, 0, max(1, (int) $topLimit), true) as $url => $count) {
+                $links[] = [
+                    'url' => $url,
+                    'count' => (int) $count,
+                    'unique_count' => 0,
+                ];
+            }
+
+            return $links;
+        } finally {
+            $this->reset_dashboard_query_builder();
+        }
     }
 
     protected function get_clicks_by_campaign_metrics($topLimit)
@@ -726,6 +744,13 @@ class Marketing_dashboard_model extends App_Model
         return function_exists('mb_substr')
             ? mb_substr($message, 0, 1000)
             : substr($message, 0, 1000);
+    }
+
+    protected function reset_dashboard_query_builder()
+    {
+        if (is_object($this->db) && method_exists($this->db, 'reset_query')) {
+            $this->db->reset_query();
+        }
     }
 
     protected function get_safe_event_summary()
