@@ -240,21 +240,20 @@ class Analytics extends AdminController
     protected function render_analytics_response(array $data)
     {
         $data = array_replace_recursive($this->get_default_analytics_view_data(), $data);
+        $baselineOutputLevel = ob_get_level();
 
         try {
-            $html = $this->load->view('marketing/analytics/index', $data, true);
+            $html = $this->render_view_in_isolated_buffer('marketing/analytics/index', $data, $baselineOutputLevel);
             if (!$this->rendered_html_has_visible_content($html)) {
                 throw new RuntimeException('analytics primary view returned empty visible output');
             }
-            $this->output
-                ->set_status_header(200)
-                ->set_content_type('text/html', 'utf-8')
-                ->set_output($html);
-
-            return;
+            return $this->send_html_response($html);
         } catch (Throwable $exception) {
             $this->log_analytics_runtime_failure('Marketing analytics view render failed: ', $exception);
         }
+
+        $this->clean_output_buffers_to_level($baselineOutputLevel);
+        $this->clear_pending_output_body();
 
         $fallbackData = array_replace_recursive($this->get_default_analytics_view_data(), [
             'title' => $data['title'],
@@ -264,24 +263,87 @@ class Analytics extends AdminController
         ]);
 
         try {
-            $html = $this->load->view('marketing/analytics/fallback', $fallbackData, true);
+            $html = $this->render_view_in_isolated_buffer('marketing/analytics/fallback', $fallbackData, $baselineOutputLevel);
             if (!$this->rendered_html_has_visible_content($html)) {
                 throw new RuntimeException('analytics fallback view returned empty visible output');
             }
-            $this->output
-                ->set_status_header(200)
-                ->set_content_type('text/html', 'utf-8')
-                ->set_output($html);
-
-            return;
+            return $this->send_html_response($html);
         } catch (Throwable $exception) {
             $this->log_analytics_runtime_failure('Marketing analytics emergency fallback render failed: ', $exception);
         }
 
+        $this->clean_output_buffers_to_level($baselineOutputLevel);
+        $this->clear_pending_output_body();
+
+        return $this->send_html_response($this->build_minimal_fallback_html($fallbackData));
+    }
+
+    protected function render_view_in_isolated_buffer($view, array $data, $baselineOutputLevel)
+    {
+        ob_start();
+        $isolatedBufferLevel = ob_get_level();
+        $html = '';
+        $caughtException = null;
+
+        try {
+            $html = $this->load->view($view, $data, true);
+        } catch (Throwable $exception) {
+            $caughtException = $exception;
+        }
+
+        $this->clean_output_buffers_to_level($isolatedBufferLevel);
+
+        $capturedOutput = '';
+        if (ob_get_level() === $isolatedBufferLevel) {
+            $capturedOutput = (string) ob_get_contents();
+            @ob_end_clean();
+        }
+
+        if (ob_get_level() !== $baselineOutputLevel) {
+            $this->clean_output_buffers_to_level($baselineOutputLevel);
+            throw new RuntimeException('analytics render changed output buffer level unexpectedly');
+        }
+
+        if ($caughtException instanceof Throwable) {
+            throw $caughtException;
+        }
+
+        if (trim($capturedOutput) !== '') {
+            throw new RuntimeException('analytics render emitted unexpected direct output');
+        }
+
+        return is_string($html) ? $html : (string) $html;
+    }
+
+    protected function clean_output_buffers_to_level($baselineOutputLevel)
+    {
+        while (ob_get_level() > $baselineOutputLevel) {
+            if (!@ob_end_clean()) {
+                break;
+            }
+        }
+    }
+
+    protected function clear_pending_output_body()
+    {
+        if (!isset($this->output)) {
+            return;
+        }
+
+        $this->output->set_output('');
+    }
+
+    protected function send_html_response($html)
+    {
+        $this->clear_pending_output_body();
+
         $this->output
             ->set_status_header(200)
-            ->set_content_type('text/html', 'utf-8')
-            ->set_output($this->build_minimal_fallback_html($fallbackData));
+            ->set_content_type('text/html', 'utf-8');
+
+        $this->output->set_output((string) $html);
+
+        return;
     }
 
     protected function build_minimal_fallback_html(array $data)
@@ -289,7 +351,7 @@ class Analytics extends AdminController
         $title = html_escape((string) ($data['title'] ?? 'Marketing Analytics'));
         $warning = html_escape((string) ($data['analytics_warning_message'] ?? 'Analytics is temporarily unavailable.'));
 
-        return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' . $title . '</title>'
+        return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . $title . '</title>'
             . '<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:32px;}'
             . '.marketing-fallback{max-width:760px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;box-shadow:0 12px 30px rgba(15,23,42,.08);}'
             . '.marketing-fallback h1{margin:0 0 12px;font-size:24px;}.marketing-fallback p{margin:0 0 12px;line-height:1.6;color:#475569;}'
