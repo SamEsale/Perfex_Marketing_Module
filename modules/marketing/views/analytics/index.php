@@ -84,6 +84,13 @@
         font-size: 13px;
         line-height: 1.6;
     }
+    .marketing-top-clicked-links-table td,
+    .marketing-top-clicked-links-table th {
+        vertical-align: middle !important;
+    }
+    .marketing-top-clicked-links-url {
+        word-break: break-word;
+    }
     @media (max-width: 1199px) {
         .marketing-analytics-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -147,6 +154,23 @@
                             ? array_merge(['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1], $events_pagination)
                             : ['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1];
                         $top_clicked_links = isset($top_clicked_links) && is_array($top_clicked_links) ? $top_clicked_links : [];
+                        $topClickedLinks = [];
+                        foreach ($top_clicked_links as $topClickedLink) {
+                            if (!is_array($topClickedLink)) {
+                                continue;
+                            }
+
+                            $url = trim((string) ($topClickedLink['url'] ?? ''));
+                            if ($url === '') {
+                                continue;
+                            }
+
+                            $topClickedLinks[] = [
+                                'url' => $url,
+                                'count' => (int) ($topClickedLink['count'] ?? 0),
+                                'unique_count' => (int) ($topClickedLink['unique_count'] ?? 0),
+                            ];
+                        }
                         $analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)
                             ? trim($analytics_warning_message)
                             : '';
@@ -315,6 +339,35 @@
                                 <?php $renderMetricCard(_l('marketing_unique_human_clicks'), $stats['events']['unique_human_clicks'], 'marketing-metric-blue', sprintf(_l('marketing_tracked_link_unique_human_clicks_helper'), (int) ($stats['events']['tracked_link_unique_human_clicks'] ?? 0))); ?>
                                 <?php $renderMetricCard(_l('marketing_raw_click_events'), $stats['events']['raw_click_events'], 'marketing-metric-slate', _l('marketing_raw_click_events_note')); ?>
                             </div>
+                        </div>
+                        <div class="marketing-analytics-section">
+                            <div>
+                                <h5 class="marketing-analytics-section-title"><?= _l('marketing_top_clicked_links'); ?></h5>
+                            </div>
+                            <?php if (empty($topClickedLinks)) { ?>
+                                <p class="text-muted no-margin"><?= _l('marketing_no_records_yet'); ?></p>
+                            <?php } else { ?>
+                                <div class="table-responsive">
+                                    <table class="table marketing-top-clicked-links-table">
+                                        <thead>
+                                            <tr>
+                                                <th><?= _l('marketing_click_target'); ?></th>
+                                                <th class="text-right"><?= _l('marketing_human_clicks'); ?></th>
+                                                <th class="text-right"><?= _l('marketing_unique_human_clicks'); ?></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($topClickedLinks as $topClickedLink) { ?>
+                                                <tr>
+                                                    <td class="marketing-top-clicked-links-url"><?= html_escape($topClickedLink['url']); ?></td>
+                                                    <td class="text-right"><?= (int) $topClickedLink['count']; ?></td>
+                                                    <td class="text-right"><?= (int) $topClickedLink['unique_count']; ?></td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php } ?>
                         </div>
                         <div class="marketing-analytics-section">
                             <div>
