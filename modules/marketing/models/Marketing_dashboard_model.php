@@ -38,9 +38,10 @@ class Marketing_dashboard_model extends App_Model
 
     public function get_dashboard_data($campaignLimit = 5, $activityLimit = 10)
     {
-        $eventModel = $this->get_events_model();
-        $eventSummary = $eventModel->get_normalized_summary();
-        $queueDiagnostics = $this->get_campaigns_model()->get_queue_diagnostics();
+        $defaults = $this->get_default_dashboard_data();
+        $eventSummary = $this->get_safe_event_summary();
+        $queueDiagnostics = $this->get_safe_queue_diagnostics();
+        $retentionDiagnostics = $this->get_safe_retention_diagnostics();
         $totalRecipients = $this->db->count_all($this->recipientsTable);
         $sentRecipients = total_rows($this->recipientsTable, ['status' => 'sent']);
         $delivered = (int) $eventSummary['delivered'];
@@ -52,7 +53,7 @@ class Marketing_dashboard_model extends App_Model
         $openRate = $delivered > 0 ? ($opened / $delivered) * 100 : 0;
         $bounceRate = $sentRecipients > 0 ? ($bounced / $sentRecipients) * 100 : 0;
 
-        return [
+        return array_merge($defaults, [
             'total_campaigns'        => $this->db->count_all($this->campaignsTable),
             'total_lists'            => $this->db->count_all($this->listsTable),
             'total_contacts'         => $this->count_active_audience_contacts(),
@@ -69,35 +70,28 @@ class Marketing_dashboard_model extends App_Model
             'bounce_rate'            => $bounceRate,
             'click_analytics'        => $this->get_click_analytics(),
             'queue_diagnostics'      => $queueDiagnostics,
-            'retention_diagnostics'  => $eventModel->get_retention_diagnostics(),
+            'retention_diagnostics'  => $retentionDiagnostics,
             'recent_campaigns'       => $this->get_recent_campaigns($campaignLimit),
             'recent_activity'        => $this->get_recent_activity($activityLimit),
-        ];
+        ]);
     }
 
     public function get_click_analytics($topLimit = 5)
     {
+        $analytics = $this->get_default_click_analytics();
         $recipientClickSummary = $this->get_recipient_click_summary();
         $publicLinkSummary = $this->get_public_link_click_summary();
         $topLinkRows = $this->get_top_clicked_links_from_public_links($topLimit);
         $campaignRows = $this->get_clicks_by_campaign_metrics($topLimit);
         $rawClickEvents = $this->count_events_by_types(['click', 'clicked']);
 
-        $analytics = [
-            'human_clicks' => (int) ($recipientClickSummary['human_clicks'] ?? 0),
-            'unique_human_clicks' => (int) ($recipientClickSummary['unique_human_clicks'] ?? 0),
-            'raw_click_events' => $rawClickEvents,
-            'tracked_link_human_clicks' => (int) ($publicLinkSummary['human_clicks'] ?? 0),
-            'tracked_link_unique_human_clicks' => (int) ($publicLinkSummary['unique_clicks'] ?? 0),
-            'total_clicks' => (int) ($recipientClickSummary['human_clicks'] ?? 0),
-            'unique_clicked_recipients' => (int) ($recipientClickSummary['unique_human_clicks'] ?? 0),
-            'top_clicked_links' => [],
-            'clicks_by_campaign' => [],
-            'chart_mode' => 'empty',
-            'chart_labels' => [],
-            'chart_values' => [],
-            'has_data' => false,
-        ];
+        $analytics['human_clicks'] = (int) ($recipientClickSummary['human_clicks'] ?? 0);
+        $analytics['unique_human_clicks'] = (int) ($recipientClickSummary['unique_human_clicks'] ?? 0);
+        $analytics['raw_click_events'] = $rawClickEvents;
+        $analytics['tracked_link_human_clicks'] = (int) ($publicLinkSummary['human_clicks'] ?? 0);
+        $analytics['tracked_link_unique_human_clicks'] = (int) ($publicLinkSummary['unique_clicks'] ?? 0);
+        $analytics['total_clicks'] = (int) ($recipientClickSummary['human_clicks'] ?? 0);
+        $analytics['unique_clicked_recipients'] = (int) ($recipientClickSummary['unique_human_clicks'] ?? 0);
 
         if ($analytics['human_clicks'] <= 0 && $analytics['unique_human_clicks'] <= 0 && empty($topLinkRows) && empty($campaignRows)) {
             return $analytics;
@@ -126,7 +120,7 @@ class Marketing_dashboard_model extends App_Model
 
     public function get_analytics_summary()
     {
-        $eventSummary = $this->get_events_model()->get_normalized_summary();
+        $eventSummary = $this->get_safe_event_summary();
         $sentRecipients = total_rows($this->recipientsTable, ['status' => 'sent']);
         $acceptedSentEvents = (int) $eventSummary['accepted_sent'];
         $recipientClickSummary = $this->get_recipient_click_summary();
@@ -611,5 +605,147 @@ class Marketing_dashboard_model extends App_Model
         $CI->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
 
         return $CI->marketing_campaigns_model;
+    }
+
+    protected function get_safe_event_summary()
+    {
+        $defaults = [
+            'total_records' => 0,
+            'accepted_sent' => 0,
+            'delivered' => 0,
+            'open' => 0,
+            'click' => 0,
+            'bounce' => 0,
+            'complaint' => 0,
+            'failed_rejected' => 0,
+            'send_readiness_failed' => 0,
+            'unsubscribe' => 0,
+            'delivery_delay' => 0,
+        ];
+
+        try {
+            $eventModel = $this->get_events_model();
+            if (is_object($eventModel) && method_exists($eventModel, 'get_normalized_summary')) {
+                $summary = $eventModel->get_normalized_summary();
+                if (is_array($summary)) {
+                    return array_merge($defaults, $summary);
+                }
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing dashboard event summary unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        return $defaults;
+    }
+
+    protected function get_safe_retention_diagnostics()
+    {
+        try {
+            $eventModel = $this->get_events_model();
+            if (is_object($eventModel) && method_exists($eventModel, 'get_retention_diagnostics')) {
+                $diagnostics = $eventModel->get_retention_diagnostics();
+                if (is_array($diagnostics)) {
+                    return array_merge($this->get_default_retention_diagnostics(), $diagnostics);
+                }
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing dashboard retention diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        return $this->get_default_retention_diagnostics();
+    }
+
+    protected function get_safe_queue_diagnostics()
+    {
+        try {
+            $campaignsModel = $this->get_campaigns_model();
+            if (is_object($campaignsModel) && method_exists($campaignsModel, 'get_queue_diagnostics')) {
+                $diagnostics = $campaignsModel->get_queue_diagnostics();
+                if (is_array($diagnostics)) {
+                    return $diagnostics;
+                }
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing dashboard queue diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        return [
+            'schema_ready' => false,
+            'queue_paused' => false,
+            'schema_missing' => [],
+            'rate_limit_snapshot' => [],
+            'recent_warning_counts' => [],
+            'recent_failure_metric_counts' => [],
+            'recent_operator_actions' => [],
+            'campaign_worker_leases_active' => 0,
+            'campaign_worker_leases_stale' => 0,
+            'recipients_processing' => 0,
+            'recipients_processing_stale' => 0,
+            'recipients_queued' => 0,
+            'recipients_failed' => 0,
+            'recent_recovered_total' => 0,
+        ];
+    }
+
+    protected function get_default_dashboard_data()
+    {
+        return [
+            'total_campaigns' => 0,
+            'total_lists' => 0,
+            'total_contacts' => 0,
+            'total_memberships' => 0,
+            'active_suppressions' => 0,
+            'total_recipients' => 0,
+            'sent_recipients' => 0,
+            'delivered_events' => 0,
+            'opened_events' => 0,
+            'bounced_events' => 0,
+            'spam_complaint_events' => 0,
+            'delivery_rate' => 0,
+            'open_rate' => 0,
+            'bounce_rate' => 0,
+            'click_analytics' => $this->get_default_click_analytics(),
+            'queue_diagnostics' => $this->get_safe_queue_diagnostics(),
+            'retention_diagnostics' => $this->get_default_retention_diagnostics(),
+            'recent_campaigns' => [],
+            'recent_activity' => [],
+        ];
+    }
+
+    protected function get_default_click_analytics()
+    {
+        return [
+            'human_clicks' => 0,
+            'unique_human_clicks' => 0,
+            'raw_click_events' => 0,
+            'tracked_link_human_clicks' => 0,
+            'tracked_link_unique_human_clicks' => 0,
+            'total_clicks' => 0,
+            'unique_clicked_recipients' => 0,
+            'top_clicked_links' => [],
+            'clicks_by_campaign' => [],
+            'chart_mode' => 'empty',
+            'chart_labels' => [],
+            'chart_values' => [],
+            'has_data' => false,
+        ];
+    }
+
+    protected function get_default_retention_diagnostics()
+    {
+        return [
+            'cleanup_mode' => 'explicit_only',
+            'event_retention_days' => 0,
+            'webhook_log_retention_days' => 0,
+            'retention_floor_days' => 30,
+            'delete_limit_per_run' => 500,
+            'events_cleanup_candidate_preview' => 0,
+            'events_cleanup_candidate_more' => false,
+            'webhook_logs_cleanup_candidate_preview' => 0,
+            'webhook_logs_cleanup_candidate_more' => false,
+            'click_aggregate_candidate_preview' => 0,
+            'click_aggregate_candidate_more' => false,
+            'warnings' => [],
+        ];
     }
 }

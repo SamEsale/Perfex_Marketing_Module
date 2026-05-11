@@ -18,7 +18,16 @@ class Marketing extends AdminController
 
     public function index()
     {
-        $data = $this->marketing_dashboard_model->get_dashboard_data();
+        $data = $this->get_default_dashboard_data();
+        try {
+            $dashboardData = $this->marketing_dashboard_model->get_dashboard_data();
+            if (is_array($dashboardData)) {
+                $data = array_replace_recursive($data, $dashboardData);
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing dashboard data unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
         $data['title'] = _l('marketing_dashboard');
         $data['can_manage_queue'] = staff_can('settings', 'marketing');
 
@@ -57,5 +66,71 @@ class Marketing extends AdminController
         }
 
         redirect(admin_url('marketing'));
+    }
+
+    protected function get_default_dashboard_data()
+    {
+        return [
+            'total_campaigns' => 0,
+            'total_lists' => 0,
+            'total_contacts' => 0,
+            'total_memberships' => 0,
+            'active_suppressions' => 0,
+            'total_recipients' => 0,
+            'sent_recipients' => 0,
+            'delivered_events' => 0,
+            'opened_events' => 0,
+            'bounced_events' => 0,
+            'spam_complaint_events' => 0,
+            'delivery_rate' => 0,
+            'open_rate' => 0,
+            'bounce_rate' => 0,
+            'click_analytics' => [
+                'human_clicks' => 0,
+                'unique_human_clicks' => 0,
+                'raw_click_events' => 0,
+                'tracked_link_human_clicks' => 0,
+                'tracked_link_unique_human_clicks' => 0,
+                'total_clicks' => 0,
+                'unique_clicked_recipients' => 0,
+                'top_clicked_links' => [],
+                'clicks_by_campaign' => [],
+                'chart_mode' => 'empty',
+                'chart_labels' => [],
+                'chart_values' => [],
+                'has_data' => false,
+            ],
+            'queue_diagnostics' => [
+                'schema_ready' => false,
+                'queue_paused' => false,
+                'schema_missing' => [],
+                'rate_limit_snapshot' => [],
+                'recent_warning_counts' => [],
+                'recent_failure_metric_counts' => [],
+                'recent_operator_actions' => [],
+                'campaign_worker_leases_active' => 0,
+                'campaign_worker_leases_stale' => 0,
+                'recipients_processing' => 0,
+                'recipients_processing_stale' => 0,
+                'recipients_queued' => 0,
+                'recipients_failed' => 0,
+                'recent_recovered_total' => 0,
+            ],
+            'retention_diagnostics' => [
+                'cleanup_mode' => 'explicit_only',
+                'event_retention_days' => 0,
+                'webhook_log_retention_days' => 0,
+                'retention_floor_days' => 30,
+                'delete_limit_per_run' => 500,
+                'events_cleanup_candidate_preview' => 0,
+                'events_cleanup_candidate_more' => false,
+                'webhook_logs_cleanup_candidate_preview' => 0,
+                'webhook_logs_cleanup_candidate_more' => false,
+                'click_aggregate_candidate_preview' => 0,
+                'click_aggregate_candidate_more' => false,
+            ],
+            'recent_campaigns' => [],
+            'recent_activity' => [],
+        ];
     }
 }

@@ -364,6 +364,85 @@ if (($license_state['status'] ?? '') === 'active') {
                                     </div>
                                 </div>
 
+                                <div class="panel_s marketing-settings-panel">
+                                    <div class="panel-body">
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_license_updates_heading'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_license_updates_note'); ?></p>
+
+                                        <?php if (empty($license_available)) { ?>
+                                            <div class="alert alert-warning">
+                                                <?= _l('marketing_license_unavailable_warning'); ?>
+                                            </div>
+                                        <?php } else { ?>
+                                            <div class="alert <?= html_escape($licenseStatusClass); ?>">
+                                                <?= html_escape($license_state['status_label'] ?? 'Inactive'); ?>
+                                                <?php if (!empty($license_state['grace_active']) && !empty($license_state['grace_until'])) { ?>
+                                                    <br />
+                                                    <?= sprintf(_l('marketing_license_grace_warning'), html_escape($license_state['grace_until'])); ?>
+                                                <?php } ?>
+                                                <?php if (!empty($license_state['last_error'])) { ?>
+                                                    <br />
+                                                    <?= html_escape($license_state['last_error']); ?>
+                                                <?php } ?>
+                                            </div>
+
+                                            <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-license-settings-form']); ?>
+                                            <input type="hidden" name="settings_form" value="license">
+
+                                            <div class="form-group">
+                                                <label for="marketing_license_key" class="control-label"><?= _l('marketing_license_key'); ?></label>
+                                                <input type="password" id="marketing_license_key" name="marketing_license_key" class="form-control" value="" autocomplete="off" placeholder="<?= html_escape(_l('marketing_license_key_placeholder')); ?>">
+                                                <p class="text-muted mtop5">
+                                                    <?php if (!empty($license_state['masked_license_key'])) { ?>
+                                                        <?= sprintf(_l('marketing_license_key_masked'), html_escape($license_state['masked_license_key'])); ?>
+                                                    <?php } else { ?>
+                                                        <?= _l('marketing_license_key_empty_note'); ?>
+                                                    <?php } ?>
+                                                </p>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="marketing_license_email" class="control-label"><?= _l('marketing_license_email'); ?></label>
+                                                <input type="email" id="marketing_license_email" name="marketing_license_email" class="form-control" value="<?= html_escape($licenseFieldValue('marketing_license_email')); ?>">
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="marketing_license_status" class="control-label"><?= _l('marketing_license_status'); ?></label>
+                                                <input type="text" id="marketing_license_status" class="form-control" readonly value="<?= html_escape($license_state['status_label'] ?? 'Inactive'); ?>">
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="marketing_license_domain" class="control-label"><?= _l('marketing_license_domain'); ?></label>
+                                                <input type="text" id="marketing_license_domain" class="form-control" readonly value="<?= html_escape($license_state['licensed_domain'] !== '' ? $license_state['licensed_domain'] : ''); ?>">
+                                                <p class="text-muted mtop5"><?= sprintf(_l('marketing_license_current_domain_note'), html_escape($license_state['current_domain'] ?? 'unknown-domain')); ?></p>
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="marketing_license_last_checked" class="control-label"><?= _l('marketing_license_last_checked'); ?></label>
+                                                <input type="text" id="marketing_license_last_checked" class="form-control" readonly value="<?= html_escape($license_state['last_checked_display'] ?? 'Never'); ?>">
+                                            </div>
+
+                                            <div class="form-group">
+                                                <label for="marketing_license_module_version" class="control-label"><?= _l('marketing_license_module_version'); ?></label>
+                                                <input type="text" id="marketing_license_module_version" class="form-control" readonly value="<?= html_escape($license_state['module_version'] ?? '1.1.0'); ?>">
+                                            </div>
+
+                                            <div class="alert alert-info">
+                                                <?= sprintf(
+                                                    _l('marketing_license_api_config_note'),
+                                                    html_escape($license_state['api_base_url_hint'] ?? 'https://license.spitol.com/api')
+                                                ); ?>
+                                            </div>
+
+                                            <div class="marketing-license-actions">
+                                                <button type="submit" name="license_action" value="activate" class="btn btn-primary"><?= _l('marketing_license_activate_button'); ?></button>
+                                                <button type="submit" name="license_action" value="deactivate" class="btn btn-danger" onclick="return confirm('<?= html_escape(_l('marketing_license_deactivate_confirm')); ?>');"><?= _l('marketing_license_deactivate_button'); ?></button>
+                                            </div>
+                                            <?= form_close(); ?>
+                                        <?php } ?>
+                                    </div>
+                                </div>
+
                             </div>
 
                             <div class="marketing-settings-column">
@@ -556,85 +635,6 @@ if (($license_state['status'] ?? '') === 'active') {
                                     </div>
                                 </div>
                                 <!-- marketing-whatsapp-test-form-end -->
-
-                                <div class="panel_s marketing-settings-panel">
-                                    <div class="panel-body">
-                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_license_updates_heading'); ?></h4>
-                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_license_updates_note'); ?></p>
-
-                                        <?php if (empty($license_available)) { ?>
-                                            <div class="alert alert-warning">
-                                                <?= _l('marketing_license_unavailable_warning'); ?>
-                                            </div>
-                                        <?php } else { ?>
-                                            <div class="alert <?= html_escape($licenseStatusClass); ?>">
-                                                <?= html_escape($license_state['status_label'] ?? 'Inactive'); ?>
-                                                <?php if (!empty($license_state['grace_active']) && !empty($license_state['grace_until'])) { ?>
-                                                    <br />
-                                                    <?= sprintf(_l('marketing_license_grace_warning'), html_escape($license_state['grace_until'])); ?>
-                                                <?php } ?>
-                                                <?php if (!empty($license_state['last_error'])) { ?>
-                                                    <br />
-                                                    <?= html_escape($license_state['last_error']); ?>
-                                                <?php } ?>
-                                            </div>
-
-                                            <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-license-settings-form']); ?>
-                                            <input type="hidden" name="settings_form" value="license">
-
-                                            <div class="form-group">
-                                                <label for="marketing_license_key" class="control-label"><?= _l('marketing_license_key'); ?></label>
-                                                <input type="password" id="marketing_license_key" name="marketing_license_key" class="form-control" value="" autocomplete="off" placeholder="<?= html_escape(_l('marketing_license_key_placeholder')); ?>">
-                                                <p class="text-muted mtop5">
-                                                    <?php if (!empty($license_state['masked_license_key'])) { ?>
-                                                        <?= sprintf(_l('marketing_license_key_masked'), html_escape($license_state['masked_license_key'])); ?>
-                                                    <?php } else { ?>
-                                                        <?= _l('marketing_license_key_empty_note'); ?>
-                                                    <?php } ?>
-                                                </p>
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label for="marketing_license_email" class="control-label"><?= _l('marketing_license_email'); ?></label>
-                                                <input type="email" id="marketing_license_email" name="marketing_license_email" class="form-control" value="<?= html_escape($licenseFieldValue('marketing_license_email')); ?>">
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label for="marketing_license_status" class="control-label"><?= _l('marketing_license_status'); ?></label>
-                                                <input type="text" id="marketing_license_status" class="form-control" readonly value="<?= html_escape($license_state['status_label'] ?? 'Inactive'); ?>">
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label for="marketing_license_domain" class="control-label"><?= _l('marketing_license_domain'); ?></label>
-                                                <input type="text" id="marketing_license_domain" class="form-control" readonly value="<?= html_escape($license_state['licensed_domain'] !== '' ? $license_state['licensed_domain'] : ''); ?>">
-                                                <p class="text-muted mtop5"><?= sprintf(_l('marketing_license_current_domain_note'), html_escape($license_state['current_domain'] ?? 'unknown-domain')); ?></p>
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label for="marketing_license_last_checked" class="control-label"><?= _l('marketing_license_last_checked'); ?></label>
-                                                <input type="text" id="marketing_license_last_checked" class="form-control" readonly value="<?= html_escape($license_state['last_checked_display'] ?? 'Never'); ?>">
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label for="marketing_license_module_version" class="control-label"><?= _l('marketing_license_module_version'); ?></label>
-                                                <input type="text" id="marketing_license_module_version" class="form-control" readonly value="<?= html_escape($license_state['module_version'] ?? '1.1.0'); ?>">
-                                            </div>
-
-                                            <div class="alert alert-info">
-                                                <?= sprintf(
-                                                    _l('marketing_license_api_config_note'),
-                                                    html_escape($license_state['api_base_url_hint'] ?? 'https://license.spitol.com/api')
-                                                ); ?>
-                                            </div>
-
-                                            <div class="marketing-license-actions">
-                                                <button type="submit" name="license_action" value="activate" class="btn btn-primary"><?= _l('marketing_license_activate_button'); ?></button>
-                                                <button type="submit" name="license_action" value="deactivate" class="btn btn-danger" onclick="return confirm('<?= html_escape(_l('marketing_license_deactivate_confirm')); ?>');"><?= _l('marketing_license_deactivate_button'); ?></button>
-                                            </div>
-                                            <?= form_close(); ?>
-                                        <?php } ?>
-                                    </div>
-                                </div>
 
                                 <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">

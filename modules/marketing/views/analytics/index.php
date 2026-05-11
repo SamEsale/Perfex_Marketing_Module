@@ -92,6 +92,34 @@
                 <div class="panel_s">
                     <div class="panel-body">
                         <?php
+                        $stats = isset($stats) && is_array($stats) ? $stats : [];
+                        $stats = array_replace_recursive([
+                            'campaigns' => ['total' => 0, 'draft' => 0, 'sending' => 0, 'sent' => 0, 'failed' => 0],
+                            'recipients' => ['total' => 0, 'queued' => 0, 'processing' => 0, 'sent' => 0, 'failed' => 0],
+                            'events' => [
+                                'total_records' => 0,
+                                'accepted_sent' => 0,
+                                'accepted_sent_events' => 0,
+                                'delivered' => 0,
+                                'open' => 0,
+                                'click' => 0,
+                                'human_clicks' => 0,
+                                'unique_human_clicks' => 0,
+                                'tracked_link_human_clicks' => 0,
+                                'tracked_link_unique_human_clicks' => 0,
+                                'raw_click_events' => 0,
+                                'bounce' => 0,
+                                'complaint' => 0,
+                                'failed_rejected' => 0,
+                                'send_readiness_failed' => 0,
+                                'unsubscribe' => 0,
+                                'delivery_delay' => 0,
+                            ],
+                        ], $stats);
+                        $recent = isset($recent) && is_array($recent) ? $recent : [];
+                        $events_pagination = isset($events_pagination) && is_array($events_pagination)
+                            ? array_merge(['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1], $events_pagination)
+                            : ['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1];
                         $eventTypeLabels = [
                             'queued' => 'Recipients Queued',
                             'send_start' => 'Send Started',
@@ -245,7 +273,7 @@
                             </div>
                         </div>
                         <hr />
-                        <?php if (count($recent) === 0) { ?>
+                        <?php if (empty($recent)) { ?>
                             <p class="text-muted no-margin"><?= _l('marketing_no_records_yet'); ?></p>
                         <?php } else { ?>
                             <div class="table-responsive">

@@ -675,6 +675,26 @@ check_dashboard_queue_diagnostics_surface() {
     "heading=$view_heading_line | warnings=$view_warning_line | controller=$controller_line"
 }
 
+check_dashboard_view_array_guards() {
+  local queue_line merge_line warnings_line failures_line operators_line
+  queue_line="$(first_fixed_match '$queueDiagnostics = isset($queue_diagnostics) && is_array($queue_diagnostics) ? $queue_diagnostics : [];' "$DASHBOARD_VIEW_FILE")"
+  merge_line="$(first_fixed_match '$queueDiagnostics = array_merge([' "$DASHBOARD_VIEW_FILE")"
+  warnings_line="$(first_fixed_match "isset(\$queueDiagnostics['recent_warning_counts']) && is_array(\$queueDiagnostics['recent_warning_counts'])" "$DASHBOARD_VIEW_FILE")"
+  failures_line="$(first_fixed_match "isset(\$queueDiagnostics['recent_failure_metric_counts']) && is_array(\$queueDiagnostics['recent_failure_metric_counts'])" "$DASHBOARD_VIEW_FILE")"
+  operators_line="$(first_fixed_match "isset(\$queueDiagnostics['recent_operator_actions']) && is_array(\$queueDiagnostics['recent_operator_actions'])" "$DASHBOARD_VIEW_FILE")"
+
+  if [[ -z "$queue_line" || -z "$merge_line" || -z "$warnings_line" || -z "$failures_line" || -z "$operators_line" ]]; then
+    fail \
+      "dashboard view normalizes diagnostics arrays before rendering warning and operator loops" \
+      "expected queue diagnostics normalization and array guards in $DASHBOARD_VIEW_FILE; queue=${queue_line:-missing}; merge=${merge_line:-missing}; warnings=${warnings_line:-missing}; failures=${failures_line:-missing}; operators=${operators_line:-missing}"
+    return
+  fi
+
+  pass \
+    "dashboard view normalizes diagnostics arrays before rendering warning and operator loops" \
+    "queue=$queue_line | warnings=$warnings_line | operators=$operators_line"
+}
+
 check_queue_warning_telemetry_propagation() {
   local recovered_warning_line lease_warning_line payload_warning_line
   recovered_warning_line="$(first_fixed_match 'stale_processing_recovered' "$CAMPAIGNS_FILE")"
@@ -780,6 +800,25 @@ check_dashboard_failure_metric_surface() {
   pass \
     "dashboard diagnostics surface normalized recent provider failure metrics" \
     "diagnostics=$diagnostics_line | view=$view_line"
+}
+
+check_dashboard_model_retention_fail_closed() {
+  local helper_line default_line method_line fallback_line
+  helper_line="$(first_match 'function[[:space:]]+get_safe_retention_diagnostics' "$DASHBOARD_FILE")"
+  default_line="$(first_match 'function[[:space:]]+get_default_retention_diagnostics' "$DASHBOARD_FILE")"
+  method_line="$(first_fixed_match "method_exists(\$eventModel, 'get_retention_diagnostics')" "$DASHBOARD_FILE")"
+  fallback_line="$(first_fixed_match 'return $this->get_default_retention_diagnostics();' "$DASHBOARD_FILE")"
+
+  if [[ -z "$helper_line" || -z "$default_line" || -z "$method_line" || -z "$fallback_line" ]]; then
+    fail \
+      "dashboard model returns retention diagnostics defaults when event-model helpers are unavailable" \
+      "expected safe retention helper, defaults helper, method_exists guard, and fallback return in $DASHBOARD_FILE; helper=${helper_line:-missing}; defaults=${default_line:-missing}; method=${method_line:-missing}; fallback=${fallback_line:-missing}"
+    return
+  fi
+
+  pass \
+    "dashboard model returns retention diagnostics defaults when event-model helpers are unavailable" \
+    "helper=$helper_line | method=$method_line | fallback=$fallback_line"
 }
 
 check_reconciliation_skipped_metric_visible() {
@@ -1072,6 +1111,26 @@ check_no_destructive_event_history_clear() {
     "post=$controller_post_line | model_call=$controller_model_line | summary=$summary_line"
 }
 
+check_analytics_view_array_guards() {
+  local stats_line recent_line pagination_line empty_line diagnostics_line
+  stats_line="$(first_fixed_match '$stats = isset($stats) && is_array($stats) ? $stats : [];' "$ANALYTICS_VIEW_FILE")"
+  recent_line="$(first_fixed_match '$recent = isset($recent) && is_array($recent) ? $recent : [];' "$ANALYTICS_VIEW_FILE")"
+  pagination_line="$(first_fixed_match '$events_pagination = isset($events_pagination) && is_array($events_pagination)' "$ANALYTICS_VIEW_FILE")"
+  empty_line="$(first_fixed_match '<?php if (empty($recent)) { ?>' "$ANALYTICS_VIEW_FILE")"
+  diagnostics_line="$(first_fixed_match '$retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)' "$ANALYTICS_VIEW_FILE")"
+
+  if [[ -z "$stats_line" || -z "$recent_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" ]]; then
+    fail \
+      "analytics view guards stats, events, pagination, and retention diagnostics arrays before rendering" \
+      "expected stats/recent/pagination/diagnostics normalization and empty() guard in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}"
+    return
+  fi
+
+  pass \
+    "analytics view guards stats, events, pagination, and retention diagnostics arrays before rendering" \
+    "stats=$stats_line | recent=$recent_line | empty=$empty_line"
+}
+
 check_retention_preserves_unsubscribe_audit_events() {
   local helper_line unsubscribe_line operator_line
   helper_line="$(first_match 'function[[:space:]]+get_audit_critical_event_types' "$EVENTS_FILE")"
@@ -1147,6 +1206,26 @@ check_click_aggregate_cleanup_bounds() {
     "floor=$floor_line | limit=$limit_line | usage=$limit_usage_line"
 }
 
+check_events_public_links_fail_closed() {
+  local helper_line diagnostics_line method_line warning_line cleanup_method_line
+  helper_line="$(first_match 'function[[:space:]]+get_public_links_model' "$EVENTS_FILE")"
+  diagnostics_line="$(first_match 'function[[:space:]]+get_click_aggregate_retention_diagnostics_summary' "$EVENTS_FILE")"
+  cleanup_method_line="$(first_match 'function[[:space:]]+run_click_aggregate_cleanup' "$EVENTS_FILE")"
+  method_line="$(first_fixed_match "method_exists(\$publicLinksModel, 'reset_stale_click_aggregates')" "$EVENTS_FILE")"
+  warning_line="$(first_fixed_match "'warnings' => ['click_aggregate_cleanup_unavailable']" "$EVENTS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$diagnostics_line" || -z "$cleanup_method_line" || -z "$method_line" || -z "$warning_line" ]]; then
+    fail \
+      "marketing events public-link integration fails closed when cleanup helpers are unavailable" \
+      "expected public-links loader, diagnostics helper, cleanup helper, method_exists guard, and fail-closed warning defaults in $EVENTS_FILE; loader=${helper_line:-missing}; diagnostics=${diagnostics_line:-missing}; cleanup=${cleanup_method_line:-missing}; method=${method_line:-missing}; warning=${warning_line:-missing}"
+    return
+  fi
+
+  pass \
+    "marketing events public-link integration fails closed when cleanup helpers are unavailable" \
+    "loader=$helper_line | cleanup=$cleanup_method_line | method=$method_line"
+}
+
 check_settings_two_column_layout() {
   local grid_line shell_line column_line
   grid_line="$(first_fixed_match '.marketing-settings-grid {' "$SETTINGS_VIEW_FILE")"
@@ -1183,6 +1262,36 @@ check_settings_mobile_responsive_layout() {
   pass \
     "settings page collapses cleanly for mobile and preserves core settings fields" \
     "media=$media_line | collapse=$collapse_line | general=$field_line"
+}
+
+check_settings_license_block_order() {
+  local inbound_line license_line second_column_line
+  inbound_line="$(first_fixed_match "marketing_inbound_reply_webhook_url" "$SETTINGS_VIEW_FILE")"
+  license_line="$(first_fixed_match "marketing_license_updates_heading" "$SETTINGS_VIEW_FILE")"
+  second_column_line="$(grep -nF -- '<div class="marketing-settings-column">' "$SETTINGS_VIEW_FILE" | sed -n '2p')"
+
+  if [[ -z "$inbound_line" || -z "$license_line" || -z "$second_column_line" ]]; then
+    fail \
+      "settings page places License & Updates after Inbound Reply Webhook URL in the left column" \
+      "expected inbound webhook section, license section, and second column marker in $SETTINGS_VIEW_FILE; inbound=${inbound_line:-missing}; license=${license_line:-missing}; second_column=${second_column_line:-missing}"
+    return
+  fi
+
+  local inbound_no license_no second_column_no
+  inbound_no="${inbound_line%%:*}"
+  license_no="${license_line%%:*}"
+  second_column_no="${second_column_line%%:*}"
+
+  if [[ "$license_no" -le "$inbound_no" || "$license_no" -ge "$second_column_no" ]]; then
+    fail \
+      "settings page places License & Updates after Inbound Reply Webhook URL in the left column" \
+      "expected license block after inbound webhook and before second column; inbound=$inbound_line | license=$license_line | second_column=$second_column_line"
+    return
+  fi
+
+  pass \
+    "settings page places License & Updates after Inbound Reply Webhook URL in the left column" \
+    "inbound=$inbound_line | license=$license_line | second_column=$second_column_line"
 }
 
 check_dashboard_operator_ui_structure() {
@@ -1502,12 +1611,14 @@ check_queue_diagnostics_column_guards
 check_queue_diagnostics_stale_worker_count
 check_queue_diagnostics_stale_processing_count
 check_dashboard_queue_diagnostics_surface
+check_dashboard_view_array_guards
 check_queue_warning_telemetry_propagation
 check_provider_failure_normalization_helper
 check_provider_failure_categories_distinguishable
 check_provider_throttle_not_bounce
 check_normalized_failure_codes_in_telemetry
 check_dashboard_failure_metric_surface
+check_dashboard_model_retention_fail_closed
 check_reconciliation_skipped_metric_visible
 check_queue_pause_option_seeded
 check_queue_pause_before_send
@@ -1523,12 +1634,15 @@ check_retention_cleanup_scope
 check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_no_destructive_event_history_clear
+check_analytics_view_array_guards
 check_retention_preserves_unsubscribe_audit_events
 check_no_destructive_retention_calls
 check_click_aggregate_cleanup_scope
 check_click_aggregate_cleanup_bounds
+check_events_public_links_fail_closed
 check_settings_two_column_layout
 check_settings_mobile_responsive_layout
+check_settings_license_block_order
 check_dashboard_operator_ui_structure
 check_release_validator_exists
 check_module_metadata_header

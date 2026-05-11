@@ -151,6 +151,45 @@
 </style>
 <div id="wrapper">
     <div class="content">
+        <?php
+        $click_analytics = isset($click_analytics) && is_array($click_analytics)
+            ? array_replace_recursive([
+                'human_clicks' => 0,
+                'unique_human_clicks' => 0,
+                'raw_click_events' => 0,
+                'tracked_link_human_clicks' => 0,
+                'tracked_link_unique_human_clicks' => 0,
+                'top_clicked_links' => [],
+                'clicks_by_campaign' => [],
+                'chart_mode' => 'empty',
+                'chart_labels' => [],
+                'chart_values' => [],
+                'has_data' => false,
+            ], $click_analytics)
+            : [
+                'human_clicks' => 0,
+                'unique_human_clicks' => 0,
+                'raw_click_events' => 0,
+                'tracked_link_human_clicks' => 0,
+                'tracked_link_unique_human_clicks' => 0,
+                'top_clicked_links' => [],
+                'clicks_by_campaign' => [],
+                'chart_mode' => 'empty',
+                'chart_labels' => [],
+                'chart_values' => [],
+                'has_data' => false,
+            ];
+        $recent_campaigns = isset($recent_campaigns) && is_array($recent_campaigns) ? $recent_campaigns : [];
+        $recent_activity = isset($recent_activity) && is_array($recent_activity) ? $recent_activity : [];
+        $truncate_dashboard_label = static function ($label, $width = 62) {
+            $label = (string) $label;
+            if (function_exists('mb_strimwidth')) {
+                return mb_strimwidth($label, 0, (int) $width, '...');
+            }
+
+            return strlen($label) > (int) $width ? substr($label, 0, max(0, (int) $width - 3)) . '...' : $label;
+        };
+        ?>
         <div class="row">
             <div class="col-md-12">
                 <div class="panel_s">
@@ -264,7 +303,7 @@
                                                                         $label = $click_analytics['chart_mode'] === 'links' ? $row['url'] : $row['campaign_name'];
                                                                         ?>
                                                                         <tr>
-                                                                            <td title="<?= html_escape($label); ?>"><?= html_escape(mb_strimwidth($label, 0, 62, '...')); ?></td>
+                                                                            <td title="<?= html_escape($label); ?>"><?= html_escape($truncate_dashboard_label($label)); ?></td>
                                                                             <td><?= (int) $row['count']; ?></td>
                                                                             <td><?= (int) ($row['unique_count'] ?? 0); ?></td>
                                                                         </tr>
@@ -292,7 +331,7 @@
                                                                     $label = $click_analytics['chart_mode'] === 'links' ? $row['url'] : $row['campaign_name'];
                                                                     ?>
                                                                     <tr>
-                                                                        <td title="<?= html_escape($label); ?>"><?= html_escape(mb_strimwidth($label, 0, 62, '...')); ?></td>
+                                                                        <td title="<?= html_escape($label); ?>"><?= html_escape($truncate_dashboard_label($label)); ?></td>
                                                                         <td><span class="label label-primary"><?= (int) $row['count']; ?></span></td>
                                                                         <td><span class="label label-default"><?= (int) ($row['unique_count'] ?? 0); ?></span></td>
                                                                     </tr>
@@ -309,6 +348,22 @@
                         </div>
                         <?php
                         $queueDiagnostics = isset($queue_diagnostics) && is_array($queue_diagnostics) ? $queue_diagnostics : [];
+                        $queueDiagnostics = array_merge([
+                            'queue_paused' => false,
+                            'schema_ready' => false,
+                            'schema_missing' => [],
+                            'rate_limit_snapshot' => [],
+                            'recent_warning_counts' => [],
+                            'recent_failure_metric_counts' => [],
+                            'recent_operator_actions' => [],
+                            'campaign_worker_leases_active' => 0,
+                            'campaign_worker_leases_stale' => 0,
+                            'recipients_processing' => 0,
+                            'recipients_processing_stale' => 0,
+                            'recipients_queued' => 0,
+                            'recipients_failed' => 0,
+                            'recent_recovered_total' => 0,
+                        ], $queueDiagnostics);
                         $queueRateLimit = isset($queueDiagnostics['rate_limit_snapshot']) && is_array($queueDiagnostics['rate_limit_snapshot'])
                             ? $queueDiagnostics['rate_limit_snapshot']
                             : [];
@@ -322,8 +377,32 @@
                             ? $queueDiagnostics['recent_operator_actions']
                             : [];
                         $retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)
-                            ? $retention_diagnostics
-                            : [];
+                            ? array_merge([
+                                'cleanup_mode' => 'explicit_only',
+                                'event_retention_days' => 0,
+                                'webhook_log_retention_days' => 0,
+                                'retention_floor_days' => 30,
+                                'delete_limit_per_run' => 500,
+                                'events_cleanup_candidate_preview' => 0,
+                                'events_cleanup_candidate_more' => false,
+                                'webhook_logs_cleanup_candidate_preview' => 0,
+                                'webhook_logs_cleanup_candidate_more' => false,
+                                'click_aggregate_candidate_preview' => 0,
+                                'click_aggregate_candidate_more' => false,
+                            ], $retention_diagnostics)
+                            : [
+                                'cleanup_mode' => 'explicit_only',
+                                'event_retention_days' => 0,
+                                'webhook_log_retention_days' => 0,
+                                'retention_floor_days' => 30,
+                                'delete_limit_per_run' => 500,
+                                'events_cleanup_candidate_preview' => 0,
+                                'events_cleanup_candidate_more' => false,
+                                'webhook_logs_cleanup_candidate_preview' => 0,
+                                'webhook_logs_cleanup_candidate_more' => false,
+                                'click_aggregate_candidate_preview' => 0,
+                                'click_aggregate_candidate_more' => false,
+                            ];
                         $retentionModeLabel = str_replace('_', ' ', (string) ($retentionDiagnostics['cleanup_mode'] ?? 'explicit_only'));
                         $canManageQueue = !empty($can_manage_queue);
                         ?>
