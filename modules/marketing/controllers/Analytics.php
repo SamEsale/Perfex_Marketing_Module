@@ -4,6 +4,9 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Analytics extends AdminController
 {
+    private const PRIMARY_RENDER_PATH = 'primary-direct';
+    private const FALLBACK_RENDER_PATH = 'fallback-throwable';
+
     public function __construct()
     {
         parent::__construct();
@@ -243,22 +246,26 @@ class Analytics extends AdminController
         $baselineOutputLevel = ob_get_level();
 
         try {
+            $this->set_analytics_render_path_header(self::PRIMARY_RENDER_PATH);
             $this->load->view('marketing/analytics/index', $data);
 
             return;
         } catch (Throwable $exception) {
             $this->log_analytics_runtime_failure('Marketing analytics primary render failed: ', $exception);
-        }
 
-        return $this->render_fallback_response($data, $baselineOutputLevel);
+            return $this->render_fallback_response($data, $baselineOutputLevel, 'primary_render_throwable', $exception);
+        }
     }
 
-    protected function render_fallback_response(array $data, $baselineOutputLevel = null)
+    protected function render_fallback_response(array $data, $baselineOutputLevel = null, $reasonCode = 'unknown_fallback_path', ?Throwable $primaryException = null)
     {
+        $reasonCode = $this->sanitize_fallback_reason_code($reasonCode);
+
         if (is_int($baselineOutputLevel) || ctype_digit((string) $baselineOutputLevel)) {
             $this->clean_output_buffers_to_level((int) $baselineOutputLevel);
         }
         $this->clear_pending_output_body();
+        $this->append_analytics_fallback_diagnostic_log($reasonCode, $primaryException);
 
         $fallbackData = array_replace_recursive($this->get_default_analytics_view_data(), [
             'title' => $data['title'] ?? _l('marketing_analytics'),
@@ -273,17 +280,25 @@ class Analytics extends AdminController
                 throw new RuntimeException('analytics fallback view returned empty output');
             }
 
-            return $this->send_html_response($html);
+            return $this->send_html_response(
+                $html,
+                $this->get_fallback_response_headers($reasonCode)
+            );
         } catch (Throwable $exception) {
             $this->log_analytics_runtime_failure('Marketing analytics emergency fallback render failed: ', $exception);
+            $this->append_analytics_fallback_diagnostic_log('fallback_render_throwable', $exception);
         }
 
         if (is_int($baselineOutputLevel) || ctype_digit((string) $baselineOutputLevel)) {
             $this->clean_output_buffers_to_level((int) $baselineOutputLevel);
         }
         $this->clear_pending_output_body();
+        $this->append_analytics_fallback_diagnostic_log('minimal_fallback');
 
-        return $this->send_html_response($this->build_minimal_fallback_html($fallbackData));
+        return $this->send_html_response(
+            $this->build_minimal_fallback_html($fallbackData),
+            $this->get_fallback_response_headers('minimal_fallback')
+        );
     }
 
     protected function clean_output_buffers_to_level($baselineOutputLevel)
@@ -304,7 +319,7 @@ class Analytics extends AdminController
         $this->output->set_output('');
     }
 
-    protected function send_html_response($html)
+    protected function send_html_response($html, array $headers = [])
     {
         $this->clear_pending_output_body();
 
@@ -312,9 +327,76 @@ class Analytics extends AdminController
             ->set_status_header(200)
             ->set_content_type('text/html', 'utf-8');
 
+        foreach ($headers as $header) {
+            if (is_string($header) && $header !== '') {
+                $this->output->set_header($header);
+            }
+        }
+
         $this->output->set_output((string) $html);
 
         return;
+    }
+
+    protected function set_analytics_render_path_header($renderPath)
+    {
+        if (!isset($this->output)) {
+            return;
+        }
+
+        $this->output->set_header('X-Marketing-Analytics-Render-Path: ' . trim((string) $renderPath));
+    }
+
+    protected function get_fallback_response_headers($reasonCode)
+    {
+        $reasonCode = $this->sanitize_fallback_reason_code($reasonCode);
+
+        return [
+            'X-Marketing-Analytics-Render-Path: ' . self::FALLBACK_RENDER_PATH,
+            'X-Marketing-Analytics-Fallback: ' . $reasonCode,
+        ];
+    }
+
+    protected function sanitize_fallback_reason_code($reasonCode)
+    {
+        $reasonCode = strtolower(trim((string) $reasonCode));
+        $reasonCode = preg_replace('/[^a-z0-9_-]+/', '_', $reasonCode);
+        $reasonCode = trim((string) $reasonCode, '_');
+
+        return $reasonCode !== '' ? $reasonCode : 'unknown_fallback_path';
+    }
+
+    protected function append_analytics_fallback_diagnostic_log($reasonCode, ?Throwable $exception = null)
+    {
+        if (!defined('APPPATH')) {
+            return;
+        }
+
+        $reasonCode = $this->sanitize_fallback_reason_code($reasonCode);
+        $logDirectory = rtrim(APPPATH, '/\\') . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR;
+        $logFile = $logDirectory . 'marketing-analytics-diagnostic-' . date('Y-m-d') . '.log';
+        $exceptionClass = $exception ? get_class($exception) : 'none';
+        $message = $exception ? $this->sanitize_log_message($exception->getMessage()) : 'none';
+        $message = function_exists('mb_substr')
+            ? mb_substr($message, 0, 180)
+            : substr($message, 0, 180);
+        $location = 'none';
+
+        if ($exception && $exception->getFile()) {
+            $location = basename((string) $exception->getFile()) . ':' . (int) $exception->getLine();
+        }
+
+        $entry = sprintf(
+            "[%s] reason=%s render_path=%s exception=%s message=%s location=%s\n",
+            date('c'),
+            $reasonCode,
+            self::FALLBACK_RENDER_PATH,
+            $exceptionClass,
+            str_replace(["\r", "\n"], ' ', $message),
+            $location
+        );
+
+        @file_put_contents($logFile, $entry, FILE_APPEND | LOCK_EX);
     }
 
     protected function build_minimal_fallback_html(array $data)

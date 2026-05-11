@@ -105,6 +105,7 @@ $events_pagination = isset($events_pagination) && is_array($events_pagination)
     </style>
 </head>
 <body>
+    <!-- marketing_analytics_render_path=fallback-throwable -->
     <div class="marketing-analytics-fallback-shell">
         <div class="marketing-analytics-fallback-panel">
             <div class="marketing-analytics-fallback-header">

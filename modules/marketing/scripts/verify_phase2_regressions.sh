@@ -1166,7 +1166,7 @@ check_analytics_runtime_fail_closed_queries() {
 }
 
 check_analytics_render_fail_closed() {
-  local defaults_line render_helper_line fallback_helper_line return_line baseline_line cleanup_helper_line clear_output_line response_helper_line primary_render_line primary_catch_line cleanup_before_fallback_line fallback_render_line fallback_warning_line cleanup_before_minimal_line minimal_html_line marker_line status_line content_type_line fallback_view_line isolated_render_helper_line combine_helper_line primary_marker_helper_line primary_marker_guard_line primary_visible_guard_line visibility_helper_line buffer_level_guard_line fallback_visible_guard_line
+  local defaults_line render_helper_line fallback_helper_line return_line baseline_line cleanup_helper_line clear_output_line response_helper_line render_path_helper_line primary_path_const_line fallback_path_const_line primary_render_line primary_header_line primary_catch_line primary_fallback_return_line cleanup_before_fallback_line fallback_render_line fallback_warning_line cleanup_before_minimal_line minimal_html_line marker_line status_line content_type_line fallback_view_line fallback_path_header_line reason_header_line reason_helper_line diagnostic_log_helper_line diagnostic_log_path_line primary_diag_call_line fallback_diag_call_line minimal_diag_call_line isolated_render_helper_line combine_helper_line primary_marker_helper_line primary_marker_guard_line primary_visible_guard_line visibility_helper_line buffer_level_guard_line fallback_visible_guard_line
   defaults_line="$(first_match 'function[[:space:]]+get_default_analytics_view_data' "$ANALYTICS_CONTROLLER_FILE")"
   render_helper_line="$(first_match 'function[[:space:]]+render_analytics_response' "$ANALYTICS_CONTROLLER_FILE")"
   fallback_helper_line="$(first_match 'function[[:space:]]+render_fallback_response' "$ANALYTICS_CONTROLLER_FILE")"
@@ -1175,8 +1175,13 @@ check_analytics_render_fail_closed() {
   cleanup_helper_line="$(first_match 'function[[:space:]]+clean_output_buffers_to_level' "$ANALYTICS_CONTROLLER_FILE")"
   clear_output_line="$(first_match 'function[[:space:]]+clear_pending_output_body' "$ANALYTICS_CONTROLLER_FILE")"
   response_helper_line="$(first_match 'function[[:space:]]+send_html_response' "$ANALYTICS_CONTROLLER_FILE")"
+  render_path_helper_line="$(first_match 'function[[:space:]]+set_analytics_render_path_header' "$ANALYTICS_CONTROLLER_FILE")"
+  primary_path_const_line="$(first_fixed_match "private const PRIMARY_RENDER_PATH = 'primary-direct';" "$ANALYTICS_CONTROLLER_FILE")"
+  fallback_path_const_line="$(first_fixed_match "private const FALLBACK_RENDER_PATH = 'fallback-throwable';" "$ANALYTICS_CONTROLLER_FILE")"
   primary_render_line="$(first_fixed_match "\$this->load->view('marketing/analytics/index', \$data);" "$ANALYTICS_CONTROLLER_FILE")"
+  primary_header_line="$(first_fixed_match "\$this->set_analytics_render_path_header(self::PRIMARY_RENDER_PATH);" "$ANALYTICS_CONTROLLER_FILE")"
   primary_catch_line="$(first_fixed_match "Marketing analytics primary render failed:" "$ANALYTICS_CONTROLLER_FILE")"
+  primary_fallback_return_line="$(first_fixed_match "return \$this->render_fallback_response(\$data, \$baselineOutputLevel, 'primary_render_throwable', \$exception);" "$ANALYTICS_CONTROLLER_FILE")"
   cleanup_before_fallback_line="$(first_fixed_match '$this->clean_output_buffers_to_level((int) $baselineOutputLevel);' "$ANALYTICS_CONTROLLER_FILE")"
   fallback_render_line="$(first_fixed_match "\$html = \$this->load->view('marketing/analytics/fallback', \$fallbackData, true);" "$ANALYTICS_CONTROLLER_FILE")"
   fallback_warning_line="$(first_fixed_match "'analytics_warning_message' => 'Analytics is temporarily unavailable. A safe fallback view is being shown while runtime issues are contained.'" "$ANALYTICS_CONTROLLER_FILE")"
@@ -1186,6 +1191,14 @@ check_analytics_render_fail_closed() {
   status_line="$(first_fixed_match '->set_status_header(200)' "$ANALYTICS_CONTROLLER_FILE")"
   content_type_line="$(first_fixed_match "->set_content_type('text/html', 'utf-8')" "$ANALYTICS_CONTROLLER_FILE")"
   fallback_view_line="$(first_fixed_match 'No secrets, SQL, tokens, payloads, or raw exception traces are shown here.' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  fallback_path_header_line="$(first_fixed_match "'X-Marketing-Analytics-Render-Path: ' . self::FALLBACK_RENDER_PATH" "$ANALYTICS_CONTROLLER_FILE")"
+  reason_header_line="$(first_fixed_match "'X-Marketing-Analytics-Fallback: ' . \$reasonCode" "$ANALYTICS_CONTROLLER_FILE")"
+  reason_helper_line="$(first_match 'function[[:space:]]+sanitize_fallback_reason_code' "$ANALYTICS_CONTROLLER_FILE")"
+  diagnostic_log_helper_line="$(first_match 'function[[:space:]]+append_analytics_fallback_diagnostic_log' "$ANALYTICS_CONTROLLER_FILE")"
+  diagnostic_log_path_line="$(first_fixed_match "marketing-analytics-diagnostic-' . date('Y-m-d') . '.log'" "$ANALYTICS_CONTROLLER_FILE")"
+  primary_diag_call_line="$(first_fixed_match "\$this->append_analytics_fallback_diagnostic_log(\$reasonCode, \$primaryException);" "$ANALYTICS_CONTROLLER_FILE")"
+  fallback_diag_call_line="$(first_fixed_match "\$this->append_analytics_fallback_diagnostic_log('fallback_render_throwable', \$exception);" "$ANALYTICS_CONTROLLER_FILE")"
+  minimal_diag_call_line="$(first_fixed_match "\$this->append_analytics_fallback_diagnostic_log('minimal_fallback');" "$ANALYTICS_CONTROLLER_FILE")"
   isolated_render_helper_line="$(first_match 'function[[:space:]]+render_view_in_isolated_buffer' "$ANALYTICS_CONTROLLER_FILE")"
   combine_helper_line="$(first_match 'function[[:space:]]+combine_rendered_html_fragments' "$ANALYTICS_CONTROLLER_FILE")"
   primary_marker_helper_line="$(first_match 'function[[:space:]]+rendered_html_has_primary_analytics_markers' "$ANALYTICS_CONTROLLER_FILE")"
@@ -1195,16 +1208,16 @@ check_analytics_render_fail_closed() {
   buffer_level_guard_line="$(first_fixed_match 'analytics render changed output buffer level unexpectedly' "$ANALYTICS_CONTROLLER_FILE")"
   fallback_visible_guard_line="$(first_fixed_match "analytics fallback view returned empty visible output" "$ANALYTICS_CONTROLLER_FILE")"
 
-  if [[ -z "$defaults_line" || -z "$render_helper_line" || -z "$fallback_helper_line" || -z "$return_line" || -z "$baseline_line" || -z "$cleanup_helper_line" || -z "$clear_output_line" || -z "$response_helper_line" || -z "$primary_render_line" || -z "$primary_catch_line" || -z "$cleanup_before_fallback_line" || -z "$fallback_render_line" || -z "$fallback_warning_line" || -z "$cleanup_before_minimal_line" || -z "$minimal_html_line" || -z "$marker_line" || -z "$status_line" || -z "$content_type_line" || -z "$fallback_view_line" || -n "$isolated_render_helper_line" || -n "$combine_helper_line" || -n "$primary_marker_helper_line" || -n "$primary_marker_guard_line" || -n "$primary_visible_guard_line" || -n "$visibility_helper_line" || -n "$buffer_level_guard_line" || -n "$fallback_visible_guard_line" ]]; then
+  if [[ -z "$defaults_line" || -z "$render_helper_line" || -z "$fallback_helper_line" || -z "$return_line" || -z "$baseline_line" || -z "$cleanup_helper_line" || -z "$clear_output_line" || -z "$response_helper_line" || -z "$render_path_helper_line" || -z "$primary_path_const_line" || -z "$fallback_path_const_line" || -z "$primary_render_line" || -z "$primary_header_line" || -z "$primary_catch_line" || -z "$primary_fallback_return_line" || -z "$cleanup_before_fallback_line" || -z "$fallback_render_line" || -z "$fallback_warning_line" || -z "$cleanup_before_minimal_line" || -z "$minimal_html_line" || -z "$marker_line" || -z "$status_line" || -z "$content_type_line" || -z "$fallback_view_line" || -z "$fallback_path_header_line" || -z "$reason_header_line" || -z "$reason_helper_line" || -z "$diagnostic_log_helper_line" || -z "$diagnostic_log_path_line" || -z "$primary_diag_call_line" || -z "$fallback_diag_call_line" || -z "$minimal_diag_call_line" || -n "$isolated_render_helper_line" || -n "$combine_helper_line" || -n "$primary_marker_helper_line" || -n "$primary_marker_guard_line" || -n "$primary_visible_guard_line" || -n "$visibility_helper_line" || -n "$buffer_level_guard_line" || -n "$fallback_visible_guard_line" ]]; then
     fail \
       "analytics controller uses direct Perfex primary rendering and reserves fallback for actual render exceptions" \
-      "expected direct load->view() primary render, explicit fallback helper, cleanup before fallback/minimal fallback, HTTP 200 text/html fallback response, fallback view support, and no primary marker/buffer heuristics; defaults=${defaults_line:-missing}; render=${render_helper_line:-missing}; fallback_helper=${fallback_helper_line:-missing}; return=${return_line:-missing}; baseline=${baseline_line:-missing}; cleanup=${cleanup_helper_line:-missing}; clear_output=${clear_output_line:-missing}; response=${response_helper_line:-missing}; primary=${primary_render_line:-missing}; catch=${primary_catch_line:-missing}; cleanup_fallback=${cleanup_before_fallback_line:-missing}; fallback=${fallback_render_line:-missing}; warning=${fallback_warning_line:-missing}; cleanup_minimal=${cleanup_before_minimal_line:-missing}; minimal=${minimal_html_line:-missing}; marker=${marker_line:-missing}; status=${status_line:-missing}; content_type=${content_type_line:-missing}; fallback_view=${fallback_view_line:-missing}; isolated=${isolated_render_helper_line:-unexpected}; combine=${combine_helper_line:-unexpected}; primary_marker_helper=${primary_marker_helper_line:-unexpected}; primary_marker_guard=${primary_marker_guard_line:-unexpected}; primary_visible=${primary_visible_guard_line:-unexpected}; visibility_helper=${visibility_helper_line:-unexpected}; buffer_level=${buffer_level_guard_line:-unexpected}; fallback_visible=${fallback_visible_guard_line:-unexpected}"
+      "expected direct load->view() primary render, explicit primary/fallback render-path headers, cleanup before fallback/minimal fallback, fallback diagnostic logging, HTTP 200 text/html fallback response, fallback view support, and no primary marker/buffer heuristics; defaults=${defaults_line:-missing}; render=${render_helper_line:-missing}; fallback_helper=${fallback_helper_line:-missing}; return=${return_line:-missing}; baseline=${baseline_line:-missing}; cleanup=${cleanup_helper_line:-missing}; clear_output=${clear_output_line:-missing}; response=${response_helper_line:-missing}; render_path_helper=${render_path_helper_line:-missing}; primary_const=${primary_path_const_line:-missing}; fallback_const=${fallback_path_const_line:-missing}; primary=${primary_render_line:-missing}; primary_header=${primary_header_line:-missing}; catch=${primary_catch_line:-missing}; primary_return=${primary_fallback_return_line:-missing}; cleanup_fallback=${cleanup_before_fallback_line:-missing}; fallback=${fallback_render_line:-missing}; warning=${fallback_warning_line:-missing}; cleanup_minimal=${cleanup_before_minimal_line:-missing}; minimal=${minimal_html_line:-missing}; marker=${marker_line:-missing}; status=${status_line:-missing}; content_type=${content_type_line:-missing}; fallback_view=${fallback_view_line:-missing}; fallback_path_header=${fallback_path_header_line:-missing}; reason_header=${reason_header_line:-missing}; reason_helper=${reason_helper_line:-missing}; diag_helper=${diagnostic_log_helper_line:-missing}; diag_path=${diagnostic_log_path_line:-missing}; diag_primary=${primary_diag_call_line:-missing}; diag_fallback=${fallback_diag_call_line:-missing}; diag_minimal=${minimal_diag_call_line:-missing}; isolated=${isolated_render_helper_line:-unexpected}; combine=${combine_helper_line:-unexpected}; primary_marker_helper=${primary_marker_helper_line:-unexpected}; primary_marker_guard=${primary_marker_guard_line:-unexpected}; primary_visible=${primary_visible_guard_line:-unexpected}; visibility_helper=${visibility_helper_line:-unexpected}; buffer_level=${buffer_level_guard_line:-unexpected}; fallback_visible=${fallback_visible_guard_line:-unexpected}"
     return
   fi
 
   pass \
     "analytics controller uses direct Perfex primary rendering and reserves fallback for actual render exceptions" \
-    "primary=$primary_render_line | fallback=$fallback_render_line | cleanup=$cleanup_before_fallback_line"
+    "primary=$primary_render_line | primary_header=$primary_header_line | fallback_header=$fallback_path_header_line"
 }
 
 check_analytics_failure_ui_sanitized() {
@@ -1228,29 +1241,30 @@ check_analytics_failure_ui_sanitized() {
 }
 
 check_analytics_fallback_view_standalone() {
-  local doctype_line marker_line warning_line card_line init_head_line init_tail_line body_line
+  local doctype_line marker_line warning_line card_line init_head_line init_tail_line body_line comment_line
   doctype_line="$(first_fixed_match '<!DOCTYPE html>' "$ANALYTICS_FALLBACK_VIEW_FILE")"
   marker_line="$(first_fixed_match 'Marketing Analytics Safe Fallback' "$ANALYTICS_FALLBACK_VIEW_FILE")"
   warning_line="$(first_fixed_match '$analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)' "$ANALYTICS_FALLBACK_VIEW_FILE")"
   card_line="$(first_fixed_match 'marketing-analytics-fallback-card-value' "$ANALYTICS_FALLBACK_VIEW_FILE")"
   body_line="$(first_fixed_match '<body>' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  comment_line="$(first_fixed_match 'marketing_analytics_render_path=fallback-throwable' "$ANALYTICS_FALLBACK_VIEW_FILE")"
   init_head_line="$(first_fixed_match 'init_head()' "$ANALYTICS_FALLBACK_VIEW_FILE")"
   init_tail_line="$(first_fixed_match 'init_tail()' "$ANALYTICS_FALLBACK_VIEW_FILE")"
 
-  if [[ -z "$doctype_line" || -z "$marker_line" || -z "$warning_line" || -z "$card_line" || -z "$body_line" || -n "$init_head_line" || -n "$init_tail_line" ]]; then
+  if [[ -z "$doctype_line" || -z "$marker_line" || -z "$warning_line" || -z "$card_line" || -z "$body_line" || -z "$comment_line" || -n "$init_head_line" || -n "$init_tail_line" ]]; then
     fail \
       "analytics fallback view is standalone and visibly renders safe fallback content" \
-      "expected standalone HTML document, visible safe-fallback marker, warning text, KPI cards, and no init_head/init_tail dependency in $ANALYTICS_FALLBACK_VIEW_FILE; doctype=${doctype_line:-missing}; marker=${marker_line:-missing}; warning=${warning_line:-missing}; card=${card_line:-missing}; body=${body_line:-missing}; init_head=${init_head_line:-unexpected}; init_tail=${init_tail_line:-unexpected}"
+      "expected standalone HTML document, visible safe-fallback marker, warning text, KPI cards, fallback render-path comment, and no init_head/init_tail dependency in $ANALYTICS_FALLBACK_VIEW_FILE; doctype=${doctype_line:-missing}; marker=${marker_line:-missing}; warning=${warning_line:-missing}; card=${card_line:-missing}; body=${body_line:-missing}; comment=${comment_line:-missing}; init_head=${init_head_line:-unexpected}; init_tail=${init_tail_line:-unexpected}"
     return
   fi
 
   pass \
     "analytics fallback view is standalone and visibly renders safe fallback content" \
-    "doctype=$doctype_line | marker=$marker_line | body=$body_line"
+    "doctype=$doctype_line | marker=$marker_line | comment=$comment_line"
 }
 
 check_analytics_primary_view_normal_layout() {
-  local init_head_line init_tail_line wrapper_line metric_line section_line table_line fallback_marker_line doctype_line
+  local init_head_line init_tail_line wrapper_line metric_line section_line table_line fallback_marker_line doctype_line diagnostic_comment_line diagnostic_header_line
   init_head_line="$(first_fixed_match 'init_head()' "$ANALYTICS_VIEW_FILE")"
   init_tail_line="$(first_fixed_match 'init_tail()' "$ANALYTICS_VIEW_FILE")"
   wrapper_line="$(first_fixed_match '<div id="wrapper">' "$ANALYTICS_VIEW_FILE")"
@@ -1259,11 +1273,13 @@ check_analytics_primary_view_normal_layout() {
   table_line="$(first_fixed_match '<table class="table dt-table">' "$ANALYTICS_VIEW_FILE")"
   fallback_marker_line="$(first_fixed_match 'Marketing Analytics Safe Fallback' "$ANALYTICS_VIEW_FILE")"
   doctype_line="$(first_fixed_match '<!DOCTYPE html>' "$ANALYTICS_VIEW_FILE")"
+  diagnostic_comment_line="$(first_fixed_match 'marketing_analytics_render_path=' "$ANALYTICS_VIEW_FILE")"
+  diagnostic_header_line="$(first_fixed_match 'X-Marketing-Analytics-Render-Path' "$ANALYTICS_VIEW_FILE")"
 
-  if [[ -z "$init_head_line" || -z "$init_tail_line" || -z "$wrapper_line" || -z "$metric_line" || -z "$section_line" || -z "$table_line" || -n "$fallback_marker_line" || -n "$doctype_line" ]]; then
+  if [[ -z "$init_head_line" || -z "$init_tail_line" || -z "$wrapper_line" || -z "$metric_line" || -z "$section_line" || -z "$table_line" || -n "$fallback_marker_line" || -n "$doctype_line" || -n "$diagnostic_comment_line" || -n "$diagnostic_header_line" ]]; then
     fail \
       "analytics primary view remains the normal Perfex admin layout and is not forced into fallback markup" \
-      "expected init_head/init_tail layout hooks, wrapper shell, metric cards, analytics sections, and dt-table in $ANALYTICS_VIEW_FILE, with no standalone doctype or fallback marker; init_head=${init_head_line:-missing}; init_tail=${init_tail_line:-missing}; wrapper=${wrapper_line:-missing}; metric=${metric_line:-missing}; section=${section_line:-missing}; table=${table_line:-missing}; fallback_marker=${fallback_marker_line:-unexpected}; doctype=${doctype_line:-unexpected}"
+      "expected init_head/init_tail layout hooks, wrapper shell, metric cards, analytics sections, and dt-table in $ANALYTICS_VIEW_FILE, with no standalone doctype, fallback marker, or fallback diagnostics markers; init_head=${init_head_line:-missing}; init_tail=${init_tail_line:-missing}; wrapper=${wrapper_line:-missing}; metric=${metric_line:-missing}; section=${section_line:-missing}; table=${table_line:-missing}; fallback_marker=${fallback_marker_line:-unexpected}; doctype=${doctype_line:-unexpected}; diagnostic_comment=${diagnostic_comment_line:-unexpected}; diagnostic_header=${diagnostic_header_line:-unexpected}"
     return
   fi
 
