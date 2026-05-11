@@ -243,75 +243,47 @@ class Analytics extends AdminController
         $baselineOutputLevel = ob_get_level();
 
         try {
-            $html = $this->render_view_in_isolated_buffer('marketing/analytics/index', $data, $baselineOutputLevel);
-            if (!$this->rendered_html_has_visible_content($html)) {
-                throw new RuntimeException('analytics primary view returned empty visible output');
-            }
-            if (!$this->rendered_html_has_primary_analytics_markers($html)) {
-                throw new RuntimeException('analytics primary view missing expected Perfex analytics markers');
-            }
-            return $this->send_html_response($html);
+            $this->load->view('marketing/analytics/index', $data);
+
+            return;
         } catch (Throwable $exception) {
-            $this->log_analytics_runtime_failure('Marketing analytics view render failed: ', $exception);
+            $this->log_analytics_runtime_failure('Marketing analytics primary render failed: ', $exception);
         }
 
-        $this->clean_output_buffers_to_level($baselineOutputLevel);
+        return $this->render_fallback_response($data, $baselineOutputLevel);
+    }
+
+    protected function render_fallback_response(array $data, $baselineOutputLevel = null)
+    {
+        if (is_int($baselineOutputLevel) || ctype_digit((string) $baselineOutputLevel)) {
+            $this->clean_output_buffers_to_level((int) $baselineOutputLevel);
+        }
         $this->clear_pending_output_body();
 
         $fallbackData = array_replace_recursive($this->get_default_analytics_view_data(), [
-            'title' => $data['title'],
+            'title' => $data['title'] ?? _l('marketing_analytics'),
             'can_run_retention_cleanup' => !empty($data['can_run_retention_cleanup']),
             'analytics_warning_message' => 'Analytics is temporarily unavailable. A safe fallback view is being shown while runtime issues are contained.',
             'analytics_render_failed' => true,
         ]);
 
         try {
-            $html = $this->render_view_in_isolated_buffer('marketing/analytics/fallback', $fallbackData, $baselineOutputLevel);
-            if (!$this->rendered_html_has_visible_content($html)) {
-                throw new RuntimeException('analytics fallback view returned empty visible output');
+            $html = $this->load->view('marketing/analytics/fallback', $fallbackData, true);
+            if (!is_string($html) || trim($html) === '') {
+                throw new RuntimeException('analytics fallback view returned empty output');
             }
+
             return $this->send_html_response($html);
         } catch (Throwable $exception) {
             $this->log_analytics_runtime_failure('Marketing analytics emergency fallback render failed: ', $exception);
         }
 
-        $this->clean_output_buffers_to_level($baselineOutputLevel);
+        if (is_int($baselineOutputLevel) || ctype_digit((string) $baselineOutputLevel)) {
+            $this->clean_output_buffers_to_level((int) $baselineOutputLevel);
+        }
         $this->clear_pending_output_body();
 
         return $this->send_html_response($this->build_minimal_fallback_html($fallbackData));
-    }
-
-    protected function render_view_in_isolated_buffer($view, array $data, $baselineOutputLevel)
-    {
-        ob_start();
-        $isolatedBufferLevel = ob_get_level();
-        $html = '';
-        $caughtException = null;
-
-        try {
-            $html = $this->load->view($view, $data, true);
-        } catch (Throwable $exception) {
-            $caughtException = $exception;
-        }
-
-        $this->clean_output_buffers_to_level($isolatedBufferLevel);
-
-        $capturedOutput = '';
-        if (ob_get_level() === $isolatedBufferLevel) {
-            $capturedOutput = (string) ob_get_contents();
-            @ob_end_clean();
-        }
-
-        if (ob_get_level() !== $baselineOutputLevel) {
-            $this->clean_output_buffers_to_level($baselineOutputLevel);
-            throw new RuntimeException('analytics render changed output buffer level unexpectedly');
-        }
-
-        if ($caughtException instanceof Throwable) {
-            throw $caughtException;
-        }
-
-        return $this->combine_rendered_html_fragments($capturedOutput, $html);
     }
 
     protected function clean_output_buffers_to_level($baselineOutputLevel)
@@ -345,30 +317,6 @@ class Analytics extends AdminController
         return;
     }
 
-    protected function combine_rendered_html_fragments($capturedOutput, $html)
-    {
-        $capturedOutput = (string) $capturedOutput;
-        $html = is_string($html) ? $html : (string) $html;
-
-        if ($capturedOutput === '') {
-            return $html;
-        }
-
-        if ($html === '') {
-            return $capturedOutput;
-        }
-
-        if (strpos($capturedOutput, $html) !== false) {
-            return $capturedOutput;
-        }
-
-        if (strpos($html, $capturedOutput) !== false) {
-            return $html;
-        }
-
-        return $capturedOutput . $html;
-    }
-
     protected function build_minimal_fallback_html(array $data)
     {
         $title = html_escape((string) ($data['title'] ?? 'Marketing Analytics'));
@@ -383,41 +331,6 @@ class Analytics extends AdminController
             . '<p>Analytics data could not be rendered safely, so the module returned a contained fallback page instead of a server error.</p>'
             . '<p>No secrets, raw payloads, or diagnostic traces are shown here.</p>'
             . '<p class="marketing-fallback-marker">' . $title . '</p></div></body></html>';
-    }
-
-    protected function rendered_html_has_visible_content($html)
-    {
-        if (!is_string($html) || trim($html) === '') {
-            return false;
-        }
-
-        $visibleHtml = preg_replace('/<style\b[^>]*>.*?<\/style>/is', ' ', $html);
-        $visibleHtml = preg_replace('/<script\b[^>]*>.*?<\/script>/is', ' ', (string) $visibleHtml);
-        $visibleText = html_entity_decode(strip_tags((string) $visibleHtml), ENT_QUOTES, 'UTF-8');
-        $visibleText = preg_replace('/\s+/', ' ', $visibleText);
-
-        return trim((string) $visibleText) !== '';
-    }
-
-    protected function rendered_html_has_primary_analytics_markers($html)
-    {
-        if (!is_string($html) || $html === '') {
-            return false;
-        }
-
-        $requiredMarkers = [
-            '<div id="wrapper">',
-            'marketing-analytics-section-title',
-            'marketing-metric-card',
-        ];
-
-        foreach ($requiredMarkers as $marker) {
-            if (strpos($html, $marker) === false) {
-                return false;
-            }
-        }
-
-        return strpos($html, 'Marketing Analytics Safe Fallback') === false;
     }
 
     protected function log_analytics_runtime_failure($prefix, Throwable $exception)
