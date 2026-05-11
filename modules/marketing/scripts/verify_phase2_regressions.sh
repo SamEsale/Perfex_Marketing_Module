@@ -1166,27 +1166,32 @@ check_analytics_runtime_fail_closed_queries() {
 }
 
 check_analytics_render_fail_closed() {
-  local defaults_line render_helper_line primary_render_line primary_catch_line fallback_render_line fallback_warning_line minimal_html_line status_line fallback_view_line
+  local defaults_line render_helper_line primary_render_line primary_visible_guard_line primary_catch_line fallback_render_line fallback_visible_guard_line fallback_warning_line minimal_html_line marker_line visibility_helper_line status_line return_line fallback_view_line
   defaults_line="$(first_match 'function[[:space:]]+get_default_analytics_view_data' "$ANALYTICS_CONTROLLER_FILE")"
   render_helper_line="$(first_match 'function[[:space:]]+render_analytics_response' "$ANALYTICS_CONTROLLER_FILE")"
+  return_line="$(first_fixed_match 'return $this->render_analytics_response($data);' "$ANALYTICS_CONTROLLER_FILE")"
   primary_render_line="$(first_fixed_match "\$html = \$this->load->view('marketing/analytics/index', \$data, true);" "$ANALYTICS_CONTROLLER_FILE")"
+  primary_visible_guard_line="$(first_fixed_match "analytics primary view returned empty visible output" "$ANALYTICS_CONTROLLER_FILE")"
   primary_catch_line="$(first_fixed_match "Marketing analytics view render failed:" "$ANALYTICS_CONTROLLER_FILE")"
   fallback_render_line="$(first_fixed_match "\$html = \$this->load->view('marketing/analytics/fallback', \$fallbackData, true);" "$ANALYTICS_CONTROLLER_FILE")"
+  fallback_visible_guard_line="$(first_fixed_match "analytics fallback view returned empty visible output" "$ANALYTICS_CONTROLLER_FILE")"
   fallback_warning_line="$(first_fixed_match "'analytics_warning_message' => 'Analytics is temporarily unavailable. A safe fallback view is being shown while runtime issues are contained.'" "$ANALYTICS_CONTROLLER_FILE")"
   minimal_html_line="$(first_match 'function[[:space:]]+build_minimal_fallback_html' "$ANALYTICS_CONTROLLER_FILE")"
+  marker_line="$(first_fixed_match 'Marketing Analytics Safe Fallback' "$ANALYTICS_CONTROLLER_FILE")"
+  visibility_helper_line="$(first_match 'function[[:space:]]+rendered_html_has_visible_content' "$ANALYTICS_CONTROLLER_FILE")"
   status_line="$(first_fixed_match '->set_status_header(200)' "$ANALYTICS_CONTROLLER_FILE")"
   fallback_view_line="$(first_fixed_match 'No secrets, SQL, tokens, payloads, or raw exception traces are shown here.' "$ANALYTICS_FALLBACK_VIEW_FILE")"
 
-  if [[ -z "$defaults_line" || -z "$render_helper_line" || -z "$primary_render_line" || -z "$primary_catch_line" || -z "$fallback_render_line" || -z "$fallback_warning_line" || -z "$minimal_html_line" || -z "$status_line" || -z "$fallback_view_line" ]]; then
+  if [[ -z "$defaults_line" || -z "$render_helper_line" || -z "$return_line" || -z "$primary_render_line" || -z "$primary_visible_guard_line" || -z "$primary_catch_line" || -z "$fallback_render_line" || -z "$fallback_visible_guard_line" || -z "$fallback_warning_line" || -z "$minimal_html_line" || -z "$marker_line" || -z "$visibility_helper_line" || -z "$status_line" || -z "$fallback_view_line" ]]; then
     fail \
       "analytics controller wraps primary and fallback rendering fail-closed instead of returning HTTP 500" \
-      "expected default view data helper, buffered primary render, sanitized catch, buffered fallback render, generic warning, minimal fallback HTML, HTTP 200 override, and safe fallback UI copy; defaults=${defaults_line:-missing}; render=${render_helper_line:-missing}; primary=${primary_render_line:-missing}; catch=${primary_catch_line:-missing}; fallback=${fallback_render_line:-missing}; warning=${fallback_warning_line:-missing}; minimal=${minimal_html_line:-missing}; status=${status_line:-missing}; fallback_view=${fallback_view_line:-missing}"
+      "expected default view data helper, explicit render return, buffered primary/fallback renders, visible-content guards, generic warning, minimal fallback HTML with marker, HTTP 200 override, and safe fallback UI copy; defaults=${defaults_line:-missing}; render=${render_helper_line:-missing}; return=${return_line:-missing}; primary=${primary_render_line:-missing}; primary_visible=${primary_visible_guard_line:-missing}; catch=${primary_catch_line:-missing}; fallback=${fallback_render_line:-missing}; fallback_visible=${fallback_visible_guard_line:-missing}; warning=${fallback_warning_line:-missing}; minimal=${minimal_html_line:-missing}; marker=${marker_line:-missing}; visibility_helper=${visibility_helper_line:-missing}; status=${status_line:-missing}; fallback_view=${fallback_view_line:-missing}"
     return
   fi
 
   pass \
     "analytics controller wraps primary and fallback rendering fail-closed instead of returning HTTP 500" \
-    "render=$render_helper_line | fallback=$fallback_render_line | minimal=$minimal_html_line"
+    "render=$render_helper_line | visibility=$visibility_helper_line | minimal=$minimal_html_line"
 }
 
 check_analytics_failure_ui_sanitized() {
@@ -1207,6 +1212,28 @@ check_analytics_failure_ui_sanitized() {
   pass \
     "analytics failure UI stays sanitized and does not expose raw exception details" \
     "copy=$fallback_copy_line"
+}
+
+check_analytics_fallback_view_standalone() {
+  local doctype_line marker_line warning_line card_line init_head_line init_tail_line body_line
+  doctype_line="$(first_fixed_match '<!DOCTYPE html>' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'Marketing Analytics Safe Fallback' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  warning_line="$(first_fixed_match '$analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  card_line="$(first_fixed_match 'marketing-analytics-fallback-card-value' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  body_line="$(first_fixed_match '<body>' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  init_head_line="$(first_fixed_match 'init_head()' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  init_tail_line="$(first_fixed_match 'init_tail()' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+
+  if [[ -z "$doctype_line" || -z "$marker_line" || -z "$warning_line" || -z "$card_line" || -z "$body_line" || -n "$init_head_line" || -n "$init_tail_line" ]]; then
+    fail \
+      "analytics fallback view is standalone and visibly renders safe fallback content" \
+      "expected standalone HTML document, visible safe-fallback marker, warning text, KPI cards, and no init_head/init_tail dependency in $ANALYTICS_FALLBACK_VIEW_FILE; doctype=${doctype_line:-missing}; marker=${marker_line:-missing}; warning=${warning_line:-missing}; card=${card_line:-missing}; body=${body_line:-missing}; init_head=${init_head_line:-unexpected}; init_tail=${init_tail_line:-unexpected}"
+    return
+  fi
+
+  pass \
+    "analytics fallback view is standalone and visibly renders safe fallback content" \
+    "doctype=$doctype_line | marker=$marker_line | body=$body_line"
 }
 
 check_retention_preserves_unsubscribe_audit_events() {
@@ -1924,6 +1951,7 @@ check_no_destructive_event_history_clear
 check_analytics_view_array_guards
 check_analytics_runtime_fail_closed_queries
 check_analytics_render_fail_closed
+check_analytics_fallback_view_standalone
 check_analytics_failure_ui_sanitized
 check_retention_preserves_unsubscribe_audit_events
 check_no_destructive_retention_calls
