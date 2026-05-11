@@ -48,6 +48,32 @@
     .marketing-metric-red { background: #fef2f2; color: #b91c1c; }
     .marketing-metric-slate { background: #f8fafc; color: #475569; }
     .marketing-metric-purple { background: #f5f3ff; color: #6d28d9; }
+    .marketing-analytics-note {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(59, 130, 246, .16);
+        background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+        color: #1e3a8a;
+        font-size: 13px;
+    }
+    .marketing-analytics-note strong {
+        color: #0f172a;
+    }
+    .marketing-analytics-badge-row {
+        margin-top: 12px;
+    }
+    .marketing-analytics-badge {
+        display: inline-block;
+        margin: 0 8px 8px 0;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: #ffffff;
+        border: 1px solid rgba(148, 163, 184, .28);
+        color: #334155;
+        font-size: 12px;
+        font-weight: 600;
+    }
     @media (max-width: 1199px) {
         .marketing-analytics-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -139,6 +165,9 @@
                         if ((int) ($stats['events']['accepted_sent_events'] ?? 0) !== (int) $stats['events']['accepted_sent']) {
                             $acceptedSentHelper = sprintf(_l('marketing_campaign_raw_sent_events_helper'), (int) $stats['events']['accepted_sent_events']);
                         }
+                        $retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)
+                            ? $retention_diagnostics
+                            : [];
                         ?>
                         <div class="tw-flex tw-items-start tw-justify-between tw-gap-4">
                             <div>
@@ -153,6 +182,15 @@
                                     <?= form_close(); ?>
                                 </div>
                             <?php } ?>
+                        </div>
+                        <div class="marketing-analytics-note">
+                            <strong>Retention policy:</strong> Audit-critical events such as unsubscribes, suppressions, bounces, complaints, and operator actions are retained by design.
+                            Bounded cleanup removes only non-critical telemetry and safely resets stale click aggregates for old tracking links.
+                            <div class="marketing-analytics-badge-row">
+                                <span class="marketing-analytics-badge">Event candidates: <?= (int) ($retentionDiagnostics['events_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['events_cleanup_candidate_more']) ? '+' : ''; ?></span>
+                                <span class="marketing-analytics-badge">Webhook candidates: <?= (int) ($retentionDiagnostics['webhook_logs_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['webhook_logs_cleanup_candidate_more']) ? '+' : ''; ?></span>
+                                <span class="marketing-analytics-badge">Click aggregate candidates: <?= (int) ($retentionDiagnostics['click_aggregate_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['click_aggregate_candidate_more']) ? '+' : ''; ?></span>
+                            </div>
                         </div>
                         <hr />
                         <div class="marketing-analytics-section">

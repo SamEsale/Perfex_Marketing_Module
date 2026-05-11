@@ -5,17 +5,23 @@ defined('BASEPATH') or exit('No direct script access allowed');
 class Marketing_public_links_model extends App_Model
 {
     const TABLE = 'marketing_public_links';
+    const CAMPAIGNS_TABLE = 'marketing_campaigns';
     const TYPE_CLICK = 'click';
     const TYPE_UNSUBSCRIBE = 'unsubscribe';
     const CLICK_REPORT_LIMIT = 100;
+    const RETENTION_MIN_DAYS = 30;
+    const RETENTION_RESET_LIMIT = 500;
+    private const ACTIVE_CAMPAIGN_STATUSES = ['scheduled', 'sending'];
 
     protected $table;
+    protected $campaignsTable;
 
     public function __construct()
     {
         parent::__construct();
 
         $this->table = db_prefix() . self::TABLE;
+        $this->campaignsTable = db_prefix() . self::CAMPAIGNS_TABLE;
     }
 
     public function issue_click_link(array $campaign, array $recipient, $originalUrl)
@@ -264,6 +270,97 @@ class Marketing_public_links_model extends App_Model
         ];
     }
 
+    public function get_click_aggregate_retention_diagnostics($retentionDays = null, $limit = self::RETENTION_RESET_LIMIT)
+    {
+        $retentionDays = $this->normalize_retention_days($retentionDays);
+        $limit = max(1, min(self::RETENTION_RESET_LIMIT, (int) $limit));
+        $diagnostics = [
+            'cleanup_ready' => false,
+            'candidate_preview' => 0,
+            'candidate_more' => false,
+            'warnings' => [],
+        ];
+
+        if (!$this->can_reset_click_aggregates()) {
+            $diagnostics['warnings'][] = 'click_aggregate_cleanup_unavailable';
+
+            return $diagnostics;
+        }
+
+        $cutoffDateTime = $this->build_retention_cutoff_datetime($retentionDays);
+        $candidates = $this->get_click_aggregate_candidate_rows($cutoffDateTime, $limit + 1);
+
+        $diagnostics['cleanup_ready'] = true;
+        $diagnostics['candidate_preview'] = min($limit, count($candidates));
+        $diagnostics['candidate_more'] = count($candidates) > $limit;
+
+        return $diagnostics;
+    }
+
+    public function reset_stale_click_aggregates($retentionDays = null, $limit = self::RETENTION_RESET_LIMIT)
+    {
+        $retentionDays = $this->normalize_retention_days($retentionDays);
+        $limit = max(1, min(self::RETENTION_RESET_LIMIT, (int) $limit));
+        $summary = [
+            'click_links_reset' => 0,
+            'click_links_skipped' => 0,
+            'candidate_preview' => 0,
+            'candidate_more' => false,
+            'warnings' => [],
+        ];
+
+        if (!$this->can_reset_click_aggregates()) {
+            $summary['warnings'][] = 'click_aggregate_cleanup_unavailable';
+
+            return $summary;
+        }
+
+        $cutoffDateTime = $this->build_retention_cutoff_datetime($retentionDays);
+        $candidatePreviewRows = $this->get_click_aggregate_candidate_rows($cutoffDateTime, $limit + 1);
+        $summary['candidate_preview'] = min($limit, count($candidatePreviewRows));
+        $summary['candidate_more'] = count($candidatePreviewRows) > $limit;
+
+        $candidateRows = array_slice($candidatePreviewRows, 0, $limit);
+        if (empty($candidateRows)) {
+            return $summary;
+        }
+
+        $update = $this->filter_existing_columns([
+            'click_count' => 0,
+            'human_click_count' => 0,
+            'unique_click_count' => 0,
+            'last_clicked_at' => null,
+            'last_human_clicked_at' => null,
+            'dateupdated' => date('Y-m-d H:i:s'),
+        ]);
+
+        if (empty($update)) {
+            $summary['click_links_skipped'] = count($candidateRows);
+            $summary['warnings'][] = 'click_aggregate_cleanup_unavailable';
+
+            return $summary;
+        }
+
+        foreach ($candidateRows as $row) {
+            if (!$this->row_has_click_aggregate_activity($row)) {
+                $summary['click_links_skipped']++;
+                continue;
+            }
+
+            $this->db->where('id', (int) ($row['id'] ?? 0));
+            $this->db->where('token_type', self::TYPE_CLICK);
+            $this->db->update($this->table, $update);
+
+            if ($this->db->affected_rows() >= 0) {
+                $summary['click_links_reset']++;
+            } else {
+                $summary['click_links_skipped']++;
+            }
+        }
+
+        return $summary;
+    }
+
     protected function create_public_link($tokenType, array $data)
     {
         $token = $this->generate_public_token();
@@ -387,6 +484,176 @@ class Marketing_public_links_model extends App_Model
     protected function table_ready()
     {
         return $this->db->table_exists($this->table);
+    }
+
+    protected function can_reset_click_aggregates()
+    {
+        return $this->table_ready()
+            && $this->db->field_exists('id', $this->table)
+            && $this->db->field_exists('token_type', $this->table)
+            && (
+                $this->db->field_exists('dateupdated', $this->table)
+                || $this->db->field_exists('last_used_at', $this->table)
+                || $this->db->field_exists('datecreated', $this->table)
+            );
+    }
+
+    protected function normalize_retention_days($retentionDays)
+    {
+        $retentionDays = (int) $retentionDays;
+        if ($retentionDays <= 0) {
+            $retentionDays = self::RETENTION_MIN_DAYS;
+        }
+
+        return max(self::RETENTION_MIN_DAYS, $retentionDays);
+    }
+
+    protected function build_retention_cutoff_datetime($retentionDays)
+    {
+        $retentionDays = $this->normalize_retention_days($retentionDays);
+
+        return date('Y-m-d H:i:s', time() - ($retentionDays * 86400));
+    }
+
+    protected function get_click_aggregate_candidate_rows($cutoffDateTime, $limit)
+    {
+        if (!$this->can_reset_click_aggregates()) {
+            return [];
+        }
+
+        $select = ['p.id'];
+        foreach ([
+            'click_count',
+            'human_click_count',
+            'unique_click_count',
+            'last_clicked_at',
+            'last_human_clicked_at',
+            'last_used_at',
+            'datecreated',
+            'dateupdated',
+            'campaign_id',
+        ] as $column) {
+            if ($this->db->field_exists($column, $this->table)) {
+                $select[] = 'p.' . $column;
+            }
+        }
+
+        if (
+            $this->db->table_exists($this->campaignsTable)
+            && $this->db->field_exists('campaign_id', $this->table)
+            && $this->db->field_exists('id', $this->campaignsTable)
+            && $this->db->field_exists('status', $this->campaignsTable)
+        ) {
+            $select[] = 'c.status AS campaign_status';
+            $this->db->join($this->campaignsTable . ' c', 'c.id = p.campaign_id', 'left');
+        } else {
+            $select[] = 'NULL AS campaign_status';
+        }
+
+        $this->db->select(implode(', ', $select), false)
+            ->from($this->table . ' p')
+            ->where('p.token_type', self::TYPE_CLICK);
+
+        if ($this->db->field_exists('is_active', $this->table)) {
+            $this->db->where('p.is_active', 1);
+        }
+
+        if (
+            $this->db->table_exists($this->campaignsTable)
+            && $this->db->field_exists('campaign_id', $this->table)
+            && $this->db->field_exists('id', $this->campaignsTable)
+            && $this->db->field_exists('status', $this->campaignsTable)
+        ) {
+            $this->db->group_start();
+            $this->db->where('c.status IS NULL', null, false);
+            $this->db->or_where_not_in('c.status', self::ACTIVE_CAMPAIGN_STATUSES);
+            $this->db->group_end();
+        }
+
+        if ($this->db->field_exists('last_human_clicked_at', $this->table)) {
+            $this->db->group_start();
+            $this->db->where('p.last_human_clicked_at <=', $cutoffDateTime);
+            $this->db->or_where('p.last_human_clicked_at IS NULL', null, false);
+            $this->db->group_end();
+        }
+
+        if ($this->db->field_exists('last_clicked_at', $this->table)) {
+            $this->db->group_start();
+            $this->db->where('p.last_clicked_at <=', $cutoffDateTime);
+            $this->db->or_where('p.last_clicked_at IS NULL', null, false);
+            $this->db->group_end();
+        }
+
+        if ($this->db->field_exists('last_used_at', $this->table)) {
+            $this->db->group_start();
+            $this->db->where('p.last_used_at <=', $cutoffDateTime);
+            $this->db->or_where('p.last_used_at IS NULL', null, false);
+            $this->db->group_end();
+        } elseif ($this->db->field_exists('dateupdated', $this->table)) {
+            // Fall back to generic row age only when click/use timestamps are unavailable.
+            $this->db->group_start();
+            $this->db->where('p.dateupdated <=', $cutoffDateTime);
+            $this->db->or_where('p.dateupdated IS NULL', null, false);
+            $this->db->group_end();
+        }
+
+        if ($this->db->field_exists('datecreated', $this->table)) {
+            $this->db->where('p.datecreated <=', $cutoffDateTime);
+        }
+
+        $this->db->group_start();
+        $hasActivityFilter = false;
+        foreach (['click_count', 'human_click_count', 'unique_click_count'] as $counterColumn) {
+            if ($this->db->field_exists($counterColumn, $this->table)) {
+                if ($hasActivityFilter) {
+                    $this->db->or_where('p.' . $counterColumn . ' >', 0, false);
+                } else {
+                    $this->db->where('p.' . $counterColumn . ' >', 0, false);
+                    $hasActivityFilter = true;
+                }
+            }
+        }
+        foreach (['last_clicked_at', 'last_human_clicked_at'] as $dateColumn) {
+            if ($this->db->field_exists($dateColumn, $this->table)) {
+                if ($hasActivityFilter) {
+                    $this->db->or_where('p.' . $dateColumn . ' IS NOT NULL', null, false);
+                } else {
+                    $this->db->where('p.' . $dateColumn . ' IS NOT NULL', null, false);
+                    $hasActivityFilter = true;
+                }
+            }
+        }
+        if (!$hasActivityFilter) {
+            $this->db->where('1 = 0', null, false);
+        }
+        $this->db->group_end();
+
+        if ($this->db->field_exists('last_used_at', $this->table)) {
+            $this->db->order_by('p.last_used_at', 'ASC');
+        } elseif ($this->db->field_exists('dateupdated', $this->table)) {
+            $this->db->order_by('p.dateupdated', 'ASC');
+        } else {
+            $this->db->order_by('p.id', 'ASC');
+        }
+
+        return $this->db->limit(max(1, (int) $limit))->get()->result_array();
+    }
+
+    protected function row_has_click_aggregate_activity(array $row)
+    {
+        foreach (['click_count', 'human_click_count', 'unique_click_count'] as $counterColumn) {
+            if ((int) ($row[$counterColumn] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        foreach (['last_clicked_at', 'last_human_clicked_at'] as $dateColumn) {
+            if (!empty($row[$dateColumn])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function filter_existing_columns(array $data)

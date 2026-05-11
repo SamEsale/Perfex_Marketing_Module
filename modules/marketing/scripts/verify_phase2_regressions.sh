@@ -767,7 +767,7 @@ check_normalized_failure_codes_in_telemetry() {
 check_dashboard_failure_metric_surface() {
   local diagnostics_line view_line
   diagnostics_line="$(first_fixed_match "'recent_failure_metric_counts' => []" "$CAMPAIGNS_FILE")"
-  view_line="$(first_fixed_match 'Recent Failure Metrics' "$DASHBOARD_VIEW_FILE")"
+  view_line="$(first_fixed_match 'Failure Metrics' "$DASHBOARD_VIEW_FILE")"
 
   if [[ -z "$diagnostics_line" || -z "$view_line" ]]; then
     fail \
@@ -877,8 +877,8 @@ check_stale_recovery_operator_guard() {
 check_dashboard_operator_status_surface() {
   local paused_line controls_line actions_line rate_line
   paused_line="$(first_fixed_match 'Queue Paused' "$DASHBOARD_VIEW_FILE")"
-  controls_line="$(first_fixed_match 'Operator Controls' "$DASHBOARD_VIEW_FILE")"
-  actions_line="$(first_fixed_match 'Recent Operator Actions' "$DASHBOARD_VIEW_FILE")"
+  controls_line="$(first_fixed_match 'Queue Controls' "$DASHBOARD_VIEW_FILE")"
+  actions_line="$(first_fixed_match 'Operator Audit' "$DASHBOARD_VIEW_FILE")"
   rate_line="$(first_fixed_match 'Hourly Remaining' "$DASHBOARD_VIEW_FILE")"
 
   if [[ -z "$paused_line" || -z "$controls_line" || -z "$actions_line" || -z "$rate_line" ]]; then
@@ -990,23 +990,26 @@ check_retention_excludes_audit_critical_events() {
 }
 
 check_retention_cleanup_scope() {
-  local cleanup_helper_line event_delete_line webhook_delete_line public_links_line suppressions_line
+  local cleanup_helper_line event_delete_line webhook_delete_line public_links_line click_reset_line suppressions_line recipients_line campaigns_line
   cleanup_helper_line="$(first_match 'function[[:space:]]+run_retention_cleanup' "$EVENTS_FILE")"
   event_delete_line="$(first_fixed_match "\$this->db->delete(\$this->table);" "$EVENTS_FILE")"
   webhook_delete_line="$(first_fixed_match "\$this->db->delete(\$this->webhookLogTable);" "$EVENTS_FILE")"
-  public_links_line="$(first_fixed_match 'marketing_public_links' "$EVENTS_FILE")"
+  public_links_line="$(first_fixed_match "Marketing_public_links_model" "$EVENTS_FILE")"
+  click_reset_line="$(first_fixed_match 'reset_stale_click_aggregates' "$EVENTS_FILE")"
   suppressions_line="$(first_fixed_match 'marketing_suppressions' "$EVENTS_FILE")"
+  recipients_line="$(first_fixed_match 'marketing_campaign_recipients' "$EVENTS_FILE")"
+  campaigns_line="$(first_fixed_match 'marketing_campaigns' "$EVENTS_FILE")"
 
-  if [[ -z "$cleanup_helper_line" || -z "$event_delete_line" || -z "$webhook_delete_line" || -n "$public_links_line" || -n "$suppressions_line" ]]; then
+  if [[ -z "$cleanup_helper_line" || -z "$event_delete_line" || -z "$webhook_delete_line" || -z "$public_links_line" || -z "$click_reset_line" || -n "$suppressions_line" || -n "$recipients_line" || -n "$campaigns_line" ]]; then
     fail \
-      "retention cleanup only targets events and webhook logs, not campaigns, recipients, suppressions, or public links" \
-      "expected explicit retention helper plus event/webhook deletes only in $EVENTS_FILE; helper=${cleanup_helper_line:-missing}; event_delete=${event_delete_line:-missing}; webhook_delete=${webhook_delete_line:-missing}; public_links=${public_links_line:-none}; suppressions=${suppressions_line:-none}"
+      "retention cleanup only targets non-critical events, webhook logs, and safe click aggregate resets" \
+      "expected explicit retention helper, event/webhook deletes, safe public-links reset helper, and no campaigns/recipients/suppressions cleanup in $EVENTS_FILE; helper=${cleanup_helper_line:-missing}; event_delete=${event_delete_line:-missing}; webhook_delete=${webhook_delete_line:-missing}; public_links=${public_links_line:-missing}; click_reset=${click_reset_line:-missing}; suppressions=${suppressions_line:-none}; recipients=${recipients_line:-none}; campaigns=${campaigns_line:-none}"
     return
   fi
 
   pass \
-    "retention cleanup only targets events and webhook logs, not campaigns, recipients, suppressions, or public links" \
-    "helper=$cleanup_helper_line | event_delete=$event_delete_line | webhook_delete=$webhook_delete_line"
+    "retention cleanup only targets non-critical events, webhook logs, and safe click aggregate resets" \
+    "helper=$cleanup_helper_line | event_delete=$event_delete_line | webhook_delete=$webhook_delete_line | click_reset=$click_reset_line"
 }
 
 check_retention_cleanup_not_auto_cron() {
@@ -1027,42 +1030,139 @@ check_retention_cleanup_not_auto_cron() {
 }
 
 check_retention_dashboard_surface() {
-  local dashboard_line view_line candidate_line
+  local dashboard_line view_line candidate_line click_candidate_line
   dashboard_line="$(first_match "'retention_diagnostics'[[:space:]]*=>" "$DASHBOARD_FILE")"
   view_line="$(first_fixed_match 'Telemetry Retention' "$DASHBOARD_VIEW_FILE")"
   candidate_line="$(first_fixed_match 'events_cleanup_candidate_preview' "$DASHBOARD_VIEW_FILE")"
+  click_candidate_line="$(first_fixed_match 'click_aggregate_candidate_preview' "$DASHBOARD_VIEW_FILE")"
 
-  if [[ -z "$dashboard_line" || -z "$view_line" || -z "$candidate_line" ]]; then
+  if [[ -z "$dashboard_line" || -z "$view_line" || -z "$candidate_line" || -z "$click_candidate_line" ]]; then
     fail \
       "dashboard diagnostics surface retention status and cleanup candidate previews" \
-      "expected retention diagnostics in $DASHBOARD_FILE and view rendering in $DASHBOARD_VIEW_FILE; dashboard=${dashboard_line:-missing}; view=${view_line:-missing}; candidate=${candidate_line:-missing}"
+      "expected retention diagnostics in $DASHBOARD_FILE and view rendering in $DASHBOARD_VIEW_FILE; dashboard=${dashboard_line:-missing}; view=${view_line:-missing}; candidate=${candidate_line:-missing}; click_candidate=${click_candidate_line:-missing}"
     return
   fi
 
   pass \
     "dashboard diagnostics surface retention status and cleanup candidate previews" \
-    "dashboard=$dashboard_line | view=$view_line | candidate=$candidate_line"
+    "dashboard=$dashboard_line | view=$view_line | candidate=$candidate_line | click_candidate=$click_candidate_line"
 }
 
 check_no_destructive_event_history_clear() {
-  local controller_post_line controller_model_line controller_flag_line model_guard_line safe_button_line destructive_button_line
+  local controller_post_line controller_model_line controller_flag_line model_guard_line safe_button_line destructive_button_line summary_line
   controller_post_line="$(first_fixed_match "if (\$this->input->post('run_retention_cleanup')) {" "$ANALYTICS_CONTROLLER_FILE")"
   controller_model_line="$(first_fixed_match '$summary = $this->marketing_events_model->run_retention_cleanup();' "$ANALYTICS_CONTROLLER_FILE")"
   controller_flag_line="$(first_fixed_match "\$data['can_run_retention_cleanup'] = staff_can('settings', 'marketing');" "$ANALYTICS_CONTROLLER_FILE")"
   model_guard_line="$(first_fixed_match 'return false;' "$EVENTS_FILE")"
   safe_button_line="$(first_fixed_match 'Run Retention Cleanup' "$ANALYTICS_VIEW_FILE")"
   destructive_button_line="$(first_fixed_match 'marketing_clear_event_history' "$ANALYTICS_VIEW_FILE")"
+  summary_line="$(first_fixed_match "\$clickLinksReset = (int) (\$summary['click_links_reset'] ?? 0);" "$ANALYTICS_CONTROLLER_FILE")"
 
-  if [[ -z "$controller_post_line" || -z "$controller_model_line" || -z "$controller_flag_line" || -z "$model_guard_line" || -z "$safe_button_line" || -n "$destructive_button_line" ]]; then
+  if [[ -z "$controller_post_line" || -z "$controller_model_line" || -z "$controller_flag_line" || -z "$model_guard_line" || -z "$safe_button_line" || -z "$summary_line" || -n "$destructive_button_line" ]]; then
     fail \
       "analytics exposes only safe bounded retention cleanup and keeps destructive history clearing disabled" \
-      "expected retention cleanup POST path, bounded model call, permission flag, fail-closed clear_event_history(), visible safe button, and no destructive clear button; post=${controller_post_line:-missing}; model_call=${controller_model_line:-missing}; flag=${controller_flag_line:-missing}; model=${model_guard_line:-missing}; safe_button=${safe_button_line:-missing}; destructive_button=${destructive_button_line:-unexpected}"
+      "expected retention cleanup POST path, bounded model call, permission flag, fail-closed clear_event_history(), click reset summary, visible safe button, and no destructive clear button; post=${controller_post_line:-missing}; model_call=${controller_model_line:-missing}; flag=${controller_flag_line:-missing}; model=${model_guard_line:-missing}; summary=${summary_line:-missing}; safe_button=${safe_button_line:-missing}; destructive_button=${destructive_button_line:-unexpected}"
     return
   fi
 
   pass \
     "analytics exposes only safe bounded retention cleanup and keeps destructive history clearing disabled" \
-    "post=$controller_post_line | model_call=$controller_model_line | safe_button=$safe_button_line"
+    "post=$controller_post_line | model_call=$controller_model_line | summary=$summary_line"
+}
+
+check_retention_preserves_unsubscribe_audit_events() {
+  local helper_line unsubscribe_line operator_line
+  helper_line="$(first_match 'function[[:space:]]+get_audit_critical_event_types' "$EVENTS_FILE")"
+  unsubscribe_line="$(first_fixed_match "'unsubscribe'" "$EVENTS_FILE")"
+  operator_line="$(first_fixed_match "'operator_action'" "$EVENTS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$unsubscribe_line" || -z "$operator_line" ]]; then
+    fail \
+      "retention cleanup preserves unsubscribe and other audit-critical events" \
+      "expected audit-critical helper plus unsubscribe and operator_action markers in $EVENTS_FILE; helper=${helper_line:-missing}; unsubscribe=${unsubscribe_line:-missing}; operator=${operator_line:-missing}"
+    return
+  fi
+
+  pass \
+    "retention cleanup preserves unsubscribe and other audit-critical events" \
+    "helper=$helper_line | unsubscribe=$unsubscribe_line | operator=$operator_line"
+}
+
+check_no_destructive_retention_calls() {
+  local empty_line truncate_line controller_clear_line
+  empty_line="$(first_fixed_match 'empty_table(' "$EVENTS_FILE")"
+  truncate_line="$(first_fixed_match 'truncate(' "$EVENTS_FILE")"
+  controller_clear_line="$(first_fixed_match "clear_marketing_events" "$ANALYTICS_CONTROLLER_FILE")"
+
+  if [[ -n "$empty_line" || -n "$truncate_line" || -n "$controller_clear_line" ]]; then
+    fail \
+      "retention cleanup does not use destructive clear-history paths" \
+      "expected no empty_table(), truncate(), or clear_marketing_events path in analytics retention flow; empty=${empty_line:-none}; truncate=${truncate_line:-none}; controller=${controller_clear_line:-none}"
+    return
+  fi
+
+  pass \
+    "retention cleanup does not use destructive clear-history paths" \
+    "no empty_table(), truncate(), or clear_marketing_events path found"
+}
+
+check_click_aggregate_cleanup_scope() {
+  local helper_line type_click_line type_unsubscribe_line reset_line
+  helper_line="$(first_match 'function[[:space:]]+reset_stale_click_aggregates' "$PUBLIC_LINKS_FILE")"
+  type_click_line="$(first_fixed_match "where('p.token_type', self::TYPE_CLICK)" "$PUBLIC_LINKS_FILE")"
+  type_unsubscribe_line="$(first_fixed_match 'TYPE_UNSUBSCRIBE' "$PUBLIC_LINKS_FILE")"
+  reset_line="$(first_fixed_match "'click_links_reset'" "$EVENTS_FILE")"
+
+  if [[ -z "$helper_line" || -z "$type_click_line" || -z "$type_unsubscribe_line" || -z "$reset_line" ]]; then
+    fail \
+      "click aggregate cleanup targets only tracking links and reports reset counts" \
+      "expected click aggregate reset helper in $PUBLIC_LINKS_FILE, TYPE_CLICK scope, unsubscribe constant preserved, and click_links_reset summary in $EVENTS_FILE; helper=${helper_line:-missing}; click_scope=${type_click_line:-missing}; unsubscribe=${type_unsubscribe_line:-missing}; summary=${reset_line:-missing}"
+    return
+  fi
+
+  pass \
+    "click aggregate cleanup targets only tracking links and reports reset counts" \
+    "helper=$helper_line | click_scope=$type_click_line | summary=$reset_line"
+}
+
+check_click_aggregate_cleanup_bounds() {
+  local floor_line limit_line limit_usage_line active_campaign_line
+  floor_line="$(first_match 'RETENTION_MIN_DAYS' "$PUBLIC_LINKS_FILE")"
+  limit_line="$(first_match 'RETENTION_RESET_LIMIT' "$PUBLIC_LINKS_FILE")"
+  limit_usage_line="$(first_fixed_match 'min(self::RETENTION_RESET_LIMIT, (int) $limit)' "$PUBLIC_LINKS_FILE")"
+  active_campaign_line="$(first_fixed_match 'ACTIVE_CAMPAIGN_STATUSES' "$PUBLIC_LINKS_FILE")"
+
+  if [[ -z "$floor_line" || -z "$limit_line" || -z "$limit_usage_line" || -z "$active_campaign_line" ]]; then
+    fail \
+      "click aggregate cleanup is bounded, respects retention floor, and skips active campaigns" \
+      "expected retention floor, reset limit, bounded limit usage, and active campaign guard in $PUBLIC_LINKS_FILE; floor=${floor_line:-missing}; limit=${limit_line:-missing}; usage=${limit_usage_line:-missing}; active=${active_campaign_line:-missing}"
+    return
+  fi
+
+  pass \
+    "click aggregate cleanup is bounded, respects retention floor, and skips active campaigns" \
+    "floor=$floor_line | limit=$limit_line | usage=$limit_usage_line"
+}
+
+check_dashboard_operator_ui_structure() {
+  local controls_line health_line warnings_line failure_line audit_line retention_line
+  controls_line="$(first_fixed_match 'Queue Controls' "$DASHBOARD_VIEW_FILE")"
+  health_line="$(first_fixed_match 'Queue Health' "$DASHBOARD_VIEW_FILE")"
+  warnings_line="$(first_fixed_match 'Recent Warnings' "$DASHBOARD_VIEW_FILE")"
+  failure_line="$(first_fixed_match 'Failure Metrics' "$DASHBOARD_VIEW_FILE")"
+  audit_line="$(first_fixed_match 'Operator Audit' "$DASHBOARD_VIEW_FILE")"
+  retention_line="$(first_fixed_match 'Telemetry Retention' "$DASHBOARD_VIEW_FILE")"
+
+  if [[ -z "$controls_line" || -z "$health_line" || -z "$warnings_line" || -z "$failure_line" || -z "$audit_line" || -z "$retention_line" ]]; then
+    fail \
+      "dashboard operator controls are rendered as structured commercial UI sections" \
+      "expected Queue Controls, Queue Health, Recent Warnings, Failure Metrics, Operator Audit, and Telemetry Retention sections in $DASHBOARD_VIEW_FILE; controls=${controls_line:-missing}; health=${health_line:-missing}; warnings=${warnings_line:-missing}; failure=${failure_line:-missing}; audit=${audit_line:-missing}; retention=${retention_line:-missing}"
+    return
+  fi
+
+  pass \
+    "dashboard operator controls are rendered as structured commercial UI sections" \
+    "controls=$controls_line | health=$health_line | retention=$retention_line"
 }
 
 check_release_validator_exists() {
@@ -1382,6 +1482,11 @@ check_retention_cleanup_scope
 check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_no_destructive_event_history_clear
+check_retention_preserves_unsubscribe_audit_events
+check_no_destructive_retention_calls
+check_click_aggregate_cleanup_scope
+check_click_aggregate_cleanup_bounds
+check_dashboard_operator_ui_structure
 check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks

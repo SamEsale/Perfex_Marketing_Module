@@ -1,5 +1,154 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
+<style>
+    .marketing-ops-shell {
+        border: 1px solid #e2e8f0;
+        background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    .marketing-ops-section {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 18px;
+        margin-top: 18px;
+    }
+    .marketing-ops-section:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+        margin-top: 0;
+    }
+    .marketing-ops-section-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .marketing-ops-section-copy {
+        margin: 6px 0 0;
+        color: #64748b;
+        font-size: 13px;
+    }
+    .marketing-ops-badge {
+        display: inline-block;
+        margin: 0 8px 8px 0;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .marketing-ops-status-pill {
+        display: inline-flex;
+        align-items: center;
+        margin: 0 8px 8px 0;
+        padding: 7px 11px;
+        border-radius: 999px;
+        border: 1px solid #dbeafe;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .marketing-ops-control-shell,
+    .marketing-ops-table-shell {
+        margin-top: 14px;
+        padding: 16px;
+        border-radius: 14px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+    }
+    .marketing-ops-control-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+        gap: 16px;
+    }
+    .marketing-ops-button-row .btn {
+        margin: 0 10px 10px 0;
+    }
+    .marketing-ops-list {
+        display: grid;
+        gap: 10px;
+    }
+    .marketing-ops-list-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #f1f5f9;
+        color: #334155;
+        font-size: 13px;
+    }
+    .marketing-ops-list-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+    }
+    .marketing-ops-list-row strong {
+        color: #0f172a;
+        font-weight: 700;
+    }
+    .marketing-ops-empty {
+        margin-top: 12px;
+        padding: 14px 16px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 12px;
+        color: #64748b;
+        background: #ffffff;
+    }
+    .marketing-ops-metric {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 16px;
+        min-height: 112px;
+    }
+    .marketing-ops-metric-label {
+        display: block;
+        color: #64748b;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+    }
+    .marketing-ops-metric-value {
+        display: block;
+        margin-top: 10px;
+        color: #0f172a;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+    .marketing-ops-metric-helper {
+        display: block;
+        margin-top: 8px;
+        color: #94a3b8;
+        font-size: 12px;
+    }
+    .marketing-ops-retention-grid,
+    .marketing-ops-health-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+    }
+    .marketing-ops-badge-grid {
+        display: flex;
+        flex-wrap: wrap;
+        margin-top: 14px;
+    }
+    @media (max-width: 991px) {
+        .marketing-ops-control-grid,
+        .marketing-ops-retention-grid,
+        .marketing-ops-health-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 767px) {
+        .marketing-ops-control-grid,
+        .marketing-ops-retention-grid,
+        .marketing-ops-health-grid {
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+    }
+</style>
 <div id="wrapper">
     <div class="content">
         <div class="row">
@@ -175,192 +324,240 @@
                         $retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)
                             ? $retention_diagnostics
                             : [];
+                        $retentionModeLabel = str_replace('_', ' ', (string) ($retentionDiagnostics['cleanup_mode'] ?? 'explicit_only'));
                         $canManageQueue = !empty($can_manage_queue);
                         ?>
                         <div class="row tw-mt-15">
                             <div class="col-md-12">
-                                <div class="panel_s" style="border:1px solid #e2e8f0;background:#f8fafc;">
+                                <div class="panel_s marketing-ops-shell">
                                     <div class="panel-body">
                                         <div class="row">
                                             <div class="col-md-8">
                                                 <h4 class="no-margin">Queue Diagnostics</h4>
-                                                <p class="text-muted mtop10">Live worker, processing, and recovery telemetry from existing queue and event records.</p>
+                                                <p class="text-muted mtop10">Operational controls and recent execution telemetry for queue health, provider pressure, operator actions, and bounded telemetry retention.</p>
                                             </div>
                                             <div class="col-md-4 text-right">
-                                                <?php if (!empty($queueDiagnostics['queue_paused'])) { ?>
-                                                    <span class="label label-warning">Queue Paused</span>
-                                                <?php } else { ?>
-                                                    <span class="label label-success">Queue Active</span>
-                                                <?php } ?>
-                                                <?php if (!empty($queueDiagnostics['schema_ready'])) { ?>
-                                                    <span class="label label-success">Schema Ready</span>
-                                                <?php } else { ?>
-                                                    <span class="label label-warning">Schema Partial</span>
-                                                <?php } ?>
+                                                <span class="marketing-ops-status-pill"><?= !empty($queueDiagnostics['queue_paused']) ? 'Queue Paused' : 'Queue Active'; ?></span>
+                                                <span class="marketing-ops-status-pill"><?= !empty($queueDiagnostics['schema_ready']) ? 'Schema Ready' : 'Schema Partial'; ?></span>
+                                                <span class="marketing-ops-status-pill">Mode: <?= html_escape(ucwords($retentionModeLabel)); ?></span>
                                             </div>
                                         </div>
-                                        <div class="row mtop15">
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Worker Leases</span>
-                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['campaign_worker_leases_active'] ?? 0); ?></h3>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Stale Worker Leases</span>
-                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['campaign_worker_leases_stale'] ?? 0); ?></h3>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Processing</span>
-                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_processing'] ?? 0); ?></h3>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Stale Processing</span>
-                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_processing_stale'] ?? 0); ?></h3>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Queued</span>
-                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_queued'] ?? 0); ?></h3>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Hourly Remaining</span>
-                                                    <h3 class="tw-mt-10"><?= html_escape($queueRateLimit['hourly_remaining'] === null ? '∞' : (string) (int) $queueRateLimit['hourly_remaining']); ?></h3>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Daily Remaining</span>
-                                                    <h3 class="tw-mt-10"><?= html_escape($queueRateLimit['daily_remaining'] === null ? '∞' : (string) (int) $queueRateLimit['daily_remaining']); ?></h3>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small">Failed</span>
-                                                    <h3 class="tw-mt-10"><?= (int) ($queueDiagnostics['recipients_failed'] ?? 0); ?></h3>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title">Queue Controls</h5>
+                                            <p class="marketing-ops-section-copy">Pause, resume, or recover stale queue work without modifying active recipient ownership or deleting telemetry.</p>
+                                            <div class="marketing-ops-control-shell">
+                                                <div class="marketing-ops-control-grid">
+                                                    <div>
+                                                        <?php if ($canManageQueue) { ?>
+                                                            <div class="marketing-ops-button-row">
+                                                                <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
+                                                                    <input type="hidden" name="queue_action" value="<?= !empty($queueDiagnostics['queue_paused']) ? 'resume' : 'pause'; ?>">
+                                                                    <button type="submit" class="btn btn-<?= !empty($queueDiagnostics['queue_paused']) ? 'success' : 'warning'; ?>">
+                                                                        <?= !empty($queueDiagnostics['queue_paused']) ? 'Resume Queue' : 'Pause Queue'; ?>
+                                                                    </button>
+                                                                <?= form_close(); ?>
+                                                                <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
+                                                                    <input type="hidden" name="queue_action" value="recover_stale_worker_leases">
+                                                                    <button type="submit" class="btn btn-default">Recover Stale Worker Leases</button>
+                                                                <?= form_close(); ?>
+                                                                <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
+                                                                    <input type="hidden" name="queue_action" value="recover_stale_processing">
+                                                                    <button type="submit" class="btn btn-default">Recover Stale Processing</button>
+                                                                <?= form_close(); ?>
+                                                            </div>
+                                                        <?php } else { ?>
+                                                            <div class="marketing-ops-empty">Queue controls are available to marketing settings administrators only.</div>
+                                                        <?php } ?>
+                                                    </div>
+                                                    <div class="marketing-ops-list">
+                                                        <div class="marketing-ops-list-row">
+                                                            <span>Queue state</span>
+                                                            <strong><?= !empty($queueDiagnostics['queue_paused']) ? 'Paused' : 'Active'; ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-list-row">
+                                                            <span>Recent recovered rows</span>
+                                                            <strong><?= (int) ($queueDiagnostics['recent_recovered_total'] ?? 0); ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-list-row">
+                                                            <span>Hourly send capacity</span>
+                                                            <strong><?= html_escape($queueRateLimit['hourly_remaining'] === null ? 'Unlimited' : (string) (int) $queueRateLimit['hourly_remaining']); ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-list-row">
+                                                            <span>Daily send capacity</span>
+                                                            <strong><?= html_escape($queueRateLimit['daily_remaining'] === null ? 'Unlimited' : (string) (int) $queueRateLimit['daily_remaining']); ?></strong>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                        <?php if ($canManageQueue) { ?>
-                                            <div class="mtop15">
-                                                <h5 class="bold no-margin">Operator Controls</h5>
-                                                <div class="marketing-campaign-actions mtop10">
-                                                    <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
-                                                        <input type="hidden" name="queue_action" value="<?= !empty($queueDiagnostics['queue_paused']) ? 'resume' : 'pause'; ?>">
-                                                        <button type="submit" class="btn btn-<?= !empty($queueDiagnostics['queue_paused']) ? 'success' : 'warning'; ?>">
-                                                            <?= !empty($queueDiagnostics['queue_paused']) ? 'Resume Queue' : 'Pause Queue'; ?>
-                                                        </button>
-                                                    <?= form_close(); ?>
-                                                    <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
-                                                        <input type="hidden" name="queue_action" value="recover_stale_worker_leases">
-                                                        <button type="submit" class="btn btn-default">Recover Stale Worker Leases</button>
-                                                    <?= form_close(); ?>
-                                                    <?= form_open(admin_url('marketing/queue_control'), ['class' => 'inline-block']); ?>
-                                                        <input type="hidden" name="queue_action" value="recover_stale_processing">
-                                                        <button type="submit" class="btn btn-default">Recover Stale Processing</button>
-                                                    <?= form_close(); ?>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title">Queue Health</h5>
+                                            <p class="marketing-ops-section-copy">Live lease, backlog, recovery, and rate-cap telemetry from existing queue state.</p>
+                                            <div class="marketing-ops-health-grid mtop15">
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Worker Leases</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($queueDiagnostics['campaign_worker_leases_active'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Active campaign worker ownership markers.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Stale Worker Leases</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($queueDiagnostics['campaign_worker_leases_stale'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Eligible for guarded stale recovery only.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Processing Recipients</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($queueDiagnostics['recipients_processing'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Rows currently owned by active workers.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Stale Processing</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($queueDiagnostics['recipients_processing_stale'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Processing rows past the stale timeout.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Queued Recipients</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($queueDiagnostics['recipients_queued'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Sendable recipients waiting for queue execution.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Failed Recipients</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($queueDiagnostics['recipients_failed'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Recipient rows currently marked failed.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Hourly Remaining</span>
+                                                    <span class="marketing-ops-metric-value"><?= html_escape($queueRateLimit['hourly_remaining'] === null ? '∞' : (string) (int) $queueRateLimit['hourly_remaining']); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Current hourly send capacity.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Daily Remaining</span>
+                                                    <span class="marketing-ops-metric-value"><?= html_escape($queueRateLimit['daily_remaining'] === null ? '∞' : (string) (int) $queueRateLimit['daily_remaining']); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Current daily send capacity.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Recovered Rows</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($queueDiagnostics['recent_recovered_total'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Rows recovered in the recent batch telemetry window.</span>
                                                 </div>
                                             </div>
-                                        <?php } ?>
-                                        <div class="mtop15">
-                                            <p class="text-muted no-margin">
-                                                Recent recovered rows: <strong><?= (int) ($queueDiagnostics['recent_recovered_total'] ?? 0); ?></strong>
-                                            </p>
                                             <?php if (!empty($queueDiagnostics['schema_missing']) && is_array($queueDiagnostics['schema_missing'])) { ?>
-                                                <p class="text-muted mtop10 no-margin">
+                                                <p class="text-muted mtop15 no-margin">
                                                     Missing queue schema elements:
                                                     <?= html_escape(implode(', ', array_slice($queueDiagnostics['schema_missing'], 0, 6))); ?>
                                                 </p>
                                             <?php } ?>
                                         </div>
-                                        <div class="mtop15">
-                                            <h5 class="bold no-margin">Recent Queue Warnings</h5>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title">Recent Warnings</h5>
+                                            <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
                                             <?php if (empty($recentQueueWarnings)) { ?>
-                                                <p class="text-muted mtop10 no-margin">No recent queue warning payloads were found.</p>
+                                                <div class="marketing-ops-empty">No warnings in the recent window.</div>
                                             <?php } else { ?>
-                                                <div class="mtop10">
+                                                <div class="marketing-ops-badge-grid">
                                                     <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
-                                                        <span class="label label-default" style="display:inline-block;margin:0 8px 8px 0;">
+                                                        <span class="marketing-ops-badge">
                                                             <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
                                                         </span>
                                                     <?php } ?>
                                                 </div>
                                             <?php } ?>
                                         </div>
-                                        <div class="mtop15">
-                                            <h5 class="bold no-margin">Recent Failure Metrics</h5>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title">Failure Metrics</h5>
+                                            <p class="marketing-ops-section-copy">Recent normalized provider and recipient failure signals retained for operator review.</p>
                                             <?php if (empty($recentFailureMetrics)) { ?>
-                                                <p class="text-muted mtop10 no-margin">No normalized provider or recipient failure metrics were found recently.</p>
+                                                <div class="marketing-ops-empty">No failure signals in the recent diagnostics window.</div>
                                             <?php } else { ?>
-                                                <div class="mtop10">
+                                                <div class="marketing-ops-badge-grid">
                                                     <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
-                                                        <span class="label label-primary" style="display:inline-block;margin:0 8px 8px 0;">
+                                                        <span class="marketing-ops-badge">
                                                             <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
                                                         </span>
                                                     <?php } ?>
                                                 </div>
                                             <?php } ?>
                                         </div>
-                                        <div class="mtop15">
-                                            <h5 class="bold no-margin">Recent Operator Actions</h5>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title">Operator Audit</h5>
+                                            <p class="marketing-ops-section-copy">Recent manual queue and recovery actions recorded for administrator visibility.</p>
                                             <?php if (empty($recentOperatorActions)) { ?>
-                                                <p class="text-muted mtop10 no-margin">No recent manual queue operator actions were found.</p>
+                                                <div class="marketing-ops-empty">No recent operator actions.</div>
                                             <?php } else { ?>
-                                                <div class="table-responsive mtop10">
-                                                    <table class="table table-striped">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>Action</th>
-                                                                <th>Staff ID</th>
-                                                                <th>When</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            <?php foreach ($recentOperatorActions as $operatorAction) { ?>
+                                                <div class="marketing-ops-table-shell">
+                                                    <div class="table-responsive">
+                                                        <table class="table table-striped">
+                                                            <thead>
                                                                 <tr>
-                                                                    <td><?= html_escape(ucwords(str_replace('_', ' ', (string) ($operatorAction['action'] ?? '')))); ?></td>
-                                                                    <td><?= (int) ($operatorAction['performed_by'] ?? 0); ?></td>
-                                                                    <td><?= !empty($operatorAction['event_at']) ? html_escape((string) $operatorAction['event_at']) : '-'; ?></td>
+                                                                    <th>Action</th>
+                                                                    <th>Staff ID</th>
+                                                                    <th>When</th>
                                                                 </tr>
-                                                            <?php } ?>
-                                                        </tbody>
-                                                    </table>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php foreach ($recentOperatorActions as $operatorAction) { ?>
+                                                                    <tr>
+                                                                        <td><?= html_escape(ucwords(str_replace('_', ' ', (string) ($operatorAction['action'] ?? '')))); ?></td>
+                                                                        <td><?= (int) ($operatorAction['performed_by'] ?? 0); ?></td>
+                                                                        <td><?= !empty($operatorAction['event_at']) ? html_escape((string) $operatorAction['event_at']) : '-'; ?></td>
+                                                                    </tr>
+                                                                <?php } ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 </div>
                                             <?php } ?>
                                         </div>
-                                        <div class="mtop15">
-                                            <h5 class="bold no-margin">Telemetry Retention</h5>
-                                            <p class="text-muted mtop10 no-margin">
-                                                Cleanup mode:
-                                                <strong><?= html_escape((string) ($retentionDiagnostics['cleanup_mode'] ?? 'explicit_only')); ?></strong>.
-                                                Event retention:
-                                                <strong><?= (int) ($retentionDiagnostics['event_retention_days'] ?? 0); ?>d</strong>.
-                                                Webhook log retention:
-                                                <strong><?= (int) ($retentionDiagnostics['webhook_log_retention_days'] ?? 0); ?>d</strong>.
-                                            </p>
-                                            <p class="text-muted mtop10 no-margin">
-                                                Hard floor:
-                                                <strong><?= (int) ($retentionDiagnostics['retention_floor_days'] ?? 0); ?>d</strong>.
-                                                Per-run delete cap:
-                                                <strong><?= (int) ($retentionDiagnostics['delete_limit_per_run'] ?? 0); ?></strong>.
-                                            </p>
-                                            <div class="mtop10">
-                                                <span class="label label-default" style="display:inline-block;margin:0 8px 8px 0;">
-                                                    Event Cleanup Candidates:
-                                                    <?= (int) ($retentionDiagnostics['events_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['events_cleanup_candidate_more']) ? '+' : ''; ?>
-                                                </span>
-                                                <span class="label label-default" style="display:inline-block;margin:0 8px 8px 0;">
-                                                    Webhook Log Candidates:
-                                                    <?= (int) ($retentionDiagnostics['webhook_logs_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['webhook_logs_cleanup_candidate_more']) ? '+' : ''; ?>
-                                                </span>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title">Telemetry Retention</h5>
+                                            <p class="marketing-ops-section-copy">Bounded explicit cleanup policy for non-critical telemetry and stale click aggregates.</p>
+                                            <div class="marketing-ops-retention-grid mtop15">
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Mode</span>
+                                                    <span class="marketing-ops-metric-value"><?= html_escape(ucwords($retentionModeLabel)); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Automatic cron deletion remains disabled.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Events</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($retentionDiagnostics['event_retention_days'] ?? 0); ?>d</span>
+                                                    <span class="marketing-ops-metric-helper">Non-critical event retention window.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Webhooks</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($retentionDiagnostics['webhook_log_retention_days'] ?? 0); ?>d</span>
+                                                    <span class="marketing-ops-metric-helper">Webhook log retention window.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Floor</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($retentionDiagnostics['retention_floor_days'] ?? 0); ?>d</span>
+                                                    <span class="marketing-ops-metric-helper">Cleanup never runs below this threshold.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Per-Run Cap</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($retentionDiagnostics['delete_limit_per_run'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-metric-helper">Maximum rows processed in one cleanup run.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Event Candidates</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($retentionDiagnostics['events_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['events_cleanup_candidate_more']) ? '+' : ''; ?></span>
+                                                    <span class="marketing-ops-metric-helper">Current bounded preview of event cleanup candidates.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Webhook Candidates</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($retentionDiagnostics['webhook_logs_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['webhook_logs_cleanup_candidate_more']) ? '+' : ''; ?></span>
+                                                    <span class="marketing-ops-metric-helper">Current bounded preview of webhook log cleanup candidates.</span>
+                                                </div>
+                                                <div class="marketing-ops-metric">
+                                                    <span class="marketing-ops-metric-label">Click Aggregate Candidates</span>
+                                                    <span class="marketing-ops-metric-value"><?= (int) ($retentionDiagnostics['click_aggregate_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['click_aggregate_candidate_more']) ? '+' : ''; ?></span>
+                                                    <span class="marketing-ops-metric-helper">Old click tracking counters eligible for safe reset.</span>
+                                                </div>
+                                            </div>
+                                            <div class="marketing-ops-badge-grid">
+                                                <span class="marketing-ops-badge">Mode: <?= html_escape(ucwords($retentionModeLabel)); ?></span>
+                                                <span class="marketing-ops-badge">Events: <?= (int) ($retentionDiagnostics['event_retention_days'] ?? 0); ?> days</span>
+                                                <span class="marketing-ops-badge">Webhooks: <?= (int) ($retentionDiagnostics['webhook_log_retention_days'] ?? 0); ?> days</span>
+                                                <span class="marketing-ops-badge">Floor: <?= (int) ($retentionDiagnostics['retention_floor_days'] ?? 0); ?> days</span>
+                                                <span class="marketing-ops-badge">Per-run cap: <?= (int) ($retentionDiagnostics['delete_limit_per_run'] ?? 0); ?> rows</span>
                                             </div>
                                         </div>
                                     </div>

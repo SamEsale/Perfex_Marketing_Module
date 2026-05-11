@@ -27,27 +27,38 @@ class Analytics extends AdminController
                 $summary = $this->marketing_events_model->run_retention_cleanup();
                 $eventsDeleted = (int) ($summary['events_deleted'] ?? 0);
                 $webhookLogsDeleted = (int) ($summary['webhook_logs_deleted'] ?? 0);
+                $clickLinksReset = (int) ($summary['click_links_reset'] ?? 0);
+                $clickLinksSkipped = (int) ($summary['click_links_skipped'] ?? 0);
                 $warnings = isset($summary['warnings']) && is_array($summary['warnings'])
                     ? array_values(array_filter(array_map('trim', $summary['warnings'])))
                     : [];
 
-                if ($eventsDeleted > 0 || $webhookLogsDeleted > 0) {
+                if ($eventsDeleted > 0 || $webhookLogsDeleted > 0 || $clickLinksReset > 0) {
+                    $message = 'Retention cleanup completed. Event rows cleaned: ' . $eventsDeleted
+                        . '. Webhook logs cleaned: ' . $webhookLogsDeleted
+                        . '. Click aggregate rows reset: ' . $clickLinksReset . '.';
+                    if ($clickLinksSkipped > 0) {
+                        $message .= ' Protected click aggregate rows skipped: ' . $clickLinksSkipped . '.';
+                    }
                     set_alert(
                         'success',
-                        'Retention cleanup completed. Deleted ' . $eventsDeleted
-                        . ' telemetry event row(s) and ' . $webhookLogsDeleted . ' webhook log row(s).'
+                        $message
                     );
                 } elseif (!empty($warnings)) {
                     set_alert(
                         'warning',
-                        'Retention cleanup did not delete rows. Warnings: ' . implode(', ', $warnings) . '.'
+                        'Retention cleanup completed without deleting rows. Warnings: ' . implode(', ', $warnings) . '.'
                     );
                 } else {
-                    set_alert('info', 'Retention cleanup completed. No eligible telemetry rows were deleted.');
+                    $message = 'Retention cleanup completed. No eligible telemetry rows or stale click aggregates required changes.';
+                    if ($clickLinksSkipped > 0) {
+                        $message .= ' Protected click aggregate rows skipped: ' . $clickLinksSkipped . '.';
+                    }
+                    set_alert('info', $message);
                 }
             } catch (Throwable $exception) {
                 log_message('error', 'Marketing retention cleanup failed from analytics: ' . marketing_sanitize_log_message($exception->getMessage()));
-                set_alert('danger', 'Retention cleanup failed. No telemetry rows were deleted.');
+                set_alert('danger', 'Retention cleanup failed. No telemetry rows or click aggregates were changed.');
             }
 
             redirect(admin_url('marketing/analytics'));
@@ -71,6 +82,7 @@ class Analytics extends AdminController
         $data['title']      = _l('marketing_analytics');
         $data['stats']      = $this->marketing_dashboard_model->get_analytics_summary();
         $data['recent']     = $this->marketing_events_model->get_events_paginated($perPage, $offset);
+        $data['retention_diagnostics'] = $this->marketing_events_model->get_retention_diagnostics();
         $data['can_run_retention_cleanup'] = staff_can('settings', 'marketing');
         $data['events_pagination'] = [
             'page' => $page,
