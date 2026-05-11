@@ -18,6 +18,7 @@ class Analytics extends AdminController
 
     public function index()
     {
+        $hasRuntimeWarning = false;
         $analyticsSummary = $this->get_default_analytics_summary();
         $recentEvents = [];
         $retentionDiagnostics = $this->get_default_retention_diagnostics();
@@ -66,6 +67,7 @@ class Analytics extends AdminController
                     set_alert('info', $message);
                 }
             } catch (Throwable $exception) {
+                $hasRuntimeWarning = true;
                 $this->log_analytics_runtime_failure('Marketing retention cleanup failed from analytics: ', $exception);
                 set_alert('danger', 'Retention cleanup failed. No telemetry rows or click aggregates were changed.');
             }
@@ -84,6 +86,7 @@ class Analytics extends AdminController
         try {
             $totalEvents = max(0, (int) $this->marketing_events_model->count_all_events());
         } catch (Throwable $exception) {
+            $hasRuntimeWarning = true;
             $this->log_analytics_runtime_failure('Marketing analytics event count unavailable: ', $exception);
         }
         $totalPages = max(1, (int) ceil($totalEvents / $perPage));
@@ -99,6 +102,7 @@ class Analytics extends AdminController
                 $analyticsSummary = array_replace_recursive($analyticsSummary, $summary);
             }
         } catch (Throwable $exception) {
+            $hasRuntimeWarning = true;
             $this->log_analytics_runtime_failure('Marketing analytics summary unavailable: ', $exception);
         }
 
@@ -108,6 +112,7 @@ class Analytics extends AdminController
                 $recentEvents = $rows;
             }
         } catch (Throwable $exception) {
+            $hasRuntimeWarning = true;
             $this->log_analytics_runtime_failure('Marketing analytics events unavailable: ', $exception);
         }
 
@@ -119,6 +124,7 @@ class Analytics extends AdminController
                 }
             }
         } catch (Throwable $exception) {
+            $hasRuntimeWarning = true;
             $this->log_analytics_runtime_failure('Marketing analytics retention diagnostics unavailable: ', $exception);
         }
 
@@ -130,15 +136,20 @@ class Analytics extends AdminController
                 }
             }
         } catch (Throwable $exception) {
+            $hasRuntimeWarning = true;
             $this->log_analytics_runtime_failure('Marketing analytics top clicked links unavailable: ', $exception);
         }
 
+        $data = $this->get_default_analytics_view_data();
         $data['title']      = _l('marketing_analytics');
         $data['stats']      = $analyticsSummary;
         $data['recent']     = $recentEvents;
         $data['top_clicked_links'] = $topClickedLinks;
         $data['retention_diagnostics'] = $retentionDiagnostics;
         $data['can_run_retention_cleanup'] = staff_can('settings', 'marketing');
+        $data['analytics_warning_message'] = $hasRuntimeWarning
+            ? 'Some analytics data is temporarily unavailable. Showing a safe fallback state for any failed sections.'
+            : '';
         $data['events_pagination'] = [
             'page' => $page,
             'per_page' => $perPage,
@@ -146,7 +157,7 @@ class Analytics extends AdminController
             'total_pages' => $totalPages,
         ];
 
-        $this->load->view('marketing/analytics/index', $data);
+        $this->render_analytics_response($data);
     }
 
     protected function get_default_analytics_summary()
@@ -204,6 +215,82 @@ class Analytics extends AdminController
             'click_aggregate_candidate_more' => false,
             'warnings' => [],
         ];
+    }
+
+    protected function get_default_analytics_view_data()
+    {
+        return [
+            'title' => _l('marketing_analytics'),
+            'stats' => $this->get_default_analytics_summary(),
+            'recent' => [],
+            'top_clicked_links' => [],
+            'retention_diagnostics' => $this->get_default_retention_diagnostics(),
+            'can_run_retention_cleanup' => false,
+            'events_pagination' => [
+                'page' => 1,
+                'per_page' => 20,
+                'total' => 0,
+                'total_pages' => 1,
+            ],
+            'analytics_warning_message' => '',
+            'analytics_render_failed' => false,
+        ];
+    }
+
+    protected function render_analytics_response(array $data)
+    {
+        $data = array_replace_recursive($this->get_default_analytics_view_data(), $data);
+
+        try {
+            $html = $this->load->view('marketing/analytics/index', $data, true);
+            $this->output
+                ->set_status_header(200)
+                ->set_content_type('text/html', 'utf-8')
+                ->set_output($html);
+
+            return;
+        } catch (Throwable $exception) {
+            $this->log_analytics_runtime_failure('Marketing analytics view render failed: ', $exception);
+        }
+
+        $fallbackData = array_replace_recursive($this->get_default_analytics_view_data(), [
+            'title' => $data['title'],
+            'can_run_retention_cleanup' => !empty($data['can_run_retention_cleanup']),
+            'analytics_warning_message' => 'Analytics is temporarily unavailable. A safe fallback view is being shown while runtime issues are contained.',
+            'analytics_render_failed' => true,
+        ]);
+
+        try {
+            $html = $this->load->view('marketing/analytics/fallback', $fallbackData, true);
+            $this->output
+                ->set_status_header(200)
+                ->set_content_type('text/html', 'utf-8')
+                ->set_output($html);
+
+            return;
+        } catch (Throwable $exception) {
+            $this->log_analytics_runtime_failure('Marketing analytics emergency fallback render failed: ', $exception);
+        }
+
+        $this->output
+            ->set_status_header(200)
+            ->set_content_type('text/html', 'utf-8')
+            ->set_output($this->build_minimal_fallback_html($fallbackData));
+    }
+
+    protected function build_minimal_fallback_html(array $data)
+    {
+        $title = html_escape((string) ($data['title'] ?? 'Marketing Analytics'));
+        $warning = html_escape((string) ($data['analytics_warning_message'] ?? 'Analytics is temporarily unavailable.'));
+
+        return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' . $title . '</title>'
+            . '<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:32px;}'
+            . '.marketing-fallback{max-width:760px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;box-shadow:0 12px 30px rgba(15,23,42,.08);}'
+            . '.marketing-fallback h1{margin:0 0 12px;font-size:24px;}.marketing-fallback p{margin:0 0 12px;line-height:1.6;color:#475569;}'
+            . '.marketing-fallback .warning{margin-bottom:16px;padding:14px 16px;border-radius:12px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;}</style></head><body>'
+            . '<div class="marketing-fallback"><h1>' . $title . '</h1><div class="warning">' . $warning . '</div>'
+            . '<p>Analytics data could not be rendered safely, so the module returned a contained fallback page instead of a server error.</p>'
+            . '<p>No secrets, raw payloads, or diagnostic traces are shown here.</p></div></body></html>';
     }
 
     protected function log_analytics_runtime_failure($prefix, Throwable $exception)

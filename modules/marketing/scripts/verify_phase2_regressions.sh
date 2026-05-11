@@ -29,6 +29,7 @@ INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
+ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
 
 PASS_COUNT=0
@@ -1114,7 +1115,7 @@ check_no_destructive_event_history_clear() {
 }
 
 check_analytics_view_array_guards() {
-  local stats_line recent_line normalized_line pagination_line empty_line diagnostics_line top_links_line
+  local stats_line recent_line normalized_line pagination_line empty_line diagnostics_line top_links_line warning_line
   stats_line="$(first_fixed_match '$stats = isset($stats) && is_array($stats) ? $stats : [];' "$ANALYTICS_VIEW_FILE")"
   recent_line="$(first_fixed_match '$recent = isset($recent) && is_array($recent) ? $recent : [];' "$ANALYTICS_VIEW_FILE")"
   normalized_line="$(first_fixed_match '$normalizedRecent = [];' "$ANALYTICS_VIEW_FILE")"
@@ -1122,11 +1123,12 @@ check_analytics_view_array_guards() {
   empty_line="$(first_fixed_match '<?php if (empty($recent)) { ?>' "$ANALYTICS_VIEW_FILE")"
   diagnostics_line="$(first_fixed_match '$retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)' "$ANALYTICS_VIEW_FILE")"
   top_links_line="$(first_fixed_match '$top_clicked_links = isset($top_clicked_links) && is_array($top_clicked_links) ? $top_clicked_links : [];' "$ANALYTICS_VIEW_FILE")"
+  warning_line="$(first_fixed_match '$analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)' "$ANALYTICS_VIEW_FILE")"
 
-  if [[ -z "$stats_line" || -z "$recent_line" || -z "$normalized_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" || -z "$top_links_line" ]]; then
+  if [[ -z "$stats_line" || -z "$recent_line" || -z "$normalized_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" || -z "$top_links_line" || -z "$warning_line" ]]; then
     fail \
       "analytics view guards stats, events, pagination, retention diagnostics, and top-click arrays before rendering" \
-      "expected stats/recent normalization, per-row event defaults, pagination/diagnostics/top-link guards, and empty() handling in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; normalized=${normalized_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}; top_links=${top_links_line:-missing}"
+      "expected stats/recent normalization, per-row event defaults, pagination/diagnostics/top-link guards, warning normalization, and empty() handling in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; normalized=${normalized_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}; top_links=${top_links_line:-missing}; warning=${warning_line:-missing}"
     return
   fi
 
@@ -1136,10 +1138,11 @@ check_analytics_view_array_guards() {
 }
 
 check_analytics_runtime_fail_closed_queries() {
-  local count_line top_links_call_line top_links_data_line top_links_helper_line campaign_helper_line count_helper_line total_rows_helper_line public_token_guard_line public_url_guard_line campaign_id_guard_line pagination_select_line bootstrap_line
+  local count_line top_links_call_line top_links_data_line top_links_helper_line campaign_helper_line count_helper_line total_rows_helper_line public_token_guard_line public_url_guard_line campaign_id_guard_line pagination_select_line bootstrap_line warning_data_line
   count_line="$(first_fixed_match "Marketing analytics event count unavailable:" "$ANALYTICS_CONTROLLER_FILE")"
   top_links_call_line="$(first_fixed_match "method_exists(\$this->marketing_dashboard_model, 'get_top_clicked_links')" "$ANALYTICS_CONTROLLER_FILE")"
   top_links_data_line="$(first_fixed_match "\$data['top_clicked_links'] = \$topClickedLinks;" "$ANALYTICS_CONTROLLER_FILE")"
+  warning_data_line="$(first_fixed_match "\$data['analytics_warning_message'] = \$hasRuntimeWarning" "$ANALYTICS_CONTROLLER_FILE")"
   top_links_helper_line="$(first_match 'function[[:space:]]+get_top_clicked_links' "$DASHBOARD_FILE")"
   campaign_helper_line="$(first_match 'function[[:space:]]+get_clicks_by_campaign' "$DASHBOARD_FILE")"
   count_helper_line="$(first_match 'function[[:space:]]+safe_count_all' "$DASHBOARD_FILE")"
@@ -1150,16 +1153,60 @@ check_analytics_runtime_fail_closed_queries() {
   pagination_select_line="$(first_fixed_match "\$this->column_exists('event_at') ? 'event_at' : 'NULL AS event_at'" "$EVENTS_FILE")"
   bootstrap_line="$(first_fixed_match "function_exists('mb_substr')" "$BOOTSTRAP_FILE")"
 
-  if [[ -z "$count_line" || -z "$top_links_call_line" || -z "$top_links_data_line" || -z "$top_links_helper_line" || -z "$campaign_helper_line" || -z "$count_helper_line" || -z "$total_rows_helper_line" || -z "$public_token_guard_line" || -z "$public_url_guard_line" || -z "$campaign_id_guard_line" || -z "$pagination_select_line" || -z "$bootstrap_line" ]]; then
+  if [[ -z "$count_line" || -z "$top_links_call_line" || -z "$top_links_data_line" || -z "$warning_data_line" || -z "$top_links_helper_line" || -z "$campaign_helper_line" || -z "$count_helper_line" || -z "$total_rows_helper_line" || -z "$public_token_guard_line" || -z "$public_url_guard_line" || -z "$campaign_id_guard_line" || -z "$pagination_select_line" || -z "$bootstrap_line" ]]; then
     fail \
       "analytics runtime queries fail closed across controller defaults, dashboard guards, event pagination, and log sanitization" \
-      "expected controller fallback logging/defaults, safe top-click helpers, count guards, public-link column guards, campaign click guard, paginated event field defaults, and mbstring-safe log sanitization; count=${count_line:-missing}; top_call=${top_links_call_line:-missing}; top_data=${top_links_data_line:-missing}; top_helper=${top_links_helper_line:-missing}; campaign_helper=${campaign_helper_line:-missing}; count_helper=${count_helper_line:-missing}; total_rows=${total_rows_helper_line:-missing}; token_guard=${public_token_guard_line:-missing}; url_guard=${public_url_guard_line:-missing}; campaign_id=${campaign_id_guard_line:-missing}; pagination=${pagination_select_line:-missing}; bootstrap=${bootstrap_line:-missing}"
+      "expected controller fallback logging/defaults, warning seed, safe top-click helpers, count guards, public-link column guards, campaign click guard, paginated event field defaults, and mbstring-safe log sanitization; count=${count_line:-missing}; top_call=${top_links_call_line:-missing}; top_data=${top_links_data_line:-missing}; warning=${warning_data_line:-missing}; top_helper=${top_links_helper_line:-missing}; campaign_helper=${campaign_helper_line:-missing}; count_helper=${count_helper_line:-missing}; total_rows=${total_rows_helper_line:-missing}; token_guard=${public_token_guard_line:-missing}; url_guard=${public_url_guard_line:-missing}; campaign_id=${campaign_id_guard_line:-missing}; pagination=${pagination_select_line:-missing}; bootstrap=${bootstrap_line:-missing}"
     return
   fi
 
   pass \
     "analytics runtime queries fail closed across controller defaults, dashboard guards, event pagination, and log sanitization" \
     "count=$count_line | top_helper=$top_links_helper_line | count_helper=$count_helper_line"
+}
+
+check_analytics_render_fail_closed() {
+  local defaults_line render_helper_line primary_render_line primary_catch_line fallback_render_line fallback_warning_line minimal_html_line status_line fallback_view_line
+  defaults_line="$(first_match 'function[[:space:]]+get_default_analytics_view_data' "$ANALYTICS_CONTROLLER_FILE")"
+  render_helper_line="$(first_match 'function[[:space:]]+render_analytics_response' "$ANALYTICS_CONTROLLER_FILE")"
+  primary_render_line="$(first_fixed_match "\$html = \$this->load->view('marketing/analytics/index', \$data, true);" "$ANALYTICS_CONTROLLER_FILE")"
+  primary_catch_line="$(first_fixed_match "Marketing analytics view render failed:" "$ANALYTICS_CONTROLLER_FILE")"
+  fallback_render_line="$(first_fixed_match "\$html = \$this->load->view('marketing/analytics/fallback', \$fallbackData, true);" "$ANALYTICS_CONTROLLER_FILE")"
+  fallback_warning_line="$(first_fixed_match "'analytics_warning_message' => 'Analytics is temporarily unavailable. A safe fallback view is being shown while runtime issues are contained.'" "$ANALYTICS_CONTROLLER_FILE")"
+  minimal_html_line="$(first_match 'function[[:space:]]+build_minimal_fallback_html' "$ANALYTICS_CONTROLLER_FILE")"
+  status_line="$(first_fixed_match '->set_status_header(200)' "$ANALYTICS_CONTROLLER_FILE")"
+  fallback_view_line="$(first_fixed_match 'No secrets, SQL, tokens, payloads, or raw exception traces are shown here.' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+
+  if [[ -z "$defaults_line" || -z "$render_helper_line" || -z "$primary_render_line" || -z "$primary_catch_line" || -z "$fallback_render_line" || -z "$fallback_warning_line" || -z "$minimal_html_line" || -z "$status_line" || -z "$fallback_view_line" ]]; then
+    fail \
+      "analytics controller wraps primary and fallback rendering fail-closed instead of returning HTTP 500" \
+      "expected default view data helper, buffered primary render, sanitized catch, buffered fallback render, generic warning, minimal fallback HTML, HTTP 200 override, and safe fallback UI copy; defaults=${defaults_line:-missing}; render=${render_helper_line:-missing}; primary=${primary_render_line:-missing}; catch=${primary_catch_line:-missing}; fallback=${fallback_render_line:-missing}; warning=${fallback_warning_line:-missing}; minimal=${minimal_html_line:-missing}; status=${status_line:-missing}; fallback_view=${fallback_view_line:-missing}"
+    return
+  fi
+
+  pass \
+    "analytics controller wraps primary and fallback rendering fail-closed instead of returning HTTP 500" \
+    "render=$render_helper_line | fallback=$fallback_render_line | minimal=$minimal_html_line"
+}
+
+check_analytics_failure_ui_sanitized() {
+  local fallback_copy_line raw_exception_line raw_trace_line raw_sql_line get_message_line
+  fallback_copy_line="$(first_fixed_match 'No secrets, SQL, tokens, payloads, or raw exception traces are shown here.' "$ANALYTICS_FALLBACK_VIEW_FILE")"
+  raw_exception_line="$(grep -nE -- 'Exception|Throwable|ParseError|Stack trace' "$ANALYTICS_VIEW_FILE" "$ANALYTICS_FALLBACK_VIEW_FILE" || true)"
+  raw_sql_line="$(grep -nE -- 'SELECT |INSERT |UPDATE |DELETE ' "$ANALYTICS_FALLBACK_VIEW_FILE" || true)"
+  get_message_line="$(grep -nF -- 'getMessage()' "$ANALYTICS_VIEW_FILE" "$ANALYTICS_FALLBACK_VIEW_FILE" || true)"
+  raw_trace_line="$(grep -nF -- '$exception' "$ANALYTICS_VIEW_FILE" "$ANALYTICS_FALLBACK_VIEW_FILE" || true)"
+
+  if [[ -z "$fallback_copy_line" || -n "$raw_exception_line" || -n "$raw_sql_line" || -n "$get_message_line" || -n "$raw_trace_line" ]]; then
+    fail \
+      "analytics failure UI stays sanitized and does not expose raw exception details" \
+      "expected safe fallback copy and no raw exception, SQL, getMessage(), or exception variable output in analytics views; copy=${fallback_copy_line:-missing}; exception=${raw_exception_line:-none}; sql=${raw_sql_line:-none}; getMessage=${get_message_line:-none}; exception_var=${raw_trace_line:-none}"
+    return
+  fi
+
+  pass \
+    "analytics failure UI stays sanitized and does not expose raw exception details" \
+    "copy=$fallback_copy_line"
 }
 
 check_retention_preserves_unsubscribe_audit_events() {
@@ -1876,6 +1923,8 @@ check_retention_dashboard_surface
 check_no_destructive_event_history_clear
 check_analytics_view_array_guards
 check_analytics_runtime_fail_closed_queries
+check_analytics_render_fail_closed
+check_analytics_failure_ui_sanitized
 check_retention_preserves_unsubscribe_audit_events
 check_no_destructive_retention_calls
 check_click_aggregate_cleanup_scope

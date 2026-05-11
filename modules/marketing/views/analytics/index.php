@@ -74,6 +74,16 @@
         font-size: 12px;
         font-weight: 600;
     }
+    .marketing-analytics-warning {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid #fcd34d;
+        background: #fffbeb;
+        color: #92400e;
+        font-size: 13px;
+        line-height: 1.6;
+    }
     @media (max-width: 1199px) {
         .marketing-analytics-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -137,6 +147,9 @@
                             ? array_merge(['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1], $events_pagination)
                             : ['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1];
                         $top_clicked_links = isset($top_clicked_links) && is_array($top_clicked_links) ? $top_clicked_links : [];
+                        $analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)
+                            ? trim($analytics_warning_message)
+                            : '';
                         $eventTypeLabels = [
                             'queued' => 'Recipients Queued',
                             'send_start' => 'Send Started',
@@ -254,6 +267,11 @@
                                 </div>
                             <?php } ?>
                         </div>
+                        <?php if ($analytics_warning_message !== '') { ?>
+                            <div class="marketing-analytics-warning">
+                                <?= html_escape($analytics_warning_message); ?>
+                            </div>
+                        <?php } ?>
                         <div class="marketing-analytics-note">
                             <strong>Retention policy:</strong> Audit-critical events such as unsubscribes, suppressions, bounces, complaints, and operator actions are retained by design.
                             Bounded cleanup removes only non-critical telemetry and safely resets stale click aggregates for old tracking links.
@@ -342,10 +360,10 @@
                                             <tr>
                                                 <td><?= (int) $event['id']; ?></td>
                                                 <td><span class="label label-<?= html_escape($badgeClass); ?>"><?= html_escape($eventLabel); ?></span></td>
-                                                <td><?= e($event['email'] ?: '-'); ?></td>
-                                                <td><?= e($event['provider']); ?></td>
-                                                <td><?= e($event['url'] ?: '-'); ?></td>
-                                                <td><?= e($eventAt); ?></td>
+                                                <td><?= html_escape($event['email'] ?: '-'); ?></td>
+                                                <td><?= html_escape($event['provider']); ?></td>
+                                                <td><?= html_escape($event['url'] ?: '-'); ?></td>
+                                                <td><?= html_escape($eventAt); ?></td>
                                             </tr>
                                         <?php } ?>
                                     </tbody>
