@@ -1158,7 +1158,7 @@ check_analytics_runtime_fail_closed_queries() {
   public_human_sum_line="$(first_fixed_match "COALESCE(SUM(pl.human_click_count), 0)" "$DASHBOARD_FILE")"
   public_unique_sum_line="$(first_fixed_match "COALESCE(SUM(pl.unique_click_count), 0)" "$DASHBOARD_FILE")"
   public_old_alias_from_line="$(first_fixed_match "from(\$this->publicLinksTable . ' p')" "$DASHBOARD_FILE")"
-  public_old_alias_sum_line="$(grep -nE \"SUM\\(p\\.(human_click_count|unique_click_count)\\)\" "$DASHBOARD_FILE" || true)"
+  public_old_alias_sum_line="$(first_match 'SUM\(p\.(human_click_count|unique_click_count)\)' "$DASHBOARD_FILE")"
   public_bare_url_select_line="$(first_fixed_match "select('original_url AS url, ' . \$humanCountExpr . ' AS count, ' . \$uniqueCountExpr . ' AS unique_count', false)" "$DASHBOARD_FILE")"
   public_bare_url_null_line="$(first_fixed_match "where('original_url IS NOT NULL', null, false)" "$DASHBOARD_FILE")"
   public_bare_url_not_empty_line="$(first_fixed_match "where('original_url !=', '')" "$DASHBOARD_FILE")"
@@ -1339,23 +1339,28 @@ check_no_destructive_retention_calls() {
 }
 
 check_click_aggregate_cleanup_scope() {
-  local helper_line type_click_line type_unsubscribe_line reset_line skip_line
+  local helper_line from_line join_line type_click_line stale_from_line stale_join_line stale_type_click_line type_unsubscribe_line reset_line skip_line
   helper_line="$(first_match 'function[[:space:]]+reset_stale_click_aggregates' "$PUBLIC_LINKS_FILE")"
-  type_click_line="$(first_fixed_match "where('p.token_type', self::TYPE_CLICK)" "$PUBLIC_LINKS_FILE")"
+  from_line="$(first_fixed_match "from(\$this->table . ' pl')" "$PUBLIC_LINKS_FILE")"
+  join_line="$(first_fixed_match "join(\$this->campaignsTable . ' c', 'c.id = pl.campaign_id', 'left')" "$PUBLIC_LINKS_FILE")"
+  type_click_line="$(first_fixed_match "where('pl.token_type', self::TYPE_CLICK)" "$PUBLIC_LINKS_FILE")"
+  stale_from_line="$(first_fixed_match "from(\$this->table . ' p')" "$PUBLIC_LINKS_FILE")"
+  stale_join_line="$(first_fixed_match "join(\$this->campaignsTable . ' c', 'c.id = p.campaign_id', 'left')" "$PUBLIC_LINKS_FILE")"
+  stale_type_click_line="$(first_fixed_match "where('p.token_type', self::TYPE_CLICK)" "$PUBLIC_LINKS_FILE")"
   type_unsubscribe_line="$(first_fixed_match 'TYPE_UNSUBSCRIBE' "$PUBLIC_LINKS_FILE")"
   reset_line="$(first_fixed_match "\$summary['click_links_reset'] = (int) (\$clickAggregateSummary['click_links_reset'] ?? 0);" "$EVENTS_FILE")"
   skip_line="$(first_fixed_match "\$summary['click_links_skipped'] = (int) (\$clickAggregateSummary['click_links_skipped'] ?? 0);" "$EVENTS_FILE")"
 
-  if [[ -z "$helper_line" || -z "$type_click_line" || -z "$type_unsubscribe_line" || -z "$reset_line" || -z "$skip_line" ]]; then
+  if [[ -z "$helper_line" || -z "$from_line" || -z "$join_line" || -z "$type_click_line" || -n "$stale_from_line" || -n "$stale_join_line" || -n "$stale_type_click_line" || -z "$type_unsubscribe_line" || -z "$reset_line" || -z "$skip_line" ]]; then
     fail \
       "click aggregate cleanup targets only tracking links and reports reset counts" \
-      "expected click aggregate reset helper in $PUBLIC_LINKS_FILE, TYPE_CLICK scope, unsubscribe constant preserved, and click_links_reset/click_links_skipped summary keys in $EVENTS_FILE; helper=${helper_line:-missing}; click_scope=${type_click_line:-missing}; unsubscribe=${type_unsubscribe_line:-missing}; reset=${reset_line:-missing}; skipped=${skip_line:-missing}"
+      "expected click aggregate reset helper in $PUBLIC_LINKS_FILE, unique pl alias in from/join/TYPE_CLICK scope with no stale p alias references, unsubscribe constant preserved, and click_links_reset/click_links_skipped summary keys in $EVENTS_FILE; helper=${helper_line:-missing}; from=${from_line:-missing}; join=${join_line:-missing}; click_scope=${type_click_line:-missing}; stale_from=${stale_from_line:-unexpected}; stale_join=${stale_join_line:-unexpected}; stale_click_scope=${stale_type_click_line:-unexpected}; unsubscribe=${type_unsubscribe_line:-missing}; reset=${reset_line:-missing}; skipped=${skip_line:-missing}"
     return
   fi
 
   pass \
     "click aggregate cleanup targets only tracking links and reports reset counts" \
-    "helper=$helper_line | click_scope=$type_click_line | reset=$reset_line | skipped=$skip_line"
+    "helper=$helper_line | from=$from_line | join=$join_line | click_scope=$type_click_line | reset=$reset_line | skipped=$skip_line"
 }
 
 check_click_aggregate_cleanup_bounds() {

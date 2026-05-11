@@ -521,7 +521,7 @@ class Marketing_public_links_model extends App_Model
             return [];
         }
 
-        $select = ['p.id'];
+        $select = ['pl.id'];
         foreach ([
             'click_count',
             'human_click_count',
@@ -534,7 +534,7 @@ class Marketing_public_links_model extends App_Model
             'campaign_id',
         ] as $column) {
             if ($this->db->field_exists($column, $this->table)) {
-                $select[] = 'p.' . $column;
+                $select[] = 'pl.' . $column;
             }
         }
 
@@ -545,17 +545,17 @@ class Marketing_public_links_model extends App_Model
             && $this->db->field_exists('status', $this->campaignsTable)
         ) {
             $select[] = 'c.status AS campaign_status';
-            $this->db->join($this->campaignsTable . ' c', 'c.id = p.campaign_id', 'left');
+            $this->db->join($this->campaignsTable . ' c', 'c.id = pl.campaign_id', 'left');
         } else {
             $select[] = 'NULL AS campaign_status';
         }
 
         $this->db->select(implode(', ', $select), false)
-            ->from($this->table . ' p')
-            ->where('p.token_type', self::TYPE_CLICK);
+            ->from($this->table . ' pl')
+            ->where('pl.token_type', self::TYPE_CLICK);
 
         if ($this->db->field_exists('is_active', $this->table)) {
-            $this->db->where('p.is_active', 1);
+            $this->db->where('pl.is_active', 1);
         }
 
         if (
@@ -572,33 +572,33 @@ class Marketing_public_links_model extends App_Model
 
         if ($this->db->field_exists('last_human_clicked_at', $this->table)) {
             $this->db->group_start();
-            $this->db->where('p.last_human_clicked_at <=', $cutoffDateTime);
-            $this->db->or_where('p.last_human_clicked_at IS NULL', null, false);
+            $this->db->where('pl.last_human_clicked_at <=', $cutoffDateTime);
+            $this->db->or_where('pl.last_human_clicked_at IS NULL', null, false);
             $this->db->group_end();
         }
 
         if ($this->db->field_exists('last_clicked_at', $this->table)) {
             $this->db->group_start();
-            $this->db->where('p.last_clicked_at <=', $cutoffDateTime);
-            $this->db->or_where('p.last_clicked_at IS NULL', null, false);
+            $this->db->where('pl.last_clicked_at <=', $cutoffDateTime);
+            $this->db->or_where('pl.last_clicked_at IS NULL', null, false);
             $this->db->group_end();
         }
 
         if ($this->db->field_exists('last_used_at', $this->table)) {
             $this->db->group_start();
-            $this->db->where('p.last_used_at <=', $cutoffDateTime);
-            $this->db->or_where('p.last_used_at IS NULL', null, false);
+            $this->db->where('pl.last_used_at <=', $cutoffDateTime);
+            $this->db->or_where('pl.last_used_at IS NULL', null, false);
             $this->db->group_end();
         } elseif ($this->db->field_exists('dateupdated', $this->table)) {
             // Fall back to generic row age only when click/use timestamps are unavailable.
             $this->db->group_start();
-            $this->db->where('p.dateupdated <=', $cutoffDateTime);
-            $this->db->or_where('p.dateupdated IS NULL', null, false);
+            $this->db->where('pl.dateupdated <=', $cutoffDateTime);
+            $this->db->or_where('pl.dateupdated IS NULL', null, false);
             $this->db->group_end();
         }
 
         if ($this->db->field_exists('datecreated', $this->table)) {
-            $this->db->where('p.datecreated <=', $cutoffDateTime);
+            $this->db->where('pl.datecreated <=', $cutoffDateTime);
         }
 
         $this->db->group_start();
@@ -606,9 +606,9 @@ class Marketing_public_links_model extends App_Model
         foreach (['click_count', 'human_click_count', 'unique_click_count'] as $counterColumn) {
             if ($this->db->field_exists($counterColumn, $this->table)) {
                 if ($hasActivityFilter) {
-                    $this->db->or_where('p.' . $counterColumn . ' >', 0, false);
+                    $this->db->or_where('pl.' . $counterColumn . ' >', 0, false);
                 } else {
-                    $this->db->where('p.' . $counterColumn . ' >', 0, false);
+                    $this->db->where('pl.' . $counterColumn . ' >', 0, false);
                     $hasActivityFilter = true;
                 }
             }
@@ -616,9 +616,9 @@ class Marketing_public_links_model extends App_Model
         foreach (['last_clicked_at', 'last_human_clicked_at'] as $dateColumn) {
             if ($this->db->field_exists($dateColumn, $this->table)) {
                 if ($hasActivityFilter) {
-                    $this->db->or_where('p.' . $dateColumn . ' IS NOT NULL', null, false);
+                    $this->db->or_where('pl.' . $dateColumn . ' IS NOT NULL', null, false);
                 } else {
-                    $this->db->where('p.' . $dateColumn . ' IS NOT NULL', null, false);
+                    $this->db->where('pl.' . $dateColumn . ' IS NOT NULL', null, false);
                     $hasActivityFilter = true;
                 }
             }
@@ -629,11 +629,11 @@ class Marketing_public_links_model extends App_Model
         $this->db->group_end();
 
         if ($this->db->field_exists('last_used_at', $this->table)) {
-            $this->db->order_by('p.last_used_at', 'ASC');
+            $this->db->order_by('pl.last_used_at', 'ASC');
         } elseif ($this->db->field_exists('dateupdated', $this->table)) {
-            $this->db->order_by('p.dateupdated', 'ASC');
+            $this->db->order_by('pl.dateupdated', 'ASC');
         } else {
-            $this->db->order_by('p.id', 'ASC');
+            $this->db->order_by('pl.id', 'ASC');
         }
 
         return $this->db->limit(max(1, (int) $limit))->get()->result_array();
