@@ -18,6 +18,11 @@ class Analytics extends AdminController
 
     public function index()
     {
+        $analyticsSummary = $this->get_default_analytics_summary();
+        $recentEvents = [];
+        $retentionDiagnostics = $this->get_default_retention_diagnostics();
+        $topClickedLinks = [];
+
         if ($this->input->post('run_retention_cleanup')) {
             if (staff_cant('settings', 'marketing')) {
                 access_denied('marketing');
@@ -61,7 +66,7 @@ class Analytics extends AdminController
                     set_alert('info', $message);
                 }
             } catch (Throwable $exception) {
-                log_message('error', 'Marketing retention cleanup failed from analytics: ' . marketing_sanitize_log_message($exception->getMessage()));
+                $this->log_analytics_runtime_failure('Marketing retention cleanup failed from analytics: ', $exception);
                 set_alert('danger', 'Retention cleanup failed. No telemetry rows or click aggregates were changed.');
             }
 
@@ -75,7 +80,12 @@ class Analytics extends AdminController
         }
         $perPage = min($perPage, 100);
         $offset = ($page - 1) * $perPage;
-        $totalEvents = $this->marketing_events_model->count_all_events();
+        $totalEvents = 0;
+        try {
+            $totalEvents = max(0, (int) $this->marketing_events_model->count_all_events());
+        } catch (Throwable $exception) {
+            $this->log_analytics_runtime_failure('Marketing analytics event count unavailable: ', $exception);
+        }
         $totalPages = max(1, (int) ceil($totalEvents / $perPage));
 
         if ($page > $totalPages && $totalEvents > 0) {
@@ -83,27 +93,24 @@ class Analytics extends AdminController
             $offset = ($page - 1) * $perPage;
         }
 
-        $analyticsSummary = $this->get_default_analytics_summary();
         try {
             $summary = $this->marketing_dashboard_model->get_analytics_summary();
             if (is_array($summary)) {
                 $analyticsSummary = array_replace_recursive($analyticsSummary, $summary);
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing analytics summary unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_analytics_runtime_failure('Marketing analytics summary unavailable: ', $exception);
         }
 
-        $recentEvents = [];
         try {
             $rows = $this->marketing_events_model->get_events_paginated($perPage, $offset);
             if (is_array($rows)) {
                 $recentEvents = $rows;
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing analytics events unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_analytics_runtime_failure('Marketing analytics events unavailable: ', $exception);
         }
 
-        $retentionDiagnostics = $this->get_default_retention_diagnostics();
         try {
             if (method_exists($this->marketing_events_model, 'get_retention_diagnostics')) {
                 $diagnostics = $this->marketing_events_model->get_retention_diagnostics();
@@ -112,12 +119,24 @@ class Analytics extends AdminController
                 }
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing analytics retention diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_analytics_runtime_failure('Marketing analytics retention diagnostics unavailable: ', $exception);
+        }
+
+        try {
+            if (method_exists($this->marketing_dashboard_model, 'get_top_clicked_links')) {
+                $rows = $this->marketing_dashboard_model->get_top_clicked_links(5);
+                if (is_array($rows)) {
+                    $topClickedLinks = $rows;
+                }
+            }
+        } catch (Throwable $exception) {
+            $this->log_analytics_runtime_failure('Marketing analytics top clicked links unavailable: ', $exception);
         }
 
         $data['title']      = _l('marketing_analytics');
         $data['stats']      = $analyticsSummary;
         $data['recent']     = $recentEvents;
+        $data['top_clicked_links'] = $topClickedLinks;
         $data['retention_diagnostics'] = $retentionDiagnostics;
         $data['can_run_retention_cleanup'] = staff_can('settings', 'marketing');
         $data['events_pagination'] = [
@@ -185,5 +204,26 @@ class Analytics extends AdminController
             'click_aggregate_candidate_more' => false,
             'warnings' => [],
         ];
+    }
+
+    protected function log_analytics_runtime_failure($prefix, Throwable $exception)
+    {
+        log_message('error', $prefix . $this->sanitize_log_message($exception->getMessage()));
+    }
+
+    protected function sanitize_log_message($message)
+    {
+        if (function_exists('marketing_sanitize_log_message')) {
+            return marketing_sanitize_log_message($message);
+        }
+
+        $message = trim(strip_tags((string) $message));
+        if ($message === '') {
+            return 'unknown_error';
+        }
+
+        return function_exists('mb_substr')
+            ? mb_substr($message, 0, 1000)
+            : substr($message, 0, 1000);
     }
 }

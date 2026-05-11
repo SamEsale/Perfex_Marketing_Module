@@ -117,9 +117,26 @@
                             ],
                         ], $stats);
                         $recent = isset($recent) && is_array($recent) ? $recent : [];
+                        $normalizedRecent = [];
+                        foreach ($recent as $event) {
+                            if (!is_array($event)) {
+                                continue;
+                            }
+
+                            $normalizedRecent[] = array_merge([
+                                'id' => 0,
+                                'event_type' => '',
+                                'email' => '',
+                                'provider' => '',
+                                'url' => '',
+                                'event_at' => null,
+                            ], $event);
+                        }
+                        $recent = $normalizedRecent;
                         $events_pagination = isset($events_pagination) && is_array($events_pagination)
                             ? array_merge(['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1], $events_pagination)
                             : ['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1];
+                        $top_clicked_links = isset($top_clicked_links) && is_array($top_clicked_links) ? $top_clicked_links : [];
                         $eventTypeLabels = [
                             'queued' => 'Recipients Queued',
                             'send_start' => 'Send Started',
@@ -194,8 +211,34 @@
                             $acceptedSentHelper = sprintf(_l('marketing_campaign_raw_sent_events_helper'), (int) $stats['events']['accepted_sent_events']);
                         }
                         $retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)
-                            ? $retention_diagnostics
-                            : [];
+                            ? array_merge([
+                                'cleanup_mode' => 'explicit_only',
+                                'event_retention_days' => 0,
+                                'webhook_log_retention_days' => 0,
+                                'retention_floor_days' => 30,
+                                'delete_limit_per_run' => 500,
+                                'events_cleanup_candidate_preview' => 0,
+                                'events_cleanup_candidate_more' => false,
+                                'webhook_logs_cleanup_candidate_preview' => 0,
+                                'webhook_logs_cleanup_candidate_more' => false,
+                                'click_aggregate_candidate_preview' => 0,
+                                'click_aggregate_candidate_more' => false,
+                                'warnings' => [],
+                            ], $retention_diagnostics)
+                            : [
+                                'cleanup_mode' => 'explicit_only',
+                                'event_retention_days' => 0,
+                                'webhook_log_retention_days' => 0,
+                                'retention_floor_days' => 30,
+                                'delete_limit_per_run' => 500,
+                                'events_cleanup_candidate_preview' => 0,
+                                'events_cleanup_candidate_more' => false,
+                                'webhook_logs_cleanup_candidate_preview' => 0,
+                                'webhook_logs_cleanup_candidate_more' => false,
+                                'click_aggregate_candidate_preview' => 0,
+                                'click_aggregate_candidate_more' => false,
+                                'warnings' => [],
+                            ];
                         ?>
                         <div class="tw-flex tw-items-start tw-justify-between tw-gap-4">
                             <div>
@@ -294,6 +337,7 @@
                                             $eventType = (string) $event['event_type'];
                                             $eventLabel = $eventTypeLabels[$eventType] ?? ucwords(str_replace('_', ' ', $eventType));
                                             $badgeClass = $eventTypeBadgeClasses[$eventType] ?? 'default';
+                                            $eventAt = !empty($event['event_at']) ? _dt($event['event_at']) : '-';
                                             ?>
                                             <tr>
                                                 <td><?= (int) $event['id']; ?></td>
@@ -301,7 +345,7 @@
                                                 <td><?= e($event['email'] ?: '-'); ?></td>
                                                 <td><?= e($event['provider']); ?></td>
                                                 <td><?= e($event['url'] ?: '-'); ?></td>
-                                                <td><?= e(_dt($event['event_at'])); ?></td>
+                                                <td><?= e($eventAt); ?></td>
                                             </tr>
                                         <?php } ?>
                                     </tbody>

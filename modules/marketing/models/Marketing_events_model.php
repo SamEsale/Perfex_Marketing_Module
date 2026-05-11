@@ -79,11 +79,29 @@ class Marketing_events_model extends App_Model
             return [];
         }
 
-        return $this->db->from($this->table)
-            ->order_by('id', 'DESC')
+        $select = [
+            $this->column_exists('id') ? 'id' : '0 AS id',
+            $this->column_exists('event_type') ? 'event_type' : "'' AS event_type",
+            $this->column_exists('email') ? 'email' : "'' AS email",
+            $this->column_exists('provider') ? 'provider' : "'' AS provider",
+            $this->column_exists('url') ? 'url' : "'' AS url",
+            $this->column_exists('event_at') ? 'event_at' : 'NULL AS event_at',
+        ];
+
+        $this->db->select(implode(', ', $select), false)
+            ->from($this->table);
+
+        if ($this->column_exists('event_at')) {
+            $this->db->order_by('event_at', 'DESC');
+        } elseif ($this->column_exists('id')) {
+            $this->db->order_by('id', 'DESC');
+        }
+
+        $query = $this->db
             ->limit($limit, $offset)
-            ->get()
-            ->result_array();
+            ->get();
+
+        return $query ? $query->result_array() : [];
     }
 
     public function count_all_events()
@@ -880,6 +898,27 @@ class Marketing_events_model extends App_Model
         return trim((string) ($error['message'] ?? ''));
     }
 
+    protected function log_events_runtime_failure($prefix, Throwable $exception)
+    {
+        log_message('error', $prefix . $this->sanitize_log_message($exception->getMessage()));
+    }
+
+    protected function sanitize_log_message($message)
+    {
+        if (function_exists('marketing_sanitize_log_message')) {
+            return marketing_sanitize_log_message($message);
+        }
+
+        $message = trim(strip_tags((string) $message));
+        if ($message === '') {
+            return 'unknown_error';
+        }
+
+        return function_exists('mb_substr')
+            ? mb_substr($message, 0, 1000)
+            : substr($message, 0, 1000);
+    }
+
     protected function get_public_links_model()
     {
         if ($this->marketingPublicLinksModel === null) {
@@ -911,7 +950,7 @@ class Marketing_events_model extends App_Model
                 return array_merge($summary, $diagnostics);
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing click aggregate retention diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_events_runtime_failure('Marketing click aggregate retention diagnostics unavailable: ', $exception);
         }
 
         return $summary;
@@ -938,7 +977,7 @@ class Marketing_events_model extends App_Model
                 return array_merge($summary, $cleanup);
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing click aggregate cleanup failed closed: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_events_runtime_failure('Marketing click aggregate cleanup failed closed: ', $exception);
         }
 
         return $summary;

@@ -387,7 +387,9 @@ function marketing_sanitize_log_message($message)
     $message = preg_replace('/smtp_pass\s*[:=]\s*[^\s]+/i', 'smtp_pass=[redacted]', $message);
     $message = preg_replace('/password\s*[:=]\s*[^\s]+/i', 'password=[redacted]', $message);
 
-    return mb_substr($message, 0, 1000);
+    return function_exists('mb_substr')
+        ? mb_substr($message, 0, 1000)
+        : substr($message, 0, 1000);
 }
 
 function marketing_get_module_version()

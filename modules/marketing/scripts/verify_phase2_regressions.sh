@@ -1114,23 +1114,52 @@ check_no_destructive_event_history_clear() {
 }
 
 check_analytics_view_array_guards() {
-  local stats_line recent_line pagination_line empty_line diagnostics_line
+  local stats_line recent_line normalized_line pagination_line empty_line diagnostics_line top_links_line
   stats_line="$(first_fixed_match '$stats = isset($stats) && is_array($stats) ? $stats : [];' "$ANALYTICS_VIEW_FILE")"
   recent_line="$(first_fixed_match '$recent = isset($recent) && is_array($recent) ? $recent : [];' "$ANALYTICS_VIEW_FILE")"
+  normalized_line="$(first_fixed_match '$normalizedRecent = [];' "$ANALYTICS_VIEW_FILE")"
   pagination_line="$(first_fixed_match '$events_pagination = isset($events_pagination) && is_array($events_pagination)' "$ANALYTICS_VIEW_FILE")"
   empty_line="$(first_fixed_match '<?php if (empty($recent)) { ?>' "$ANALYTICS_VIEW_FILE")"
   diagnostics_line="$(first_fixed_match '$retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)' "$ANALYTICS_VIEW_FILE")"
+  top_links_line="$(first_fixed_match '$top_clicked_links = isset($top_clicked_links) && is_array($top_clicked_links) ? $top_clicked_links : [];' "$ANALYTICS_VIEW_FILE")"
 
-  if [[ -z "$stats_line" || -z "$recent_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" ]]; then
+  if [[ -z "$stats_line" || -z "$recent_line" || -z "$normalized_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" || -z "$top_links_line" ]]; then
     fail \
-      "analytics view guards stats, events, pagination, and retention diagnostics arrays before rendering" \
-      "expected stats/recent/pagination/diagnostics normalization and empty() guard in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}"
+      "analytics view guards stats, events, pagination, retention diagnostics, and top-click arrays before rendering" \
+      "expected stats/recent normalization, per-row event defaults, pagination/diagnostics/top-link guards, and empty() handling in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; normalized=${normalized_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}; top_links=${top_links_line:-missing}"
     return
   fi
 
   pass \
-    "analytics view guards stats, events, pagination, and retention diagnostics arrays before rendering" \
-    "stats=$stats_line | recent=$recent_line | empty=$empty_line"
+    "analytics view guards stats, events, pagination, retention diagnostics, and top-click arrays before rendering" \
+    "stats=$stats_line | recent=$recent_line | normalized=$normalized_line"
+}
+
+check_analytics_runtime_fail_closed_queries() {
+  local count_line top_links_call_line top_links_data_line top_links_helper_line campaign_helper_line count_helper_line total_rows_helper_line public_token_guard_line public_url_guard_line campaign_id_guard_line pagination_select_line bootstrap_line
+  count_line="$(first_fixed_match "Marketing analytics event count unavailable:" "$ANALYTICS_CONTROLLER_FILE")"
+  top_links_call_line="$(first_fixed_match "method_exists(\$this->marketing_dashboard_model, 'get_top_clicked_links')" "$ANALYTICS_CONTROLLER_FILE")"
+  top_links_data_line="$(first_fixed_match "\$data['top_clicked_links'] = \$topClickedLinks;" "$ANALYTICS_CONTROLLER_FILE")"
+  top_links_helper_line="$(first_match 'function[[:space:]]+get_top_clicked_links' "$DASHBOARD_FILE")"
+  campaign_helper_line="$(first_match 'function[[:space:]]+get_clicks_by_campaign' "$DASHBOARD_FILE")"
+  count_helper_line="$(first_match 'function[[:space:]]+safe_count_all' "$DASHBOARD_FILE")"
+  total_rows_helper_line="$(first_match 'function[[:space:]]+safe_total_rows' "$DASHBOARD_FILE")"
+  public_token_guard_line="$(first_fixed_match "field_exists('token_type', \$this->publicLinksTable)" "$DASHBOARD_FILE")"
+  public_url_guard_line="$(first_fixed_match "field_exists('original_url', \$this->publicLinksTable)" "$DASHBOARD_FILE")"
+  campaign_id_guard_line="$(first_fixed_match "field_exists('campaign_id', \$this->recipientsTable)" "$DASHBOARD_FILE")"
+  pagination_select_line="$(first_fixed_match "\$this->column_exists('event_at') ? 'event_at' : 'NULL AS event_at'" "$EVENTS_FILE")"
+  bootstrap_line="$(first_fixed_match "function_exists('mb_substr')" "$BOOTSTRAP_FILE")"
+
+  if [[ -z "$count_line" || -z "$top_links_call_line" || -z "$top_links_data_line" || -z "$top_links_helper_line" || -z "$campaign_helper_line" || -z "$count_helper_line" || -z "$total_rows_helper_line" || -z "$public_token_guard_line" || -z "$public_url_guard_line" || -z "$campaign_id_guard_line" || -z "$pagination_select_line" || -z "$bootstrap_line" ]]; then
+    fail \
+      "analytics runtime queries fail closed across controller defaults, dashboard guards, event pagination, and log sanitization" \
+      "expected controller fallback logging/defaults, safe top-click helpers, count guards, public-link column guards, campaign click guard, paginated event field defaults, and mbstring-safe log sanitization; count=${count_line:-missing}; top_call=${top_links_call_line:-missing}; top_data=${top_links_data_line:-missing}; top_helper=${top_links_helper_line:-missing}; campaign_helper=${campaign_helper_line:-missing}; count_helper=${count_helper_line:-missing}; total_rows=${total_rows_helper_line:-missing}; token_guard=${public_token_guard_line:-missing}; url_guard=${public_url_guard_line:-missing}; campaign_id=${campaign_id_guard_line:-missing}; pagination=${pagination_select_line:-missing}; bootstrap=${bootstrap_line:-missing}"
+    return
+  fi
+
+  pass \
+    "analytics runtime queries fail closed across controller defaults, dashboard guards, event pagination, and log sanitization" \
+    "count=$count_line | top_helper=$top_links_helper_line | count_helper=$count_helper_line"
 }
 
 check_retention_preserves_unsubscribe_audit_events() {
@@ -1846,6 +1875,7 @@ check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_no_destructive_event_history_clear
 check_analytics_view_array_guards
+check_analytics_runtime_fail_closed_queries
 check_retention_preserves_unsubscribe_audit_events
 check_no_destructive_retention_calls
 check_click_aggregate_cleanup_scope

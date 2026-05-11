@@ -81,8 +81,8 @@ class Marketing_dashboard_model extends App_Model
         $analytics = $this->get_default_click_analytics();
         $recipientClickSummary = $this->get_recipient_click_summary();
         $publicLinkSummary = $this->get_public_link_click_summary();
-        $topLinkRows = $this->get_top_clicked_links_from_public_links($topLimit);
-        $campaignRows = $this->get_clicks_by_campaign_metrics($topLimit);
+        $topLinkRows = $this->get_top_clicked_links($topLimit);
+        $campaignRows = $this->get_clicks_by_campaign($topLimit);
         $rawClickEvents = $this->count_events_by_types(['click', 'clicked']);
 
         $analytics['human_clicks'] = (int) ($recipientClickSummary['human_clicks'] ?? 0);
@@ -118,28 +118,54 @@ class Marketing_dashboard_model extends App_Model
         return $analytics;
     }
 
+    public function get_top_clicked_links($topLimit = 5)
+    {
+        try {
+            $rows = $this->get_top_clicked_links_from_public_links($topLimit);
+
+            return is_array($rows) ? $rows : [];
+        } catch (Throwable $exception) {
+            $this->log_dashboard_runtime_failure('Marketing dashboard top clicked links unavailable: ', $exception);
+        }
+
+        return [];
+    }
+
+    public function get_clicks_by_campaign($topLimit = 5)
+    {
+        try {
+            $rows = $this->get_clicks_by_campaign_metrics($topLimit);
+
+            return is_array($rows) ? $rows : [];
+        } catch (Throwable $exception) {
+            $this->log_dashboard_runtime_failure('Marketing dashboard clicks-by-campaign metrics unavailable: ', $exception);
+        }
+
+        return [];
+    }
+
     public function get_analytics_summary()
     {
         $eventSummary = $this->get_safe_event_summary();
-        $sentRecipients = total_rows($this->recipientsTable, ['status' => 'sent']);
+        $sentRecipients = $this->safe_total_rows($this->recipientsTable, ['status' => 'sent']);
         $acceptedSentEvents = (int) $eventSummary['accepted_sent'];
         $recipientClickSummary = $this->get_recipient_click_summary();
         $publicLinkSummary = $this->get_public_link_click_summary();
 
         return [
             'campaigns' => [
-                'total' => $this->db->count_all($this->campaignsTable),
-                'draft' => total_rows($this->campaignsTable, ['status' => 'draft']),
-                'sending' => total_rows($this->campaignsTable, ['status' => 'sending']),
-                'sent' => total_rows($this->campaignsTable, ['status' => 'sent']),
-                'failed' => total_rows($this->campaignsTable, ['status' => 'failed']),
+                'total' => $this->safe_count_all($this->campaignsTable),
+                'draft' => $this->safe_total_rows($this->campaignsTable, ['status' => 'draft']),
+                'sending' => $this->safe_total_rows($this->campaignsTable, ['status' => 'sending']),
+                'sent' => $this->safe_total_rows($this->campaignsTable, ['status' => 'sent']),
+                'failed' => $this->safe_total_rows($this->campaignsTable, ['status' => 'failed']),
             ],
             'recipients' => [
-                'total' => $this->db->count_all($this->recipientsTable),
-                'queued' => total_rows($this->recipientsTable, ['status' => 'queued']),
-                'processing' => total_rows($this->recipientsTable, ['status' => 'processing']),
+                'total' => $this->safe_count_all($this->recipientsTable),
+                'queued' => $this->safe_total_rows($this->recipientsTable, ['status' => 'queued']),
+                'processing' => $this->safe_total_rows($this->recipientsTable, ['status' => 'processing']),
                 'sent' => $sentRecipients,
-                'failed' => total_rows($this->recipientsTable, ['status' => 'failed']),
+                'failed' => $this->safe_total_rows($this->recipientsTable, ['status' => 'failed']),
             ],
             'events' => [
                 'total_records' => (int) $eventSummary['total_records'],
@@ -237,6 +263,10 @@ class Marketing_dashboard_model extends App_Model
             'human_clicks' => 0,
             'unique_human_clicks' => 0,
         ];
+
+        if (!$this->db->table_exists($this->recipientsTable)) {
+            return $summary;
+        }
 
         $select = [];
         if ($this->db->field_exists('click_count', $this->recipientsTable)) {
@@ -343,7 +373,10 @@ class Marketing_dashboard_model extends App_Model
             'unique_clicks' => 0,
         ];
 
-        if (!$this->db->table_exists($this->publicLinksTable)) {
+        if (
+            !$this->db->table_exists($this->publicLinksTable)
+            || !$this->db->field_exists('token_type', $this->publicLinksTable)
+        ) {
             return $summary;
         }
 
@@ -373,7 +406,11 @@ class Marketing_dashboard_model extends App_Model
 
     protected function get_top_clicked_links_from_public_links($topLimit)
     {
-        if (!$this->db->table_exists($this->publicLinksTable)) {
+        if (
+            !$this->db->table_exists($this->publicLinksTable)
+            || !$this->db->field_exists('token_type', $this->publicLinksTable)
+            || !$this->db->field_exists('original_url', $this->publicLinksTable)
+        ) {
             return $this->get_top_clicked_links_from_event_fallback($topLimit);
         }
 
@@ -386,8 +423,13 @@ class Marketing_dashboard_model extends App_Model
 
         $rows = $this->db->select('original_url AS url, ' . $humanCountExpr . ' AS count, ' . $uniqueCountExpr . ' AS unique_count', false)
             ->from($this->publicLinksTable)
-            ->where('token_type', 'click')
-            ->where('is_active', 1)
+            ->where('token_type', 'click');
+
+        if ($this->db->field_exists('is_active', $this->publicLinksTable)) {
+            $this->db->where('is_active', 1);
+        }
+
+        $rows = $this->db
             ->where('original_url IS NOT NULL', null, false)
             ->where('original_url !=', '')
             ->group_by('original_url')
@@ -420,7 +462,11 @@ class Marketing_dashboard_model extends App_Model
 
     protected function get_top_clicked_links_from_event_fallback($topLimit)
     {
-        if (!$this->db->table_exists($this->eventsTable)) {
+        if (
+            !$this->db->table_exists($this->eventsTable)
+            || !$this->db->field_exists('provider', $this->eventsTable)
+            || !$this->db->field_exists('event_type', $this->eventsTable)
+        ) {
             return [];
         }
 
@@ -432,11 +478,7 @@ class Marketing_dashboard_model extends App_Model
         )
             ->from($this->eventsTable);
 
-        if ($this->db->field_exists('provider', $this->eventsTable)) {
-            $this->db->where('provider', 'module');
-        } else {
-            return [];
-        }
+        $this->db->where('provider', 'module');
 
         $this->apply_normalized_event_type_filter($this->db, ['click', 'clicked']);
 
@@ -476,7 +518,11 @@ class Marketing_dashboard_model extends App_Model
 
     protected function get_clicks_by_campaign_metrics($topLimit)
     {
-        if (!$this->db->field_exists('click_count', $this->recipientsTable)) {
+        if (
+            !$this->db->table_exists($this->recipientsTable)
+            || !$this->db->field_exists('click_count', $this->recipientsTable)
+            || !$this->db->field_exists('campaign_id', $this->recipientsTable)
+        ) {
             return [];
         }
 
@@ -484,9 +530,18 @@ class Marketing_dashboard_model extends App_Model
             ? 'COALESCE(SUM(r.unique_click_count), 0)'
             : 'COALESCE(SUM(CASE WHEN r.click_count > 0 THEN 1 ELSE 0 END), 0)';
 
-        $rows = $this->db->select('r.campaign_id, c.name AS campaign_name, COALESCE(SUM(r.click_count), 0) AS count, ' . $uniqueExpr . ' AS unique_count', false)
-            ->from($this->recipientsTable . ' r')
-            ->join($this->campaignsTable . ' c', 'c.id = r.campaign_id', 'left')
+        $campaignNameSelect = 'NULL AS campaign_name';
+        $this->db->from($this->recipientsTable . ' r');
+        if (
+            $this->db->table_exists($this->campaignsTable)
+            && $this->db->field_exists('id', $this->campaignsTable)
+            && $this->db->field_exists('name', $this->campaignsTable)
+        ) {
+            $campaignNameSelect = 'c.name AS campaign_name';
+            $this->db->join($this->campaignsTable . ' c', 'c.id = r.campaign_id', 'left');
+        }
+
+        $rows = $this->db->select('r.campaign_id, ' . $campaignNameSelect . ', COALESCE(SUM(r.click_count), 0) AS count, ' . $uniqueExpr . ' AS unique_count', false)
             ->group_by('r.campaign_id')
             ->having('count >', 0)
             ->order_by('count', 'DESC')
@@ -552,7 +607,16 @@ class Marketing_dashboard_model extends App_Model
 
     protected function count_events_by_types(array $eventTypes)
     {
-        return $this->get_events_model()->count_events_by_normalized_types($eventTypes);
+        try {
+            $eventModel = $this->get_events_model();
+            if (is_object($eventModel) && method_exists($eventModel, 'count_events_by_normalized_types')) {
+                return (int) $eventModel->count_events_by_normalized_types($eventTypes);
+            }
+        } catch (Throwable $exception) {
+            $this->log_dashboard_runtime_failure('Marketing dashboard event type counts unavailable: ', $exception);
+        }
+
+        return 0;
     }
 
     protected function apply_normalized_event_type_filter($db, array $eventTypes)
@@ -607,6 +671,63 @@ class Marketing_dashboard_model extends App_Model
         return $CI->marketing_campaigns_model;
     }
 
+    protected function safe_count_all($table)
+    {
+        if (!is_string($table) || $table === '' || !$this->db->table_exists($table)) {
+            return 0;
+        }
+
+        try {
+            return (int) $this->db->count_all($table);
+        } catch (Throwable $exception) {
+            $this->log_dashboard_runtime_failure('Marketing dashboard count unavailable: ', $exception);
+        }
+
+        return 0;
+    }
+
+    protected function safe_total_rows($table, array $where)
+    {
+        if (!is_string($table) || $table === '' || !$this->db->table_exists($table)) {
+            return 0;
+        }
+
+        foreach (array_keys($where) as $column) {
+            if (!$this->db->field_exists($column, $table)) {
+                return 0;
+            }
+        }
+
+        try {
+            return (int) total_rows($table, $where);
+        } catch (Throwable $exception) {
+            $this->log_dashboard_runtime_failure('Marketing dashboard filtered count unavailable: ', $exception);
+        }
+
+        return 0;
+    }
+
+    protected function log_dashboard_runtime_failure($prefix, Throwable $exception)
+    {
+        log_message('error', $prefix . $this->sanitize_log_message($exception->getMessage()));
+    }
+
+    protected function sanitize_log_message($message)
+    {
+        if (function_exists('marketing_sanitize_log_message')) {
+            return marketing_sanitize_log_message($message);
+        }
+
+        $message = trim(strip_tags((string) $message));
+        if ($message === '') {
+            return 'unknown_error';
+        }
+
+        return function_exists('mb_substr')
+            ? mb_substr($message, 0, 1000)
+            : substr($message, 0, 1000);
+    }
+
     protected function get_safe_event_summary()
     {
         $defaults = [
@@ -632,7 +753,7 @@ class Marketing_dashboard_model extends App_Model
                 }
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing dashboard event summary unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_dashboard_runtime_failure('Marketing dashboard event summary unavailable: ', $exception);
         }
 
         return $defaults;
@@ -649,7 +770,7 @@ class Marketing_dashboard_model extends App_Model
                 }
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing dashboard retention diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_dashboard_runtime_failure('Marketing dashboard retention diagnostics unavailable: ', $exception);
         }
 
         return $this->get_default_retention_diagnostics();
@@ -666,7 +787,7 @@ class Marketing_dashboard_model extends App_Model
                 }
             }
         } catch (Throwable $exception) {
-            log_message('error', 'Marketing dashboard queue diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+            $this->log_dashboard_runtime_failure('Marketing dashboard queue diagnostics unavailable: ', $exception);
         }
 
         return [
