@@ -1399,6 +1399,108 @@ check_whatsapp_active_social_scope() {
     "route=$route_line | settings=$settings_line | const=$model_const_line"
 }
 
+check_whatsapp_conversation_schema_readiness() {
+  local conv_channel conv_provider conv_phone conv_norm_phone conv_thread conv_lead conv_assigned conv_unread conv_inbound conv_outbound conv_notes
+  local msg_provider msg_type msg_thread msg_status msg_media msg_context
+  conv_channel="$(first_fixed_match "'channel' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_provider="$(first_fixed_match "'provider' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_phone="$(first_fixed_match "'contact_phone' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_norm_phone="$(first_fixed_match "'normalized_phone' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_thread="$(first_fixed_match "'provider_thread_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_lead="$(first_fixed_match "'lead_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_assigned="$(first_fixed_match "'assigned_staff_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_unread="$(first_fixed_match "'unread_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_inbound="$(first_fixed_match "'last_inbound_at' => ['sql' => 'DATETIME NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_outbound="$(first_fixed_match "'last_outbound_at' => ['sql' => 'DATETIME NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  conv_notes="$(first_fixed_match "'internal_notes' => ['sql' => 'TEXT NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  msg_provider="$(first_fixed_match "'provider' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  msg_type="$(first_fixed_match "'message_type' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  msg_thread="$(first_fixed_match "'provider_thread_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  msg_status="$(first_fixed_match "'provider_status' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  msg_media="$(first_fixed_match "'media_meta_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  msg_context="$(first_fixed_match "'context_provider_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+
+  if [[ -z "$conv_channel" || -z "$conv_provider" || -z "$conv_phone" || -z "$conv_norm_phone" || -z "$conv_thread" || -z "$conv_lead" || -z "$conv_assigned" || -z "$conv_unread" || -z "$conv_inbound" || -z "$conv_outbound" || -z "$conv_notes" || -z "$msg_provider" || -z "$msg_type" || -z "$msg_thread" || -z "$msg_status" || -z "$msg_media" || -z "$msg_context" ]]; then
+    fail \
+      "WhatsApp-ready conversation and message schema fields are repairable and bootstrap-managed" \
+      "expected new conversation/message fields in $SCHEMA_FILE; conv_channel=${conv_channel:-missing}; conv_provider=${conv_provider:-missing}; conv_phone=${conv_phone:-missing}; conv_thread=${conv_thread:-missing}; conv_unread=${conv_unread:-missing}; msg_type=${msg_type:-missing}; msg_media=${msg_media:-missing}; msg_context=${msg_context:-missing}"
+    return
+  fi
+
+  pass \
+    "WhatsApp-ready conversation and message schema fields are repairable and bootstrap-managed" \
+    "conv_channel=$conv_channel | conv_unread=$conv_unread | msg_type=$msg_type | msg_media=$msg_media"
+}
+
+check_conversation_model_optional_column_guards() {
+  local conv_filter_line msg_filter_line phone_helper_line unread_guard_line media_helper_line thread_filter_line
+  conv_filter_line="$(first_fixed_match '$insert = $this->filter_existing_columns($this->conversationsTable, $insert);' "modules/marketing/models/Marketing_conversations_model.php")"
+  msg_filter_line="$(first_fixed_match '$insert = $this->filter_existing_columns($this->messagesTable, $insert);' "modules/marketing/models/Marketing_conversations_model.php")"
+  phone_helper_line="$(first_match 'function[[:space:]]+normalize_phone' "modules/marketing/models/Marketing_conversations_model.php")"
+  unread_guard_line="$(first_fixed_match "&& \$this->db->field_exists('unread_count', \$this->conversationsTable)" "modules/marketing/models/Marketing_conversations_model.php")"
+  media_helper_line="$(first_match 'function[[:space:]]+encode_media_meta_json' "modules/marketing/models/Marketing_conversations_model.php")"
+  thread_filter_line="$(first_fixed_match "if (\$providerThreadId !== '' && \$this->db->field_exists('provider_thread_id', \$this->conversationsTable)) {" "modules/marketing/models/Marketing_conversations_model.php")"
+
+  if [[ -z "$conv_filter_line" || -z "$msg_filter_line" || -z "$phone_helper_line" || -z "$unread_guard_line" || -z "$media_helper_line" || -z "$thread_filter_line" ]]; then
+    fail \
+      "conversation model guards optional columns and metadata writes before persisting WhatsApp-ready fields" \
+      "expected filter_existing_columns(), normalized phone helper, unread_count guard, media-meta encoder, and provider_thread guard in modules/marketing/models/Marketing_conversations_model.php; conv_filter=${conv_filter_line:-missing}; msg_filter=${msg_filter_line:-missing}; phone=${phone_helper_line:-missing}; unread=${unread_guard_line:-missing}; media=${media_helper_line:-missing}; thread=${thread_filter_line:-missing}"
+    return
+  fi
+
+  pass \
+    "conversation model guards optional columns and metadata writes before persisting WhatsApp-ready fields" \
+    "conv_filter=$conv_filter_line | msg_filter=$msg_filter_line | unread=$unread_guard_line"
+}
+
+check_whatsapp_inbound_conversation_metadata() {
+  local lock_line channel_line provider_line phone_line type_line context_line media_line event_payload_line
+  lock_line="$(first_fixed_match '$eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);' "$WEBHOOKS_FILE")"
+  channel_line="$(first_fixed_match "'channel' => 'whatsapp'" "$WEBHOOKS_FILE")"
+  provider_line="$(first_fixed_match "'provider' => 'whatsapp_cloud'" "$WEBHOOKS_FILE")"
+  phone_line="$(first_fixed_match "'normalized_phone' => \$phone" "$WEBHOOKS_FILE")"
+  type_line="$(first_fixed_match "'message_type' => \$messageType !== '' ? \$messageType : 'text'" "$WEBHOOKS_FILE")"
+  context_line="$(first_fixed_match "'context_provider_message_id' => \$contextProviderMessageId !== '' ? \$contextProviderMessageId : null" "$WEBHOOKS_FILE")"
+  media_line="$(first_fixed_match "'media_meta_json' => \$mediaMeta" "$WEBHOOKS_FILE")"
+  event_payload_line="$(first_fixed_match "'provider_thread_id' => \$providerThreadId !== '' ? \$providerThreadId : null" "$WEBHOOKS_FILE")"
+
+  if [[ -z "$lock_line" || -z "$channel_line" || -z "$provider_line" || -z "$phone_line" || -z "$type_line" || -z "$context_line" || -z "$media_line" || -z "$event_payload_line" ]]; then
+    fail \
+      "WhatsApp inbound persistence passes channel, provider, phone, and message metadata into the conversation layer" \
+      "expected event lock plus WhatsApp channel/provider/phone/message metadata in $WEBHOOKS_FILE; lock=${lock_line:-missing}; channel=${channel_line:-missing}; provider=${provider_line:-missing}; phone=${phone_line:-missing}; type=${type_line:-missing}; context=${context_line:-missing}; media=${media_line:-missing}; thread=${event_payload_line:-missing}"
+    return
+  fi
+
+  pass \
+    "WhatsApp inbound persistence passes channel, provider, phone, and message metadata into the conversation layer" \
+    "lock=$lock_line | channel=$channel_line | type=$type_line | media=$media_line"
+}
+
+check_whatsapp_lead_conversion_deferred() {
+  local whatsapp_block route_line csrf_line
+  whatsapp_block="$(sed -n '/protected function storeWhatsappInboundMessage/,/protected function storeWhatsappStatusEvent/p' "$WEBHOOKS_FILE")"
+  route_line="$(first_fixed_match "\$route['marketing/webhooks/whatsapp'] = 'webhooks/whatsapp';" "$ROUTES_FILE")"
+  csrf_line="$(first_fixed_match "'marketing/webhooks/whatsapp'" "$CSRF_FILE")"
+
+  if printf '%s\n' "$whatsapp_block" | grep -q 'convert_reply_to_lead'; then
+    fail \
+      "automatic WhatsApp lead conversion remains deferred in Phase 4A patch 1" \
+      "unexpected convert_reply_to_lead call found inside storeWhatsappInboundMessage() in $WEBHOOKS_FILE"
+    return
+  fi
+
+  if [[ -z "$route_line" || -z "$csrf_line" ]]; then
+    fail \
+      "WhatsApp webhook route and csrf posture remain unchanged while lead conversion is deferred" \
+      "expected whatsapp route and csrf exclusion in module config; route=${route_line:-missing}; csrf=${csrf_line:-missing}"
+    return
+  fi
+
+  pass \
+    "automatic WhatsApp lead conversion remains deferred in Phase 4A patch 1" \
+    "route=$route_line | csrf=$csrf_line"
+}
+
 check_no_facebook_linkedin_active_ui_or_release_docs() {
   local settings_fb settings_li dashboard_fb dashboard_li readme_fb readme_li install_fb install_li ops_fb ops_li
   settings_fb="$(first_match 'Facebook|facebook' "$SETTINGS_VIEW_FILE")"
@@ -1757,6 +1859,10 @@ check_whatsapp_send_auth_diagnostics
 check_whatsapp_test_alert_safety
 check_whatsapp_token_preserve_and_redaction
 check_whatsapp_active_social_scope
+check_whatsapp_conversation_schema_readiness
+check_conversation_model_optional_column_guards
+check_whatsapp_inbound_conversation_metadata
+check_whatsapp_lead_conversion_deferred
 check_no_facebook_linkedin_active_ui_or_release_docs
 check_release_validator_exists
 check_module_metadata_header

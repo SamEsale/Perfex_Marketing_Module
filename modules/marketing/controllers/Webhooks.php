@@ -1065,6 +1065,10 @@ class Webhooks extends CI_Controller
         $providerMessageId = trim((string) ($message['message_id'] ?? ''));
         $eventAt = $message['timestamp'] ?? date('Y-m-d H:i:s');
         $eventType = 'whatsapp_inbound_message';
+        $messageType = trim((string) ($message['type'] ?? 'text'));
+        $contextProviderMessageId = trim((string) ($message['context_message_id'] ?? ''));
+        $providerThreadId = trim((string) ($message['provider_thread_id'] ?? ''));
+        $mediaMeta = $this->buildWhatsappMessageMediaMeta($message);
 
         $dedupeCriteria = [
             'provider' => 'whatsapp_business',
@@ -1074,61 +1078,97 @@ class Webhooks extends CI_Controller
             'event_at' => $eventAt,
         ];
 
-        if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
-            log_message('info', 'Marketing WhatsApp duplicate inbound message skipped: phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
-            return false;
-        }
-
-        $conversation = null;
-        $messageId = 0;
-        if ($this->marketing_conversations_model->tables_available()) {
-            $conversation = $this->marketing_conversations_model->find_or_create_conversation([
-                'campaign_id' => null,
-                'marketing_contact_id' => null,
-                'email' => $phone,
-                'subject' => 'WhatsApp',
-                'last_message_at' => $eventAt,
-                'status' => 'open',
-                'source_type' => 'whatsapp',
-            ]);
-
-            if ($conversation) {
-                $messageId = (int) $this->marketing_conversations_model->add_message([
-                    'conversation_id' => (int) $conversation['id'],
-                    'campaign_id' => null,
-                    'marketing_contact_id' => null,
-                    'direction' => 'inbound',
-                    'email' => $phone,
-                    'subject' => 'WhatsApp',
-                    'message' => trim((string) ($message['text'] ?? '')),
-                    'body_text' => trim((string) ($message['text'] ?? '')),
-                    'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-                    'datecreated' => $eventAt,
-                ]);
+        $eventLockKey = '';
+        if ($this->hasStableDedupeCriteria($dedupeCriteria)) {
+            $eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);
+            if (!empty($eventLock['acquired'])) {
+                $eventLockKey = (string) ($eventLock['lock_key'] ?? '');
             }
         }
 
-        $this->marketing_events_model->add_event([
-            'campaign_id' => null,
-            'campaign_recipient_id' => null,
-            'marketing_contact_id' => null,
-            'event_type' => $eventType,
-            'provider' => 'whatsapp_business',
-            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-            'email' => $phone !== '' ? $phone : null,
-            'event_at' => $eventAt,
-            'payload_json' => json_encode([
-                'message_id' => $providerMessageId,
-                'sender_name' => $message['sender_name'] ?? '',
-                'type' => $message['type'] ?? '',
-                'conversation_id' => $conversation['id'] ?? null,
-                'stored_message_id' => $messageId ?: null,
-            ]),
-        ]);
+        try {
+            if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
+                log_message('info', 'Marketing WhatsApp duplicate inbound message skipped: phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
+                return false;
+            }
 
-        log_message('info', 'Marketing WhatsApp inbound message stored: phone=' . $phone . ' conversation_id=' . (int) ($conversation['id'] ?? 0));
+            $conversation = null;
+            $messageId = 0;
+            if ($this->marketing_conversations_model->tables_available()) {
+                $conversation = $this->marketing_conversations_model->find_or_create_conversation([
+                    'campaign_id' => null,
+                    'marketing_contact_id' => null,
+                    'email' => $phone,
+                    'channel' => 'whatsapp',
+                    'provider' => 'whatsapp_cloud',
+                    'contact_phone' => $phone,
+                    'normalized_phone' => $phone,
+                    'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,
+                    'subject' => 'WhatsApp',
+                    'last_message_at' => $eventAt,
+                    'last_inbound_at' => $eventAt,
+                    'status' => 'open',
+                    'source_type' => 'whatsapp',
+                ]);
 
-        return true;
+                if ($conversation) {
+                    $messageId = (int) $this->marketing_conversations_model->add_message([
+                        'conversation_id' => (int) $conversation['id'],
+                        'campaign_id' => null,
+                        'marketing_contact_id' => null,
+                        'direction' => 'inbound',
+                        'email' => $phone,
+                        'from_email' => $phone,
+                        'channel' => 'whatsapp',
+                        'provider' => 'whatsapp_cloud',
+                        'contact_phone' => $phone,
+                        'normalized_phone' => $phone,
+                        'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,
+                        'message_type' => $messageType !== '' ? $messageType : 'text',
+                        'subject' => 'WhatsApp',
+                        'message' => trim((string) ($message['text'] ?? '')),
+                        'body_text' => trim((string) ($message['text'] ?? '')),
+                        'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                        'context_provider_message_id' => $contextProviderMessageId !== '' ? $contextProviderMessageId : null,
+                        'media_meta_json' => $mediaMeta,
+                        'datecreated' => $eventAt,
+                    ]);
+                }
+            }
+
+            $this->marketing_events_model->add_event([
+                'campaign_id' => null,
+                'campaign_recipient_id' => null,
+                'marketing_contact_id' => null,
+                'event_type' => $eventType,
+                'provider' => 'whatsapp_business',
+                'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                'email' => $phone !== '' ? $phone : null,
+                'event_at' => $eventAt,
+                'payload_json' => json_encode([
+                    'message_id' => $providerMessageId,
+                    'sender_name' => $message['sender_name'] ?? '',
+                    'type' => $messageType,
+                    'channel' => 'whatsapp',
+                    'provider' => 'whatsapp_cloud',
+                    'contact_phone' => $phone,
+                    'normalized_phone' => $phone,
+                    'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,
+                    'context_provider_message_id' => $contextProviderMessageId !== '' ? $contextProviderMessageId : null,
+                    'media_meta' => $mediaMeta,
+                    'conversation_id' => $conversation['id'] ?? null,
+                    'stored_message_id' => $messageId ?: null,
+                ]),
+            ]);
+
+            log_message('info', 'Marketing WhatsApp inbound message stored: phone=' . $phone . ' conversation_id=' . (int) ($conversation['id'] ?? 0));
+
+            return true;
+        } finally {
+            if ($eventLockKey !== '') {
+                $this->marketing_events_model->release_event_lock($eventLockKey);
+            }
+        }
     }
 
     protected function storeWhatsappStatusEvent(array $statusEvent)
@@ -1296,6 +1336,35 @@ class Webhooks extends CI_Controller
         }
 
         return (string) $value;
+    }
+
+    protected function buildWhatsappMessageMediaMeta(array $message)
+    {
+        $messageType = trim((string) ($message['type'] ?? ''));
+        $meta = [];
+
+        if ($messageType !== '') {
+            $meta['type'] = $messageType;
+        }
+
+        $contextProviderMessageId = trim((string) ($message['context_message_id'] ?? ''));
+        if ($contextProviderMessageId !== '') {
+            $meta['context_provider_message_id'] = $contextProviderMessageId;
+        }
+
+        if (!empty($message['raw']) && is_array($message['raw'])) {
+            foreach ($message['raw'] as $key => $value) {
+                if (is_scalar($value) || $value === null) {
+                    $meta[$key] = $value;
+                }
+            }
+        }
+
+        if (empty($meta)) {
+            return null;
+        }
+
+        return $meta;
     }
 
     protected function respondJson(array $data, $statusCode = 200)
