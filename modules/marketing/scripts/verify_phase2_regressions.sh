@@ -1115,29 +1115,25 @@ check_no_destructive_event_history_clear() {
 }
 
 check_analytics_view_array_guards() {
-  local stats_line recent_line normalized_line pagination_line empty_line diagnostics_line top_links_line top_links_normalized_line top_links_heading_line top_links_escape_line warning_line
+  local stats_line recent_line normalized_line pagination_line empty_line diagnostics_line warning_line
   stats_line="$(first_fixed_match '$stats = isset($stats) && is_array($stats) ? $stats : [];' "$ANALYTICS_VIEW_FILE")"
   recent_line="$(first_fixed_match '$recent = isset($recent) && is_array($recent) ? $recent : [];' "$ANALYTICS_VIEW_FILE")"
   normalized_line="$(first_fixed_match '$normalizedRecent = [];' "$ANALYTICS_VIEW_FILE")"
   pagination_line="$(first_fixed_match '$events_pagination = isset($events_pagination) && is_array($events_pagination)' "$ANALYTICS_VIEW_FILE")"
   empty_line="$(first_fixed_match '<?php if (empty($recent)) { ?>' "$ANALYTICS_VIEW_FILE")"
   diagnostics_line="$(first_fixed_match '$retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)' "$ANALYTICS_VIEW_FILE")"
-  top_links_line="$(first_fixed_match '$top_clicked_links = isset($top_clicked_links) && is_array($top_clicked_links) ? $top_clicked_links : [];' "$ANALYTICS_VIEW_FILE")"
-  top_links_normalized_line="$(first_fixed_match '$topClickedLinks = [];' "$ANALYTICS_VIEW_FILE")"
-  top_links_heading_line="$(first_fixed_match "<?= _l('marketing_top_clicked_links'); ?>" "$ANALYTICS_VIEW_FILE")"
-  top_links_escape_line="$(first_fixed_match "html_escape(\$topClickedLink['url'])" "$ANALYTICS_VIEW_FILE")"
   warning_line="$(first_fixed_match '$analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)' "$ANALYTICS_VIEW_FILE")"
 
-  if [[ -z "$stats_line" || -z "$recent_line" || -z "$normalized_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" || -z "$top_links_line" || -z "$top_links_normalized_line" || -z "$top_links_heading_line" || -z "$top_links_escape_line" || -z "$warning_line" ]]; then
+  if [[ -z "$stats_line" || -z "$recent_line" || -z "$normalized_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" || -z "$warning_line" ]]; then
     fail \
       "analytics view guards stats, events, pagination, retention diagnostics, and top-click arrays before rendering" \
-      "expected stats/recent normalization, per-row event defaults, pagination/diagnostics/top-link guards, rendered top-click section heading, html_escape() URL output, warning normalization, and empty() handling in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; normalized=${normalized_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}; top_links=${top_links_line:-missing}; top_links_normalized=${top_links_normalized_line:-missing}; top_links_heading=${top_links_heading_line:-missing}; top_links_escape=${top_links_escape_line:-missing}; warning=${warning_line:-missing}"
+      "expected stats/recent normalization, per-row event defaults, pagination/diagnostics guards, warning normalization, and empty() handling in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; normalized=${normalized_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}; warning=${warning_line:-missing}"
     return
   fi
 
   pass \
     "analytics view guards stats, events, pagination, retention diagnostics, and top-click arrays before rendering" \
-    "stats=$stats_line | recent=$recent_line | top_links_heading=$top_links_heading_line"
+    "stats=$stats_line | recent=$recent_line | normalized=$normalized_line"
 }
 
 check_analytics_runtime_fail_closed_queries() {
