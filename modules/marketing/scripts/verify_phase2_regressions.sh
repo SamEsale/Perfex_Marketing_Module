@@ -1138,7 +1138,7 @@ check_analytics_view_array_guards() {
 }
 
 check_analytics_runtime_fail_closed_queries() {
-  local count_line top_links_call_line top_links_data_line top_links_helper_line campaign_helper_line count_helper_line total_rows_helper_line public_token_guard_line public_url_guard_line public_url_select_line public_url_null_guard_line public_url_group_line public_human_sum_line public_unique_sum_line campaign_id_guard_line pagination_select_line bootstrap_line warning_data_line
+  local count_line top_links_call_line top_links_data_line top_links_helper_line campaign_helper_line count_helper_line total_rows_helper_line public_token_guard_line public_url_guard_line public_url_select_line public_url_from_line public_url_token_line public_url_active_line public_url_null_guard_line public_url_group_line public_human_sum_line public_unique_sum_line public_old_alias_from_line public_old_alias_sum_line public_bare_url_select_line public_bare_url_null_line public_bare_url_not_empty_line public_bare_url_group_line campaign_id_guard_line pagination_select_line bootstrap_line warning_data_line
   count_line="$(first_fixed_match "Marketing analytics event count unavailable:" "$ANALYTICS_CONTROLLER_FILE")"
   top_links_call_line="$(first_fixed_match "method_exists(\$this->marketing_dashboard_model, 'get_top_clicked_links')" "$ANALYTICS_CONTROLLER_FILE")"
   top_links_data_line="$(first_fixed_match "\$data['top_clicked_links'] = \$topClickedLinks;" "$ANALYTICS_CONTROLLER_FILE")"
@@ -1149,25 +1149,34 @@ check_analytics_runtime_fail_closed_queries() {
   total_rows_helper_line="$(first_match 'function[[:space:]]+safe_total_rows' "$DASHBOARD_FILE")"
   public_token_guard_line="$(first_fixed_match "field_exists('token_type', \$this->publicLinksTable)" "$DASHBOARD_FILE")"
   public_url_guard_line="$(first_fixed_match "field_exists('original_url', \$this->publicLinksTable)" "$DASHBOARD_FILE")"
-  public_url_select_line="$(first_fixed_match "select('p.original_url AS url, ' . \$humanCountExpr . ' AS count, ' . \$uniqueCountExpr . ' AS unique_count', false)" "$DASHBOARD_FILE")"
-  public_url_null_guard_line="$(first_fixed_match "where('p.original_url IS NOT NULL', null, false)" "$DASHBOARD_FILE")"
-  public_url_group_line="$(first_fixed_match "group_by('p.original_url')" "$DASHBOARD_FILE")"
-  public_human_sum_line="$(first_fixed_match "COALESCE(SUM(p.human_click_count), 0)" "$DASHBOARD_FILE")"
-  public_unique_sum_line="$(first_fixed_match "COALESCE(SUM(p.unique_click_count), 0)" "$DASHBOARD_FILE")"
+  public_url_select_line="$(first_fixed_match "select('pl.original_url AS url, ' . \$humanCountExpr . ' AS count, ' . \$uniqueCountExpr . ' AS unique_count', false)" "$DASHBOARD_FILE")"
+  public_url_from_line="$(first_fixed_match "from(\$this->publicLinksTable . ' pl')" "$DASHBOARD_FILE")"
+  public_url_token_line="$(first_fixed_match "where('pl.token_type', 'click')" "$DASHBOARD_FILE")"
+  public_url_active_line="$(first_fixed_match "where('pl.is_active', 1)" "$DASHBOARD_FILE")"
+  public_url_null_guard_line="$(first_fixed_match "where('pl.original_url IS NOT NULL', null, false)" "$DASHBOARD_FILE")"
+  public_url_group_line="$(first_fixed_match "group_by('pl.original_url')" "$DASHBOARD_FILE")"
+  public_human_sum_line="$(first_fixed_match "COALESCE(SUM(pl.human_click_count), 0)" "$DASHBOARD_FILE")"
+  public_unique_sum_line="$(first_fixed_match "COALESCE(SUM(pl.unique_click_count), 0)" "$DASHBOARD_FILE")"
+  public_old_alias_from_line="$(first_fixed_match "from(\$this->publicLinksTable . ' p')" "$DASHBOARD_FILE")"
+  public_old_alias_sum_line="$(grep -nE \"SUM\\(p\\.(human_click_count|unique_click_count)\\)\" "$DASHBOARD_FILE" || true)"
+  public_bare_url_select_line="$(first_fixed_match "select('original_url AS url, ' . \$humanCountExpr . ' AS count, ' . \$uniqueCountExpr . ' AS unique_count', false)" "$DASHBOARD_FILE")"
+  public_bare_url_null_line="$(first_fixed_match "where('original_url IS NOT NULL', null, false)" "$DASHBOARD_FILE")"
+  public_bare_url_not_empty_line="$(first_fixed_match "where('original_url !=', '')" "$DASHBOARD_FILE")"
+  public_bare_url_group_line="$(first_fixed_match "group_by('original_url')" "$DASHBOARD_FILE")"
   campaign_id_guard_line="$(first_fixed_match "field_exists('campaign_id', \$this->recipientsTable)" "$DASHBOARD_FILE")"
   pagination_select_line="$(first_fixed_match "\$this->column_exists('event_at') ? 'event_at' : 'NULL AS event_at'" "$EVENTS_FILE")"
   bootstrap_line="$(first_fixed_match "function_exists('mb_substr')" "$BOOTSTRAP_FILE")"
 
-  if [[ -z "$count_line" || -z "$top_links_call_line" || -z "$top_links_data_line" || -z "$warning_data_line" || -z "$top_links_helper_line" || -z "$campaign_helper_line" || -z "$count_helper_line" || -z "$total_rows_helper_line" || -z "$public_token_guard_line" || -z "$public_url_guard_line" || -z "$public_url_select_line" || -z "$public_url_null_guard_line" || -z "$public_url_group_line" || -z "$public_human_sum_line" || -z "$public_unique_sum_line" || -z "$campaign_id_guard_line" || -z "$pagination_select_line" || -z "$bootstrap_line" ]]; then
+  if [[ -z "$count_line" || -z "$top_links_call_line" || -z "$top_links_data_line" || -z "$warning_data_line" || -z "$top_links_helper_line" || -z "$campaign_helper_line" || -z "$count_helper_line" || -z "$total_rows_helper_line" || -z "$public_token_guard_line" || -z "$public_url_guard_line" || -z "$public_url_select_line" || -z "$public_url_from_line" || -z "$public_url_token_line" || -z "$public_url_active_line" || -z "$public_url_null_guard_line" || -z "$public_url_group_line" || -z "$public_human_sum_line" || -z "$public_unique_sum_line" || -n "$public_old_alias_from_line" || -n "$public_old_alias_sum_line" || -n "$public_bare_url_select_line" || -n "$public_bare_url_null_line" || -n "$public_bare_url_not_empty_line" || -n "$public_bare_url_group_line" || -z "$campaign_id_guard_line" || -z "$pagination_select_line" || -z "$bootstrap_line" ]]; then
     fail \
       "analytics runtime queries fail closed across controller defaults, dashboard guards, event pagination, and log sanitization" \
-      "expected controller fallback logging/defaults, warning seed, safe top-click helpers, count guards, qualified public-link original_url selects/grouping, campaign click guard, paginated event field defaults, and mbstring-safe log sanitization; count=${count_line:-missing}; top_call=${top_links_call_line:-missing}; top_data=${top_links_data_line:-missing}; warning=${warning_data_line:-missing}; top_helper=${top_links_helper_line:-missing}; campaign_helper=${campaign_helper_line:-missing}; count_helper=${count_helper_line:-missing}; total_rows=${total_rows_helper_line:-missing}; token_guard=${public_token_guard_line:-missing}; url_guard=${public_url_guard_line:-missing}; url_select=${public_url_select_line:-missing}; url_null=${public_url_null_guard_line:-missing}; url_group=${public_url_group_line:-missing}; human_sum=${public_human_sum_line:-missing}; unique_sum=${public_unique_sum_line:-missing}; campaign_id=${campaign_id_guard_line:-missing}; pagination=${pagination_select_line:-missing}; bootstrap=${bootstrap_line:-missing}"
+      "expected controller fallback logging/defaults, warning seed, safe top-click helpers, count guards, unique pl alias qualification for public-link original_url selects/grouping, no old p alias or bare original_url references, campaign click guard, paginated event field defaults, and mbstring-safe log sanitization; count=${count_line:-missing}; top_call=${top_links_call_line:-missing}; top_data=${top_links_data_line:-missing}; warning=${warning_data_line:-missing}; top_helper=${top_links_helper_line:-missing}; campaign_helper=${campaign_helper_line:-missing}; count_helper=${count_helper_line:-missing}; total_rows=${total_rows_helper_line:-missing}; token_guard=${public_token_guard_line:-missing}; url_guard=${public_url_guard_line:-missing}; url_select=${public_url_select_line:-missing}; url_from=${public_url_from_line:-missing}; url_token=${public_url_token_line:-missing}; url_active=${public_url_active_line:-missing}; url_null=${public_url_null_guard_line:-missing}; url_group=${public_url_group_line:-missing}; human_sum=${public_human_sum_line:-missing}; unique_sum=${public_unique_sum_line:-missing}; old_from=${public_old_alias_from_line:-unexpected}; old_sum=${public_old_alias_sum_line:-unexpected}; bare_select=${public_bare_url_select_line:-unexpected}; bare_null=${public_bare_url_null_line:-unexpected}; bare_not_empty=${public_bare_url_not_empty_line:-unexpected}; bare_group=${public_bare_url_group_line:-unexpected}; campaign_id=${campaign_id_guard_line:-missing}; pagination=${pagination_select_line:-missing}; bootstrap=${bootstrap_line:-missing}"
     return
   fi
 
   pass \
     "analytics runtime queries fail closed across controller defaults, dashboard guards, event pagination, and log sanitization" \
-    "count=$count_line | top_helper=$top_links_helper_line | url_select=$public_url_select_line"
+    "count=$count_line | top_helper=$top_links_helper_line | url_from=$public_url_from_line"
 }
 
 check_analytics_render_fail_closed() {
