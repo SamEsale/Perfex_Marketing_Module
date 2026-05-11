@@ -33,6 +33,12 @@ if (($license_state['status'] ?? '') === 'active') {
 ?>
 <?php init_head(); ?>
 <style>
+    .marketing-settings-shell {
+        border: 1px solid #e2e8f0;
+        background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+        border-radius: 18px;
+        padding: 20px;
+    }
     .marketing-settings-grid {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -44,6 +50,15 @@ if (($license_state['status'] ?? '') === 'active') {
     }
     .marketing-settings-column > .panel_s + .panel_s {
         margin-top: 20px;
+    }
+    .marketing-settings-panel {
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 14px 28px rgba(15, 23, 42, .04);
+    }
+    .marketing-settings-panel .panel-body {
+        padding: 22px;
     }
     .marketing-settings-column .panel_s,
     .marketing-settings-column .panel-body,
@@ -65,6 +80,25 @@ if (($license_state['status'] ?? '') === 'active') {
     .marketing-settings-column input[readonly] {
         cursor: text;
     }
+    .marketing-settings-panel-title {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .marketing-settings-panel-copy {
+        margin: 10px 0 0;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.55;
+    }
+    .marketing-settings-form-actions {
+        margin-top: 20px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
     .marketing-license-actions {
         display: flex;
         gap: 10px;
@@ -72,8 +106,19 @@ if (($license_state['status'] ?? '') === 'active') {
         flex-wrap: wrap;
     }
     @media (max-width: 767px) {
+        .marketing-settings-shell {
+            padding: 14px;
+        }
         .marketing-settings-grid {
             grid-template-columns: 1fr;
+        }
+        .marketing-settings-form-actions,
+        .marketing-license-actions {
+            justify-content: stretch;
+        }
+        .marketing-settings-form-actions .btn,
+        .marketing-license-actions .btn {
+            width: 100%;
         }
     }
 </style>
@@ -86,14 +131,15 @@ if (($license_state['status'] ?? '') === 'active') {
                         <h4 class="no-margin"><?= _l('marketing_settings'); ?></h4>
                         <p class="text-muted mtop10"><?= _l('marketing_settings_placeholder'); ?></p>
                         <hr />
-                        <div class="marketing-settings-grid">
+                        <div class="marketing-settings-shell">
+                            <div class="marketing-settings-grid">
                             <div class="marketing-settings-column">
                                 <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-general-settings-form']); ?>
                                 <input type="hidden" name="settings_form" value="general">
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('settings'); ?></h4>
-                                        <p class="text-muted mtop10"><?= _l('marketing_settings_placeholder'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('settings'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_settings_placeholder'); ?></p>
 
                                         <div class="form-group">
                                             <label class="control-label"><?= _l('marketing_send_enabled'); ?></label>
@@ -205,7 +251,7 @@ if (($license_state['status'] ?? '') === 'active') {
                                             </div>
                                             <p class="text-muted mtop5"><?= _l('marketing_tracking_defaults_help'); ?></p>
                                         </div>
-                                        <div class="text-right">
+                                        <div class="marketing-settings-form-actions">
                                             <button type="submit" class="btn btn-primary"><?= _l('marketing_save_general_settings'); ?></button>
                                         </div>
                                     </div>
@@ -215,10 +261,10 @@ if (($license_state['status'] ?? '') === 'active') {
                                 <!-- marketing-reply-lead-settings-panel -->
                                 <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-reply-lead-settings-form']); ?>
                                 <input type="hidden" name="settings_form" value="reply_leads">
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_reply_to_lead_settings'); ?></h4>
-                                        <p class="text-muted mtop10"><?= _l('marketing_reply_to_lead_settings_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_reply_to_lead_settings'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_reply_to_lead_settings_note'); ?></p>
 
                                         <?php if (!$reply_lead_available) { ?>
                                             <div class="alert alert-warning">
@@ -299,17 +345,17 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <input type="text" id="marketing_reply_to_lead_name_prefix" name="<?= html_escape($settingFieldName('marketing_reply_to_lead_name_prefix')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_reply_to_lead_name_prefix', 'Marketing Reply')); ?>">
                                         </div>
 
-                                        <div class="text-right">
+                                        <div class="marketing-settings-form-actions">
                                             <button type="submit" class="btn btn-primary"><?= _l('save'); ?></button>
                                         </div>
                                     </div>
                                 </div>
                                 <?= form_close(); ?>
 
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_inbound_reply_webhook_url'); ?></h4>
-                                        <p class="text-muted"><?= _l('marketing_reply_to_lead_settings_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_inbound_reply_webhook_url'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_reply_to_lead_settings_note'); ?></p>
                                         <div class="form-group no-margin">
                                             <label class="control-label"><?= _l('marketing_inbound_reply_webhook_url'); ?></label>
                                             <input type="text" class="form-control" readonly value="<?= e(site_url('marketing/webhooks/inbound_email')); ?>">
@@ -323,10 +369,10 @@ if (($license_state['status'] ?? '') === 'active') {
                             <div class="marketing-settings-column">
                                 <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-smtp-settings-form']); ?>
                                 <input type="hidden" name="settings_form" value="smtp">
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_smtp_settings_section'); ?></h4>
-                                        <p class="text-muted mtop10"><?= _l('marketing_smtp_settings_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_smtp_settings_section'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_smtp_settings_note'); ?></p>
 
                                         <div class="form-group">
                                             <label class="control-label"><?= _l('marketing_smtp_enabled'); ?></label>
@@ -389,20 +435,20 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <input type="text" id="marketing_ses_configuration_set" name="<?= html_escape($settingFieldName('marketing_ses_configuration_set')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_ses_configuration_set')); ?>">
                                             <p class="text-muted mtop5"><?= _l('marketing_ses_configuration_set_help'); ?></p>
                                         </div>
-                                        <div class="text-right">
+                                        <div class="marketing-settings-form-actions">
                                             <button type="submit" class="btn btn-primary"><?= _l('marketing_save_smtp_settings'); ?></button>
                                         </div>
                                     </div>
                                 </div>
                                 <?= form_close(); ?>
 
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_smtp_test_heading'); ?></h4>
-                                        <p class="text-muted"><?= _l('marketing_smtp_test_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_smtp_test_heading'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_smtp_test_note'); ?></p>
                                         <?= form_open(admin_url('marketing/settings/test_smtp'), ['id' => 'marketing-smtp-test-form']); ?>
                                         <?= render_input('test_email', 'marketing_smtp_test_email_address', '', 'email'); ?>
-                                        <div class="mtop20">
+                                        <div class="marketing-settings-form-actions">
                                             <button type="submit" class="btn btn-default"><?= _l('marketing_smtp_test_button'); ?></button>
                                         </div>
                                         <?= form_close(); ?>
@@ -414,10 +460,10 @@ if (($license_state['status'] ?? '') === 'active') {
                                 <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-whatsapp-settings-form']); ?>
                                 <input type="hidden" name="settings_form" value="whatsapp">
                                 <input type="hidden" name="whatsapp_form_probe" value="1">
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_whatsapp_settings'); ?></h4>
-                                        <p class="text-muted mtop10"><?= _l('marketing_whatsapp_settings_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_whatsapp_settings'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_whatsapp_settings_note'); ?></p>
 
                                         <div class="form-group">
                                             <label class="control-label"><?= _l('marketing_whatsapp_enabled'); ?></label>
@@ -488,7 +534,7 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <p class="text-muted mtop5"><?= _l('marketing_whatsapp_test_recipient_note'); ?></p>
                                         </div>
 
-                                        <div class="text-right">
+                                        <div class="marketing-settings-form-actions">
                                             <button type="submit" class="btn btn-primary"><?= _l('save'); ?></button>
                                         </div>
                                     </div>
@@ -497,13 +543,13 @@ if (($license_state['status'] ?? '') === 'active') {
                                 <!-- marketing-whatsapp-settings-form-end -->
 
                                 <!-- marketing-whatsapp-test-form-start -->
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_whatsapp_test_heading'); ?></h4>
-                                        <p class="text-muted"><?= _l('marketing_whatsapp_test_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_whatsapp_test_heading'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_whatsapp_test_note'); ?></p>
                                         <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-whatsapp-test-form']); ?>
                                         <input type="hidden" name="settings_form" value="whatsapp_test">
-                                        <div class="mtop20">
+                                        <div class="marketing-settings-form-actions">
                                             <button type="submit" class="btn btn-default">Send Test</button>
                                         </div>
                                         <?= form_close(); ?>
@@ -511,10 +557,10 @@ if (($license_state['status'] ?? '') === 'active') {
                                 </div>
                                 <!-- marketing-whatsapp-test-form-end -->
 
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_license_updates_heading'); ?></h4>
-                                        <p class="text-muted mtop10"><?= _l('marketing_license_updates_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_license_updates_heading'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_license_updates_note'); ?></p>
 
                                         <?php if (empty($license_available)) { ?>
                                             <div class="alert alert-warning">
@@ -590,10 +636,10 @@ if (($license_state['status'] ?? '') === 'active') {
                                     </div>
                                 </div>
 
-                                <div class="panel_s">
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
-                                        <h4 class="bold"><?= _l('marketing_schema_health'); ?></h4>
-                                        <p class="text-muted mtop10"><?= _l('marketing_schema_health_note'); ?></p>
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_schema_health'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_schema_health_note'); ?></p>
 
                                         <?php if (!empty($schema_report['ok'])) { ?>
                                             <div class="alert alert-success">
@@ -650,13 +696,14 @@ if (($license_state['status'] ?? '') === 'active') {
 
                                             <?= form_open(admin_url('marketing/settings/save')); ?>
                                             <input type="hidden" name="settings_form" value="schema_repair">
-                                            <div class="text-right">
+                                            <div class="marketing-settings-form-actions">
                                                 <button type="submit" class="btn btn-warning"><?= _l('marketing_schema_repair_button'); ?></button>
                                             </div>
                                             <?= form_close(); ?>
                                         <?php } ?>
                                     </div>
                                 </div>
+                            </div>
                             </div>
                         </div>
                     </div>

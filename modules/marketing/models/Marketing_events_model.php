@@ -14,6 +14,7 @@ class Marketing_events_model extends App_Model
     protected $table;
     protected $webhookLogTable;
     protected $tableColumns;
+    protected $marketingPublicLinksModel;
     protected $eventAliases = [
         'sent' => ['sent'],
         'provider_send' => ['provider_send'],
@@ -596,10 +597,13 @@ class Marketing_events_model extends App_Model
             'delete_limit_per_run' => self::MAX_DELETE_PER_RUN,
             'events_cleanup_ready' => false,
             'webhook_logs_cleanup_ready' => false,
+            'click_aggregate_cleanup_ready' => false,
             'events_cleanup_candidate_preview' => 0,
             'events_cleanup_candidate_more' => false,
             'webhook_logs_cleanup_candidate_preview' => 0,
             'webhook_logs_cleanup_candidate_more' => false,
+            'click_aggregate_candidate_preview' => 0,
+            'click_aggregate_candidate_more' => false,
             'warnings' => [],
         ];
 
@@ -623,6 +627,19 @@ class Marketing_events_model extends App_Model
             $diagnostics['warnings'][] = 'webhook_log_cleanup_unavailable';
         }
 
+        $clickAggregateDiagnostics = $this->get_click_aggregate_retention_diagnostics_summary($eventRetentionDays);
+        $diagnostics['click_aggregate_cleanup_ready'] = !empty($clickAggregateDiagnostics['cleanup_ready']);
+        $diagnostics['click_aggregate_candidate_preview'] = (int) ($clickAggregateDiagnostics['candidate_preview'] ?? 0);
+        $diagnostics['click_aggregate_candidate_more'] = !empty($clickAggregateDiagnostics['candidate_more']);
+        if (!empty($clickAggregateDiagnostics['warnings']) && is_array($clickAggregateDiagnostics['warnings'])) {
+            foreach ($clickAggregateDiagnostics['warnings'] as $warning) {
+                $warning = trim((string) $warning);
+                if ($warning !== '') {
+                    $diagnostics['warnings'][] = $warning;
+                }
+            }
+        }
+
         return $diagnostics;
     }
 
@@ -639,10 +656,14 @@ class Marketing_events_model extends App_Model
             'delete_limit_per_run' => self::MAX_DELETE_PER_RUN,
             'events_deleted' => 0,
             'webhook_logs_deleted' => 0,
+            'click_links_reset' => 0,
+            'click_links_skipped' => 0,
             'events_cleanup_candidate_preview' => 0,
             'events_cleanup_candidate_more' => false,
             'webhook_logs_cleanup_candidate_preview' => 0,
             'webhook_logs_cleanup_candidate_more' => false,
+            'click_aggregate_candidate_preview' => 0,
+            'click_aggregate_candidate_more' => false,
             'warnings' => [],
         ];
 
@@ -664,6 +685,20 @@ class Marketing_events_model extends App_Model
             $summary['webhook_logs_deleted'] = $this->delete_webhook_log_cleanup_candidates($webhookCutoffDateTime);
         } else {
             $summary['warnings'][] = 'webhook_log_cleanup_unavailable';
+        }
+
+        $clickAggregateSummary = $this->run_click_aggregate_cleanup($eventRetentionDays);
+        $summary['click_links_reset'] = (int) ($clickAggregateSummary['click_links_reset'] ?? 0);
+        $summary['click_links_skipped'] = (int) ($clickAggregateSummary['click_links_skipped'] ?? 0);
+        $summary['click_aggregate_candidate_preview'] = (int) ($clickAggregateSummary['candidate_preview'] ?? 0);
+        $summary['click_aggregate_candidate_more'] = !empty($clickAggregateSummary['candidate_more']);
+        if (!empty($clickAggregateSummary['warnings']) && is_array($clickAggregateSummary['warnings'])) {
+            foreach ($clickAggregateSummary['warnings'] as $warning) {
+                $warning = trim((string) $warning);
+                if ($warning !== '') {
+                    $summary['warnings'][] = $warning;
+                }
+            }
         }
 
         return $summary;
@@ -843,6 +878,70 @@ class Marketing_events_model extends App_Model
         $error = $this->db->error();
 
         return trim((string) ($error['message'] ?? ''));
+    }
+
+    protected function get_public_links_model()
+    {
+        if ($this->marketingPublicLinksModel === null) {
+            $CI = &get_instance();
+            $CI->load->model('marketing/Marketing_public_links_model', 'marketing_public_links_model');
+            $this->marketingPublicLinksModel = $CI->marketing_public_links_model;
+        }
+
+        return $this->marketingPublicLinksModel;
+    }
+
+    protected function get_click_aggregate_retention_diagnostics_summary($eventRetentionDays)
+    {
+        $summary = [
+            'cleanup_ready' => false,
+            'candidate_preview' => 0,
+            'candidate_more' => false,
+            'warnings' => ['click_aggregate_cleanup_unavailable'],
+        ];
+
+        $publicLinksModel = $this->get_public_links_model();
+        if (!is_object($publicLinksModel) || !method_exists($publicLinksModel, 'get_click_aggregate_retention_diagnostics')) {
+            return $summary;
+        }
+
+        try {
+            $diagnostics = $publicLinksModel->get_click_aggregate_retention_diagnostics($eventRetentionDays, self::MAX_DELETE_PER_RUN);
+            if (is_array($diagnostics)) {
+                return array_merge($summary, $diagnostics);
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing click aggregate retention diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        return $summary;
+    }
+
+    protected function run_click_aggregate_cleanup($eventRetentionDays)
+    {
+        $summary = [
+            'click_links_reset' => 0,
+            'click_links_skipped' => 0,
+            'candidate_preview' => 0,
+            'candidate_more' => false,
+            'warnings' => ['click_aggregate_cleanup_unavailable'],
+        ];
+
+        $publicLinksModel = $this->get_public_links_model();
+        if (!is_object($publicLinksModel) || !method_exists($publicLinksModel, 'reset_stale_click_aggregates')) {
+            return $summary;
+        }
+
+        try {
+            $cleanup = $publicLinksModel->reset_stale_click_aggregates($eventRetentionDays, self::MAX_DELETE_PER_RUN);
+            if (is_array($cleanup)) {
+                return array_merge($summary, $cleanup);
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing click aggregate cleanup failed closed: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        return $summary;
     }
 
     protected function get_retention_days($optionName)

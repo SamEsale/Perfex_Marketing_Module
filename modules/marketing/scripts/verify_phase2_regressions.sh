@@ -27,6 +27,7 @@ INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
+SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -990,26 +991,27 @@ check_retention_excludes_audit_critical_events() {
 }
 
 check_retention_cleanup_scope() {
-  local cleanup_helper_line event_delete_line webhook_delete_line public_links_line click_reset_line suppressions_line recipients_line campaigns_line
+  local cleanup_helper_line event_delete_line webhook_delete_line helper_line click_reset_line click_skip_line suppressions_line recipients_line campaigns_line
   cleanup_helper_line="$(first_match 'function[[:space:]]+run_retention_cleanup' "$EVENTS_FILE")"
   event_delete_line="$(first_fixed_match "\$this->db->delete(\$this->table);" "$EVENTS_FILE")"
   webhook_delete_line="$(first_fixed_match "\$this->db->delete(\$this->webhookLogTable);" "$EVENTS_FILE")"
-  public_links_line="$(first_fixed_match "Marketing_public_links_model" "$EVENTS_FILE")"
-  click_reset_line="$(first_fixed_match 'reset_stale_click_aggregates' "$EVENTS_FILE")"
+  helper_line="$(first_fixed_match '$clickAggregateSummary = $this->run_click_aggregate_cleanup($eventRetentionDays);' "$EVENTS_FILE")"
+  click_reset_line="$(first_fixed_match "\$summary['click_links_reset'] = (int) (\$clickAggregateSummary['click_links_reset'] ?? 0);" "$EVENTS_FILE")"
+  click_skip_line="$(first_fixed_match "\$summary['click_links_skipped'] = (int) (\$clickAggregateSummary['click_links_skipped'] ?? 0);" "$EVENTS_FILE")"
   suppressions_line="$(first_fixed_match 'marketing_suppressions' "$EVENTS_FILE")"
   recipients_line="$(first_fixed_match 'marketing_campaign_recipients' "$EVENTS_FILE")"
   campaigns_line="$(first_fixed_match 'marketing_campaigns' "$EVENTS_FILE")"
 
-  if [[ -z "$cleanup_helper_line" || -z "$event_delete_line" || -z "$webhook_delete_line" || -z "$public_links_line" || -z "$click_reset_line" || -n "$suppressions_line" || -n "$recipients_line" || -n "$campaigns_line" ]]; then
+  if [[ -z "$cleanup_helper_line" || -z "$event_delete_line" || -z "$webhook_delete_line" || -z "$helper_line" || -z "$click_reset_line" || -z "$click_skip_line" || -n "$suppressions_line" || -n "$recipients_line" || -n "$campaigns_line" ]]; then
     fail \
       "retention cleanup only targets non-critical events, webhook logs, and safe click aggregate resets" \
-      "expected explicit retention helper, event/webhook deletes, safe public-links reset helper, and no campaigns/recipients/suppressions cleanup in $EVENTS_FILE; helper=${cleanup_helper_line:-missing}; event_delete=${event_delete_line:-missing}; webhook_delete=${webhook_delete_line:-missing}; public_links=${public_links_line:-missing}; click_reset=${click_reset_line:-missing}; suppressions=${suppressions_line:-none}; recipients=${recipients_line:-none}; campaigns=${campaigns_line:-none}"
+      "expected explicit retention helper, event/webhook deletes, safe click cleanup integration, and no campaigns/recipients/suppressions cleanup in $EVENTS_FILE; helper=${cleanup_helper_line:-missing}; event_delete=${event_delete_line:-missing}; webhook_delete=${webhook_delete_line:-missing}; click_helper=${helper_line:-missing}; click_reset=${click_reset_line:-missing}; click_skip=${click_skip_line:-missing}; suppressions=${suppressions_line:-none}; recipients=${recipients_line:-none}; campaigns=${campaigns_line:-none}"
     return
   fi
 
   pass \
     "retention cleanup only targets non-critical events, webhook logs, and safe click aggregate resets" \
-    "helper=$cleanup_helper_line | event_delete=$event_delete_line | webhook_delete=$webhook_delete_line | click_reset=$click_reset_line"
+    "helper=$cleanup_helper_line | event_delete=$event_delete_line | webhook_delete=$webhook_delete_line | click_helper=$helper_line"
 }
 
 check_retention_cleanup_not_auto_cron() {
@@ -1107,22 +1109,23 @@ check_no_destructive_retention_calls() {
 }
 
 check_click_aggregate_cleanup_scope() {
-  local helper_line type_click_line type_unsubscribe_line reset_line
+  local helper_line type_click_line type_unsubscribe_line reset_line skip_line
   helper_line="$(first_match 'function[[:space:]]+reset_stale_click_aggregates' "$PUBLIC_LINKS_FILE")"
   type_click_line="$(first_fixed_match "where('p.token_type', self::TYPE_CLICK)" "$PUBLIC_LINKS_FILE")"
   type_unsubscribe_line="$(first_fixed_match 'TYPE_UNSUBSCRIBE' "$PUBLIC_LINKS_FILE")"
-  reset_line="$(first_fixed_match "'click_links_reset'" "$EVENTS_FILE")"
+  reset_line="$(first_fixed_match "\$summary['click_links_reset'] = (int) (\$clickAggregateSummary['click_links_reset'] ?? 0);" "$EVENTS_FILE")"
+  skip_line="$(first_fixed_match "\$summary['click_links_skipped'] = (int) (\$clickAggregateSummary['click_links_skipped'] ?? 0);" "$EVENTS_FILE")"
 
-  if [[ -z "$helper_line" || -z "$type_click_line" || -z "$type_unsubscribe_line" || -z "$reset_line" ]]; then
+  if [[ -z "$helper_line" || -z "$type_click_line" || -z "$type_unsubscribe_line" || -z "$reset_line" || -z "$skip_line" ]]; then
     fail \
       "click aggregate cleanup targets only tracking links and reports reset counts" \
-      "expected click aggregate reset helper in $PUBLIC_LINKS_FILE, TYPE_CLICK scope, unsubscribe constant preserved, and click_links_reset summary in $EVENTS_FILE; helper=${helper_line:-missing}; click_scope=${type_click_line:-missing}; unsubscribe=${type_unsubscribe_line:-missing}; summary=${reset_line:-missing}"
+      "expected click aggregate reset helper in $PUBLIC_LINKS_FILE, TYPE_CLICK scope, unsubscribe constant preserved, and click_links_reset/click_links_skipped summary keys in $EVENTS_FILE; helper=${helper_line:-missing}; click_scope=${type_click_line:-missing}; unsubscribe=${type_unsubscribe_line:-missing}; reset=${reset_line:-missing}; skipped=${skip_line:-missing}"
     return
   fi
 
   pass \
     "click aggregate cleanup targets only tracking links and reports reset counts" \
-    "helper=$helper_line | click_scope=$type_click_line | summary=$reset_line"
+    "helper=$helper_line | click_scope=$type_click_line | reset=$reset_line | skipped=$skip_line"
 }
 
 check_click_aggregate_cleanup_bounds() {
@@ -1142,6 +1145,44 @@ check_click_aggregate_cleanup_bounds() {
   pass \
     "click aggregate cleanup is bounded, respects retention floor, and skips active campaigns" \
     "floor=$floor_line | limit=$limit_line | usage=$limit_usage_line"
+}
+
+check_settings_two_column_layout() {
+  local grid_line shell_line column_line
+  grid_line="$(first_fixed_match '.marketing-settings-grid {' "$SETTINGS_VIEW_FILE")"
+  shell_line="$(first_fixed_match '.marketing-settings-shell {' "$SETTINGS_VIEW_FILE")"
+  column_line="$(first_fixed_match '<div class="marketing-settings-grid">' "$SETTINGS_VIEW_FILE")"
+
+  if [[ -z "$grid_line" || -z "$shell_line" || -z "$column_line" ]]; then
+    fail \
+      "settings page uses a structured two-column layout shell" \
+      "expected settings shell and two-column grid in $SETTINGS_VIEW_FILE; shell=${shell_line:-missing}; grid=${grid_line:-missing}; markup=${column_line:-missing}"
+    return
+  fi
+
+  pass \
+    "settings page uses a structured two-column layout shell" \
+    "shell=$shell_line | grid=$grid_line | markup=$column_line"
+}
+
+check_settings_mobile_responsive_layout() {
+  local media_line collapse_line field_line smtp_line whatsapp_line
+  media_line="$(first_fixed_match '@media (max-width: 767px)' "$SETTINGS_VIEW_FILE")"
+  collapse_line="$(first_fixed_match 'grid-template-columns: 1fr;' "$SETTINGS_VIEW_FILE")"
+  field_line="$(first_fixed_match 'marketing_send_enabled' "$SETTINGS_VIEW_FILE")"
+  smtp_line="$(first_fixed_match 'marketing_smtp_enabled' "$SETTINGS_VIEW_FILE")"
+  whatsapp_line="$(first_fixed_match 'marketing_whatsapp_enabled' "$SETTINGS_VIEW_FILE")"
+
+  if [[ -z "$media_line" || -z "$collapse_line" || -z "$field_line" || -z "$smtp_line" || -z "$whatsapp_line" ]]; then
+    fail \
+      "settings page collapses cleanly for mobile and preserves core settings fields" \
+      "expected responsive media query, single-column collapse, and core settings fields in $SETTINGS_VIEW_FILE; media=${media_line:-missing}; collapse=${collapse_line:-missing}; general=${field_line:-missing}; smtp=${smtp_line:-missing}; whatsapp=${whatsapp_line:-missing}"
+    return
+  fi
+
+  pass \
+    "settings page collapses cleanly for mobile and preserves core settings fields" \
+    "media=$media_line | collapse=$collapse_line | general=$field_line"
 }
 
 check_dashboard_operator_ui_structure() {
@@ -1486,6 +1527,8 @@ check_retention_preserves_unsubscribe_audit_events
 check_no_destructive_retention_calls
 check_click_aggregate_cleanup_scope
 check_click_aggregate_cleanup_bounds
+check_settings_two_column_layout
+check_settings_mobile_responsive_layout
 check_dashboard_operator_ui_structure
 check_release_validator_exists
 check_module_metadata_header

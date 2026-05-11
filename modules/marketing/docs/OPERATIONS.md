@@ -53,7 +53,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - From the standalone module root, run `bash scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - From that same standalone module root, run `bash scripts/verify_release_package.sh` before shipping any commercial ZIP.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 69 checks passed`.
+- Expected success result is `OK phase2-regressions 71 checks passed`.
 
 ## Uninstall Notes
 
