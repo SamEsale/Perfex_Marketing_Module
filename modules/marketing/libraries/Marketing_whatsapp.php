@@ -175,6 +175,11 @@ class Marketing_whatsapp
                 'success' => false,
                 'error' => 'WhatsApp API request failed.',
                 'status_code' => $statusCode,
+                'meta_error_message' => '',
+                'meta_error_type' => '',
+                'meta_error_code' => '',
+                'meta_error_subcode' => '',
+                'meta_fbtrace_id' => '',
             ];
         }
 
@@ -189,13 +194,26 @@ class Marketing_whatsapp
             ];
         }
 
-        $apiError = $this->sanitizeMessage($decoded['error']['message'] ?? $rawResponse);
-        $this->logSafeError('Marketing WhatsApp API send failed: status=' . $statusCode . ' message=' . $apiError);
+        $metaError = $this->extractMetaErrorDetails($decoded, $rawResponse);
+        $apiError = $metaError['meta_error_message'] !== '' ? $metaError['meta_error_message'] : 'WhatsApp API request was not accepted.';
+        $this->logSafeError(
+            'Marketing WhatsApp API send failed: status=' . $statusCode
+            . ' type=' . $metaError['meta_error_type']
+            . ' code=' . $metaError['meta_error_code']
+            . ' subcode=' . $metaError['meta_error_subcode']
+            . ' fbtrace_id=' . $metaError['meta_fbtrace_id']
+            . ' message=' . $apiError
+        );
 
         return [
             'success' => false,
-            'error' => $apiError !== '' ? $apiError : 'WhatsApp API request was not accepted.',
+            'error' => $apiError,
             'status_code' => $statusCode,
+            'meta_error_message' => $metaError['meta_error_message'],
+            'meta_error_type' => $metaError['meta_error_type'],
+            'meta_error_code' => $metaError['meta_error_code'],
+            'meta_error_subcode' => $metaError['meta_error_subcode'],
+            'meta_fbtrace_id' => $metaError['meta_fbtrace_id'],
         ];
     }
 
@@ -363,6 +381,30 @@ class Marketing_whatsapp
         $message = preg_replace('/\s+/', ' ', $message);
 
         return mb_substr($message, 0, 180);
+    }
+
+    protected function extractMetaErrorDetails($decoded, $rawResponse = '')
+    {
+        $error = is_array($decoded) && isset($decoded['error']) && is_array($decoded['error'])
+            ? $decoded['error']
+            : [];
+
+        return [
+            'meta_error_message' => $this->sanitizeMessage($error['message'] ?? $rawResponse),
+            'meta_error_type' => $this->sanitizeMetaScalar($error['type'] ?? ''),
+            'meta_error_code' => $this->sanitizeMetaScalar($error['code'] ?? ''),
+            'meta_error_subcode' => $this->sanitizeMetaScalar($error['error_subcode'] ?? ''),
+            'meta_fbtrace_id' => $this->sanitizeMetaScalar($error['fbtrace_id'] ?? ''),
+        ];
+    }
+
+    protected function sanitizeMetaScalar($value)
+    {
+        if (is_array($value) || is_object($value) || $value === null) {
+            return '';
+        }
+
+        return preg_replace('/[^A-Za-z0-9._:-]/', '', mb_substr(trim((string) $value), 0, 120));
     }
 
     protected function logSafeError($message)

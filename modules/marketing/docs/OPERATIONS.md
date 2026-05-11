@@ -53,7 +53,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - From the standalone module root, run `bash scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - From that same standalone module root, run `bash scripts/verify_release_package.sh` before shipping any commercial ZIP.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 71 checks passed`.
+- Expected success result is `OK phase2-regressions 79 checks passed`.
 
 ## Uninstall Notes
 
@@ -105,3 +105,8 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - If SES click telemetry is absent but module click tracking works, treat the issue as SES configuration-set publishing rather than outbound send failure
 - If Reply-to-Lead does not create or reuse leads, confirm inbound webhook delivery and Reply-to-Lead settings
 - If WhatsApp verification fails, confirm the stored verify token and the displayed webhook URL
+- If WhatsApp test sends fail with authentication or authorization errors, confirm the saved access token is still valid, not expired or revoked, and that it includes `whatsapp_business_messaging`.
+- Confirm the saved token is assigned access to the configured WhatsApp Phone Number ID. A valid token for the wrong business asset can still fail on the `/messages` endpoint.
+- Confirm the configured Phone Number ID is the Cloud API phone number identifier, not another business or app identifier.
+- Confirm the configured template name is approved for the configured template language such as `en_US`; template approval or locale mismatches are returned by Meta separately from token failures.
+- The `Send Test` button uses the currently saved WhatsApp settings only. Save settings changes first before testing a new token, phone number ID, template, or recipient.

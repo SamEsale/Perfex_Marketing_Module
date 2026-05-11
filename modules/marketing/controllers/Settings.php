@@ -882,10 +882,50 @@ class Settings extends AdminController
         if (!empty($result['success'])) {
             set_alert('success', _l('marketing_whatsapp_test_success'));
         } else {
-            $error = trim((string) ($result['error'] ?? ''));
-            set_alert('danger', _l('marketing_whatsapp_test_failure') . ($error !== '' ? ' ' . $error : ''));
+            set_alert('danger', $this->format_whatsapp_test_error_message($result));
         }
 
         redirect(admin_url('marketing/settings'));
+    }
+
+    protected function format_whatsapp_test_error_message(array $result)
+    {
+        $message = _l('marketing_whatsapp_test_failure');
+        $error = trim((string) ($result['error'] ?? ''));
+        if ($error !== '') {
+            $message .= ' ' . $error;
+        }
+
+        $details = [];
+        $statusCode = (int) ($result['status_code'] ?? 0);
+        if ($statusCode > 0) {
+            $details[] = 'HTTP ' . $statusCode;
+        }
+
+        $metaType = trim((string) ($result['meta_error_type'] ?? ''));
+        if ($metaType !== '') {
+            $details[] = 'type: ' . $metaType;
+        }
+
+        $metaCode = trim((string) ($result['meta_error_code'] ?? ''));
+        if ($metaCode !== '') {
+            $details[] = 'code: ' . $metaCode;
+        }
+
+        $metaSubcode = trim((string) ($result['meta_error_subcode'] ?? ''));
+        if ($metaSubcode !== '') {
+            $details[] = 'subcode: ' . $metaSubcode;
+        }
+
+        $fbtraceId = trim((string) ($result['meta_fbtrace_id'] ?? ''));
+        if ($fbtraceId !== '') {
+            $details[] = 'fbtrace_id: ' . $fbtraceId;
+        }
+
+        if (!empty($details)) {
+            $message .= ' (' . implode(', ', $details) . ')';
+        }
+
+        return $message;
     }
 }

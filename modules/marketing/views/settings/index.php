@@ -626,6 +626,9 @@ if (($license_state['status'] ?? '') === 'active') {
                                     <div class="panel-body">
                                         <h4 class="marketing-settings-panel-title"><?= _l('marketing_whatsapp_test_heading'); ?></h4>
                                         <p class="marketing-settings-panel-copy"><?= _l('marketing_whatsapp_test_note'); ?></p>
+                                        <div class="alert alert-info">
+                                            Send Test uses the currently saved WhatsApp settings. Save changes above before testing a new token, phone number ID, template, or recipient.
+                                        </div>
                                         <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-whatsapp-test-form']); ?>
                                         <input type="hidden" name="settings_form" value="whatsapp_test">
                                         <div class="marketing-settings-form-actions">

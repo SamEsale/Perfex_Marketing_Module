@@ -18,10 +18,12 @@ SES_SNS_FILE="modules/marketing/libraries/Marketing_ses_sns.php"
 INSTALL_FILE="modules/marketing/install.php"
 UNINSTALL_FILE="modules/marketing/uninstall.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
+WHATSAPP_FILE="modules/marketing/libraries/Marketing_whatsapp.php"
 DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
 MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
 CAMPAIGNS_CONTROLLER_FILE="modules/marketing/controllers/Campaigns.php"
 ANALYTICS_CONTROLLER_FILE="modules/marketing/controllers/Analytics.php"
+SETTINGS_CONTROLLER_FILE="modules/marketing/controllers/Settings.php"
 README_FILE="modules/marketing/README.md"
 INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
@@ -1315,6 +1317,67 @@ check_dashboard_operator_ui_structure() {
     "controls=$controls_line | health=$health_line | retention=$retention_line"
 }
 
+check_whatsapp_send_auth_diagnostics() {
+  local endpoint_line bearer_line message_line type_line code_line subcode_line trace_line
+  endpoint_line="$(first_fixed_match "rawurlencode(\$phoneNumberId) . '/messages'" "$WHATSAPP_FILE")"
+  bearer_line="$(first_fixed_match "'Authorization: Bearer ' . \$accessToken" "$WHATSAPP_FILE")"
+  message_line="$(first_fixed_match "'meta_error_message' => \$this->sanitizeMessage(\$error['message'] ?? \$rawResponse)" "$WHATSAPP_FILE")"
+  type_line="$(first_fixed_match "'meta_error_type' => \$this->sanitizeMetaScalar(\$error['type'] ?? '')" "$WHATSAPP_FILE")"
+  code_line="$(first_fixed_match "'meta_error_code' => \$this->sanitizeMetaScalar(\$error['code'] ?? '')" "$WHATSAPP_FILE")"
+  subcode_line="$(first_fixed_match "'meta_error_subcode' => \$this->sanitizeMetaScalar(\$error['error_subcode'] ?? '')" "$WHATSAPP_FILE")"
+  trace_line="$(first_fixed_match "'meta_fbtrace_id' => \$this->sanitizeMetaScalar(\$error['fbtrace_id'] ?? '')" "$WHATSAPP_FILE")"
+
+  if [[ -z "$endpoint_line" || -z "$bearer_line" || -z "$message_line" || -z "$type_line" || -z "$code_line" || -z "$subcode_line" || -z "$trace_line" ]]; then
+    fail \
+      "WhatsApp send path keeps phone_number_id endpoint, bearer auth, and structured Meta error parsing" \
+      "expected phone_number_id /messages endpoint, Authorization bearer header, and structured meta_error_* fields in modules/marketing/libraries/Marketing_whatsapp.php; endpoint=${endpoint_line:-missing}; bearer=${bearer_line:-missing}; message=${message_line:-missing}; type=${type_line:-missing}; code=${code_line:-missing}; subcode=${subcode_line:-missing}; trace=${trace_line:-missing}"
+    return
+  fi
+
+  pass \
+    "WhatsApp send path keeps phone_number_id endpoint, bearer auth, and structured Meta error parsing" \
+    "endpoint=$endpoint_line | bearer=$bearer_line | type=$type_line"
+}
+
+check_whatsapp_test_alert_safety() {
+  local formatter_line status_line type_line code_line trace_line warning_line
+  formatter_line="$(first_match 'function[[:space:]]+format_whatsapp_test_error_message' "$SETTINGS_CONTROLLER_FILE")"
+  status_line="$(first_fixed_match "\$details[] = 'HTTP ' . \$statusCode;" "$SETTINGS_CONTROLLER_FILE")"
+  type_line="$(first_fixed_match "\$details[] = 'type: ' . \$metaType;" "$SETTINGS_CONTROLLER_FILE")"
+  code_line="$(first_fixed_match "\$details[] = 'code: ' . \$metaCode;" "$SETTINGS_CONTROLLER_FILE")"
+  trace_line="$(first_fixed_match "\$details[] = 'fbtrace_id: ' . \$fbtraceId;" "$SETTINGS_CONTROLLER_FILE")"
+  warning_line="$(first_fixed_match 'Send Test uses the currently saved WhatsApp settings.' "$SETTINGS_VIEW_FILE")"
+
+  if [[ -z "$formatter_line" || -z "$status_line" || -z "$type_line" || -z "$code_line" || -z "$trace_line" || -z "$warning_line" ]]; then
+    fail \
+      "WhatsApp test alert exposes sanitized Meta diagnostics and warns that Send Test uses saved settings" \
+      "expected formatter plus HTTP/type/code/fbtrace fields in $SETTINGS_CONTROLLER_FILE and saved-settings warning in $SETTINGS_VIEW_FILE; formatter=${formatter_line:-missing}; status=${status_line:-missing}; type=${type_line:-missing}; code=${code_line:-missing}; trace=${trace_line:-missing}; warning=${warning_line:-missing}"
+    return
+  fi
+
+  pass \
+    "WhatsApp test alert exposes sanitized Meta diagnostics and warns that Send Test uses saved settings" \
+    "formatter=$formatter_line | status=$status_line | warning=$warning_line"
+}
+
+check_whatsapp_token_preserve_and_redaction() {
+  local preserve_line save_line redact_line
+  preserve_line="$(first_fixed_match "if (\$accessToken !== '') {" "$SETTINGS_CONTROLLER_FILE")"
+  save_line="$(first_fixed_match "\$settings['marketing_whatsapp_access_token'] = \$accessToken;" "$SETTINGS_CONTROLLER_FILE")"
+  redact_line="$(first_fixed_match "trim((string) get_option('marketing_whatsapp_access_token'))" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$preserve_line" || -z "$save_line" || -z "$redact_line" ]]; then
+    fail \
+      "WhatsApp blank-token preservation remains intact and token redaction stays in failure sanitization" \
+      "expected blank-token preserve guard in modules/marketing/controllers/Settings.php and token redaction in $CAMPAIGNS_FILE; preserve=${preserve_line:-missing}; save=${save_line:-missing}; redact=${redact_line:-missing}"
+    return
+  fi
+
+  pass \
+    "WhatsApp blank-token preservation remains intact and token redaction stays in failure sanitization" \
+    "preserve=$preserve_line | save=$save_line | redact=$redact_line"
+}
+
 check_release_validator_exists() {
   local shebang_line source_only_line zip_root_line
   if [[ ! -x "$RELEASE_VALIDATOR_FILE" ]]; then
@@ -1644,6 +1707,9 @@ check_settings_two_column_layout
 check_settings_mobile_responsive_layout
 check_settings_license_block_order
 check_dashboard_operator_ui_structure
+check_whatsapp_send_auth_diagnostics
+check_whatsapp_test_alert_safety
+check_whatsapp_token_preserve_and_redaction
 check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks
