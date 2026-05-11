@@ -129,6 +129,28 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
     }
+    .marketing-ops-compact-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        align-items: start;
+    }
+    .marketing-ops-compact-card {
+        min-width: 0;
+    }
+    .marketing-ops-compact-card .marketing-ops-section-title {
+        margin-bottom: 0;
+    }
+    .marketing-ops-compact-card .marketing-ops-section-copy {
+        min-height: 36px;
+    }
+    .marketing-ops-compact-card .marketing-ops-badge-grid {
+        margin-top: 12px;
+    }
+    .marketing-ops-compact-card .marketing-ops-table-shell {
+        max-height: 248px;
+        overflow: auto;
+    }
     .marketing-ops-badge-grid {
         display: flex;
         flex-wrap: wrap;
@@ -137,15 +159,20 @@
     @media (max-width: 991px) {
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
-        .marketing-ops-health-grid {
+        .marketing-ops-health-grid,
+        .marketing-ops-compact-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
     @media (max-width: 767px) {
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
-        .marketing-ops-health-grid {
+        .marketing-ops-health-grid,
+        .marketing-ops-compact-grid {
             grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+        .marketing-ops-compact-card .marketing-ops-section-copy {
+            min-height: 0;
         }
     }
 </style>
@@ -526,65 +553,67 @@
                                                 </p>
                                             <?php } ?>
                                         </div>
-                                        <div class="marketing-ops-section">
-                                            <h5 class="marketing-ops-section-title">Recent Warnings</h5>
-                                            <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
-                                            <?php if (empty($recentQueueWarnings)) { ?>
-                                                <div class="marketing-ops-empty">No warnings in the recent window.</div>
-                                            <?php } else { ?>
-                                                <div class="marketing-ops-badge-grid">
-                                                    <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
-                                                        <span class="marketing-ops-badge">
-                                                            <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
-                                                        </span>
-                                                    <?php } ?>
-                                                </div>
-                                            <?php } ?>
-                                        </div>
-                                        <div class="marketing-ops-section">
-                                            <h5 class="marketing-ops-section-title">Failure Metrics</h5>
-                                            <p class="marketing-ops-section-copy">Recent normalized provider and recipient failure signals retained for operator review.</p>
-                                            <?php if (empty($recentFailureMetrics)) { ?>
-                                                <div class="marketing-ops-empty">No failure signals in the recent diagnostics window.</div>
-                                            <?php } else { ?>
-                                                <div class="marketing-ops-badge-grid">
-                                                    <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
-                                                        <span class="marketing-ops-badge">
-                                                            <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
-                                                        </span>
-                                                    <?php } ?>
-                                                </div>
-                                            <?php } ?>
-                                        </div>
-                                        <div class="marketing-ops-section">
-                                            <h5 class="marketing-ops-section-title">Operator Audit</h5>
-                                            <p class="marketing-ops-section-copy">Recent manual queue and recovery actions recorded for administrator visibility.</p>
-                                            <?php if (empty($recentOperatorActions)) { ?>
-                                                <div class="marketing-ops-empty">No recent operator actions.</div>
-                                            <?php } else { ?>
-                                                <div class="marketing-ops-table-shell">
-                                                    <div class="table-responsive">
-                                                        <table class="table table-striped">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th>Action</th>
-                                                                    <th>Staff ID</th>
-                                                                    <th>When</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <?php foreach ($recentOperatorActions as $operatorAction) { ?>
-                                                                    <tr>
-                                                                        <td><?= html_escape(ucwords(str_replace('_', ' ', (string) ($operatorAction['action'] ?? '')))); ?></td>
-                                                                        <td><?= (int) ($operatorAction['performed_by'] ?? 0); ?></td>
-                                                                        <td><?= !empty($operatorAction['event_at']) ? html_escape((string) $operatorAction['event_at']) : '-'; ?></td>
-                                                                    </tr>
-                                                                <?php } ?>
-                                                            </tbody>
-                                                        </table>
+                                        <div class="marketing-ops-section marketing-ops-compact-grid">
+                                            <div class="marketing-ops-compact-card">
+                                                <h5 class="marketing-ops-section-title">Recent Warnings</h5>
+                                                <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
+                                                <?php if (empty($recentQueueWarnings)) { ?>
+                                                    <div class="marketing-ops-empty">No warnings in the recent window.</div>
+                                                <?php } else { ?>
+                                                    <div class="marketing-ops-badge-grid">
+                                                        <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
+                                                            <span class="marketing-ops-badge">
+                                                                <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
+                                                            </span>
+                                                        <?php } ?>
                                                     </div>
-                                                </div>
-                                            <?php } ?>
+                                                <?php } ?>
+                                            </div>
+                                            <div class="marketing-ops-compact-card">
+                                                <h5 class="marketing-ops-section-title">Failure Metrics</h5>
+                                                <p class="marketing-ops-section-copy">Recent normalized provider and recipient failure signals retained for operator review.</p>
+                                                <?php if (empty($recentFailureMetrics)) { ?>
+                                                    <div class="marketing-ops-empty">No failure signals in the recent diagnostics window.</div>
+                                                <?php } else { ?>
+                                                    <div class="marketing-ops-badge-grid">
+                                                        <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
+                                                            <span class="marketing-ops-badge">
+                                                                <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
+                                                            </span>
+                                                        <?php } ?>
+                                                    </div>
+                                                <?php } ?>
+                                            </div>
+                                            <div class="marketing-ops-compact-card">
+                                                <h5 class="marketing-ops-section-title">Operator Audit</h5>
+                                                <p class="marketing-ops-section-copy">Recent manual queue and recovery actions recorded for administrator visibility.</p>
+                                                <?php if (empty($recentOperatorActions)) { ?>
+                                                    <div class="marketing-ops-empty">No recent operator actions.</div>
+                                                <?php } else { ?>
+                                                    <div class="marketing-ops-table-shell">
+                                                        <div class="table-responsive">
+                                                            <table class="table table-striped">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Action</th>
+                                                                        <th>Staff ID</th>
+                                                                        <th>When</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <?php foreach ($recentOperatorActions as $operatorAction) { ?>
+                                                                        <tr>
+                                                                            <td><?= html_escape(ucwords(str_replace('_', ' ', (string) ($operatorAction['action'] ?? '')))); ?></td>
+                                                                            <td><?= (int) ($operatorAction['performed_by'] ?? 0); ?></td>
+                                                                            <td><?= !empty($operatorAction['event_at']) ? html_escape((string) $operatorAction['event_at']) : '-'; ?></td>
+                                                                        </tr>
+                                                                    <?php } ?>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                <?php } ?>
+                                            </div>
                                         </div>
                                         <div class="marketing-ops-section">
                                             <h5 class="marketing-ops-section-title">Telemetry Retention</h5>

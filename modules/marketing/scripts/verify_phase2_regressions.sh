@@ -1477,24 +1477,25 @@ check_settings_license_block_order() {
 }
 
 check_dashboard_operator_ui_structure() {
-  local controls_line health_line warnings_line failure_line audit_line retention_line
+  local controls_line health_line warnings_line failure_line audit_line retention_line compact_grid_line
   controls_line="$(first_fixed_match 'Queue Controls' "$DASHBOARD_VIEW_FILE")"
   health_line="$(first_fixed_match 'Queue Health' "$DASHBOARD_VIEW_FILE")"
   warnings_line="$(first_fixed_match 'Recent Warnings' "$DASHBOARD_VIEW_FILE")"
   failure_line="$(first_fixed_match 'Failure Metrics' "$DASHBOARD_VIEW_FILE")"
   audit_line="$(first_fixed_match 'Operator Audit' "$DASHBOARD_VIEW_FILE")"
   retention_line="$(first_fixed_match 'Telemetry Retention' "$DASHBOARD_VIEW_FILE")"
+  compact_grid_line="$(first_fixed_match 'marketing-ops-compact-grid' "$DASHBOARD_VIEW_FILE")"
 
-  if [[ -z "$controls_line" || -z "$health_line" || -z "$warnings_line" || -z "$failure_line" || -z "$audit_line" || -z "$retention_line" ]]; then
+  if [[ -z "$controls_line" || -z "$health_line" || -z "$warnings_line" || -z "$failure_line" || -z "$audit_line" || -z "$retention_line" || -z "$compact_grid_line" ]]; then
     fail \
       "dashboard operator controls are rendered as structured commercial UI sections" \
-      "expected Queue Controls, Queue Health, Recent Warnings, Failure Metrics, Operator Audit, and Telemetry Retention sections in $DASHBOARD_VIEW_FILE; controls=${controls_line:-missing}; health=${health_line:-missing}; warnings=${warnings_line:-missing}; failure=${failure_line:-missing}; audit=${audit_line:-missing}; retention=${retention_line:-missing}"
+      "expected Queue Controls, Queue Health, Recent Warnings, Failure Metrics, Operator Audit, Telemetry Retention, and compact diagnostics grid markup in $DASHBOARD_VIEW_FILE; controls=${controls_line:-missing}; health=${health_line:-missing}; warnings=${warnings_line:-missing}; failure=${failure_line:-missing}; audit=${audit_line:-missing}; retention=${retention_line:-missing}; compact_grid=${compact_grid_line:-missing}"
     return
   fi
 
   pass \
     "dashboard operator controls are rendered as structured commercial UI sections" \
-    "controls=$controls_line | health=$health_line | retention=$retention_line"
+    "controls=$controls_line | health=$health_line | compact_grid=$compact_grid_line"
 }
 
 check_whatsapp_send_auth_diagnostics() {
