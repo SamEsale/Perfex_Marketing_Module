@@ -415,24 +415,24 @@ class Marketing_dashboard_model extends App_Model
         }
 
         $humanCountExpr = $this->db->field_exists('human_click_count', $this->publicLinksTable)
-            ? 'COALESCE(SUM(human_click_count), 0)'
+            ? 'COALESCE(SUM(p.human_click_count), 0)'
             : '0';
         $uniqueCountExpr = $this->db->field_exists('unique_click_count', $this->publicLinksTable)
-            ? 'COALESCE(SUM(unique_click_count), 0)'
+            ? 'COALESCE(SUM(p.unique_click_count), 0)'
             : '0';
 
-        $rows = $this->db->select('original_url AS url, ' . $humanCountExpr . ' AS count, ' . $uniqueCountExpr . ' AS unique_count', false)
-            ->from($this->publicLinksTable)
-            ->where('token_type', 'click');
+        $rows = $this->db->select('p.original_url AS url, ' . $humanCountExpr . ' AS count, ' . $uniqueCountExpr . ' AS unique_count', false)
+            ->from($this->publicLinksTable . ' p')
+            ->where('p.token_type', 'click');
 
         if ($this->db->field_exists('is_active', $this->publicLinksTable)) {
-            $this->db->where('is_active', 1);
+            $this->db->where('p.is_active', 1);
         }
 
         $rows = $this->db
-            ->where('original_url IS NOT NULL', null, false)
-            ->where('original_url !=', '')
-            ->group_by('original_url')
+            ->where('p.original_url IS NOT NULL', null, false)
+            ->where('p.original_url !=', '')
+            ->group_by('p.original_url')
             ->order_by('count', 'DESC')
             ->order_by('unique_count', 'DESC')
             ->limit(max(1, (int) $topLimit))
