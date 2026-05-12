@@ -345,6 +345,75 @@
     margin-left: 0 !important;
 }
 
+.marketing-campaign-preview-shell {
+    border: 1px solid #dbe6f3;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.05), transparent 28%),
+        linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%);
+    padding: 18px 20px;
+}
+
+.marketing-campaign-preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.marketing-campaign-preview-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-review-note {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.marketing-campaign-preview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.marketing-campaign-preview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.marketing-campaign-preview-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.marketing-campaign-preview-rendered {
+    background: #ffffff;
+    border-radius: 12px;
+}
+
+.marketing-campaign-preview-frame {
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #f8fafc;
+}
+
 .marketing-builder-shell {
     --mb-bg: #f3f6fb;
     --mb-panel: #ffffff;
@@ -1023,6 +1092,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .marketing-campaign-preview-shell {
+        padding: 16px 18px;
+    }
+
     .marketing-builder-layout {
         grid-template-columns: 1fr;
         height: auto;
@@ -1078,6 +1151,15 @@
 
     .marketing-campaign-command-grid {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .marketing-campaign-preview-shell {
+        padding: 16px;
+    }
+
+    .marketing-campaign-preview-header {
+        flex-direction: column;
+        align-items: flex-start;
     }
 
     .marketing-builder-topbar {

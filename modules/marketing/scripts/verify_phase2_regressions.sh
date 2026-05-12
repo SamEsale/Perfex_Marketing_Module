@@ -31,6 +31,7 @@ RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
 CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
 CAMPAIGN_INDEX_VIEW_FILE="modules/marketing/views/campaigns/index.php"
+CAMPAIGN_PREVIEW_VIEW_FILE="modules/marketing/views/campaigns/preview.php"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
@@ -1161,6 +1162,27 @@ check_campaign_index_scanability() {
     "list=$list_line | marker=$marker_line | title=$title_line | status=$status_line | actions=$actions_line"
 }
 
+check_campaign_preview_review_shell() {
+  local preview_shell_line preview_marker_line preview_note_line preview_html_line show_shell_line show_frame_line
+  preview_shell_line="$(first_fixed_match 'marketing-campaign-preview-shell' "$CAMPAIGN_PREVIEW_VIEW_FILE")"
+  preview_marker_line="$(first_fixed_match 'data-marketing-campaign-preview-shell="1"' "$CAMPAIGN_PREVIEW_VIEW_FILE")"
+  preview_note_line="$(first_fixed_match 'marketing_campaign_preview_review_note' "$CAMPAIGN_PREVIEW_VIEW_FILE")"
+  preview_html_line="$(first_fixed_match '<?= $preview_html; ?>' "$CAMPAIGN_PREVIEW_VIEW_FILE")"
+  show_shell_line="$(first_fixed_match 'data-marketing-campaign-preview-frame-shell="1"' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  show_frame_line="$(first_fixed_match 'data-marketing-campaign-preview-frame="1"' "$CAMPAIGN_SHOW_VIEW_FILE")"
+
+  if [[ -z "$preview_shell_line" || -z "$preview_marker_line" || -z "$preview_note_line" || -z "$preview_html_line" || -z "$show_shell_line" || -z "$show_frame_line" ]]; then
+    fail \
+      "campaign preview and review surfaces remain wrapped without changing rendered preview semantics" \
+      "expected dedicated preview shell marker, review note key, raw preview_html output, and show-page preview shell/frame markers; preview_shell=${preview_shell_line:-missing}; preview_marker=${preview_marker_line:-missing}; preview_note=${preview_note_line:-missing}; preview_html=${preview_html_line:-missing}; show_shell=${show_shell_line:-missing}; show_frame=${show_frame_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign preview and review surfaces remain wrapped without changing rendered preview semantics" \
+    "preview_shell=$preview_shell_line | preview_marker=$preview_marker_line | preview_html=$preview_html_line | show_shell=$show_shell_line | show_frame=$show_frame_line"
+}
+
 check_no_destructive_event_history_clear() {
   local controller_post_line controller_model_line controller_flag_line model_guard_line safe_button_line destructive_button_line summary_line
   controller_post_line="$(first_fixed_match "if (\$this->input->post('run_retention_cleanup')) {" "$ANALYTICS_CONTROLLER_FILE")"
@@ -2097,6 +2119,7 @@ check_retention_dashboard_surface
 check_campaign_form_setup_guidance
 check_campaign_show_command_center
 check_campaign_index_scanability
+check_campaign_preview_review_shell
 check_no_destructive_event_history_clear
 check_analytics_view_array_guards
 check_analytics_runtime_fail_closed_queries

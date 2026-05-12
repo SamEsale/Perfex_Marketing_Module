@@ -322,11 +322,21 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                 <?php if (!$isWhatsappCampaign) { ?>
                                 <div class="panel_s">
                                     <div class="panel-body">
-                                        <h5 class="bold no-margin">Email Design Preview</h5>
+                                        <div class="marketing-campaign-preview-shell" data-marketing-campaign-preview-frame-shell="1">
+                                            <div class="marketing-campaign-preview-header">
+                                                <div>
+                                                    <h5 class="marketing-campaign-preview-title"><?= _l('marketing_campaign_preview_review_heading'); ?></h5>
+                                                    <p class="marketing-campaign-review-note no-margin"><?= _l('marketing_campaign_preview_review_note'); ?></p>
+                                                </div>
+                                                <div class="marketing-campaign-preview-actions">
+                                                    <a href="<?= admin_url('marketing/campaigns/preview/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('marketing_preview_campaign_button'); ?></a>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <?php if (!empty($preview_html)) { ?>
-                                            <div class="mtop15" style="border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;background:#f8fafc;">
+                                            <div class="marketing-campaign-preview-frame mtop15" data-marketing-campaign-preview-frame="1">
                                                 <iframe
-                                                    title="Email Design Preview"
+                                                    title="<?= html_escape(_l('marketing_campaign_preview_review_heading')); ?>"
                                                     sandbox=""
                                                     srcdoc="<?= html_escape($preview_html); ?>"
                                                     style="display:block;width:100%;min-height:720px;border:0;background:#ffffff;"
