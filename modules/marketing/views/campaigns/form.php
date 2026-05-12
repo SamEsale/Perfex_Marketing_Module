@@ -27,6 +27,7 @@ $whatsAppTemplateNameValue = trim((string) ($campaign['whatsapp_template_name'] 
 $whatsAppTemplateLanguageValue = trim((string) ($campaign['whatsapp_template_language'] ?? ''));
 $builderStateValue = trim((string) ($campaign['builder_state'] ?? ''));
 $htmlContentValue = trim((string) ($campaign['html_content'] ?? ''));
+$textContentValue = trim((string) ($campaign['text_content'] ?? ''));
 $scheduleMode = ($campaign['schedule_mode'] ?? 'now') === 'later' ? 'later' : 'now';
 $scheduledAtValue = trim((string) ($campaign['scheduled_at'] ?? ''));
 $scheduledAtDisplayValue = '';
@@ -619,7 +620,7 @@ foreach ($errorMessages as $errorMessage) {
                                 <div id="marketing-builder-advanced-panel" class="collapse">
                                     <div class="form-group">
                                         <label for="text_content"><?= _l('marketing_campaign_text_content'); ?></label>
-                                        <textarea id="text_content" name="text_content" class="form-control" rows="8"><?= html_escape($campaign['text_content']); ?></textarea>
+                                        <textarea id="text_content" name="text_content" class="form-control" rows="8" placeholder="<?= html_escape(_l('marketing_campaign_text_content_placeholder')); ?>"><?= html_escape($textContentValue); ?></textarea>
                                         <p class="marketing-builder-help mtop10"><?= _l('marketing_builder_plain_text_help'); ?></p>
                                     </div>
                                 </div>

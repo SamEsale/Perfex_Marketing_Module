@@ -7,6 +7,7 @@ class Campaigns extends AdminController
     private $saveCampaignErrorMessage = null;
     private const BUILDER_STATE_MARKER_PREFIX = '<!--marketing_builder_state:';
     private const BUILDER_STATE_MARKER_SUFFIX = '-->';
+    private const UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURE = 'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action';
 
     private const STATUSES = [
         'draft',
@@ -936,9 +937,9 @@ class Campaigns extends AdminController
             return false;
         }
 
-        $textContent = trim((string) $this->input->post('text_content', true));
+        $textContent = $this->normalize_campaign_text_content($this->input->post('text_content', true));
         if ($textContent === '') {
-            $textContent = $this->generate_plain_text_from_html($htmlContent);
+            $textContent = $this->normalize_campaign_text_content($this->generate_plain_text_from_html($htmlContent));
         }
 
         $targetingRules = $this->get_posted_targeting_rules();
@@ -1096,7 +1097,7 @@ class Campaigns extends AdminController
             'whatsapp_template_var3' => trim((string) $this->input->post('whatsapp_template_var3', true)),
             'html_content'  => $htmlContent,
             'builder_state' => $builderState,
-            'text_content'  => $this->input->post('text_content', true),
+            'text_content'  => $this->normalize_campaign_text_content($this->input->post('text_content', true)),
             'track_opens'   => $this->input->post('track_opens') ? 1 : 0,
             'track_clicks'  => $this->input->post('track_clicks') ? 1 : 0,
             'scheduled_at'  => $this->input->post('scheduled_at', true),
@@ -1175,6 +1176,7 @@ class Campaigns extends AdminController
         $campaign['targeting_rules'] = $this->marketing_campaigns_model->get_campaign_targeting_rules($campaign);
         $campaign['builder_state'] = $this->marketing_campaigns_model->strip_targeting_rules_from_builder_state($campaign['builder_state']);
         $campaign['html_content'] = $this->strip_builder_state_metadata($storedHtml);
+        $campaign['text_content'] = $this->normalize_campaign_text_content($campaign['text_content'] ?? '');
         $campaign['schedule_mode'] = !empty($campaign['scheduled_at']) && $campaign['status'] === 'scheduled' ? 'later' : 'now';
         $campaign['delivery_channel'] = $this->marketing_campaigns_model->normalize_delivery_channel($campaign['delivery_channel'] ?? 'email');
         $campaign['whatsapp_template_name'] = (string) ($campaign['whatsapp_template_name'] ?? '');
@@ -1257,6 +1259,20 @@ class Campaigns extends AdminController
         $text = preg_replace("/\n{3,}/", "\n\n", $text);
 
         return trim($text);
+    }
+
+    private function normalize_campaign_text_content($text)
+    {
+        $text = trim((string) $text);
+
+        return $this->is_unsafe_default_plain_text($text) ? '' : $text;
+    }
+
+    private function is_unsafe_default_plain_text($text)
+    {
+        $normalized = preg_replace('/\s+/', ' ', html_entity_decode(trim((string) $text), ENT_QUOTES, 'UTF-8'));
+
+        return $normalized === self::UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURE;
     }
 
     protected function respond_json(array $data, $statusCode = 200)

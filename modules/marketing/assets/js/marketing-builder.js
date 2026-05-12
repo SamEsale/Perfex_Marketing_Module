@@ -72,6 +72,14 @@
             || normalized.indexOf('&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== -1;
     }
 
+    function normalizePlainTextValue(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function isUnsafeDefaultPlainText(value) {
+        return normalizePlainTextValue(value) === 'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action';
+    }
+
     function qrSvgDataUri(text, size, caption, foreground, background) {
         var safeText = escapeHtml(text || '');
         var safeCaption = escapeHtml(caption || '');
@@ -1268,12 +1276,22 @@
 
         function syncFields() {
             var html = renderEmailHtml();
+            var generatedText;
             htmlField.value = html;
             if (builderStateField) {
                 builderStateField.value = serializeBuilderState();
             }
-            if (textField && !String(textField.value || '').trim()) {
-                textField.value = html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            if (textField) {
+                if (isUnsafeDefaultPlainText(textField.value)) {
+                    textField.value = '';
+                }
+
+                if (!String(textField.value || '').trim()) {
+                    generatedText = html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                    if (!isUnsafeDefaultPlainText(generatedText)) {
+                        textField.value = generatedText;
+                    }
+                }
             }
             updateUnsubscribeStatus();
         }

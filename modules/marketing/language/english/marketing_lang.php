@@ -550,6 +550,7 @@ $lang['marketing_campaign_schedule_for_later']  = 'Schedule for later';
 $lang['marketing_campaign_schedule_future_note'] = 'Scheduled campaigns must use a future date and time.';
 $lang['marketing_campaign_html_content']        = 'HTML Content';
 $lang['marketing_campaign_text_content']        = 'Plain Text Content';
+$lang['marketing_campaign_text_content_placeholder'] = 'Optional plain-text fallback. Leave blank to auto-generate from HTML when supported.';
 $lang['marketing_campaign_prepare_recipients']  = 'Prepare Recipients';
 $lang['marketing_campaign_schedule']            = 'Schedule Campaign';
 $lang['marketing_campaign_cancel_scheduled']    = 'Cancel Scheduled Campaign';

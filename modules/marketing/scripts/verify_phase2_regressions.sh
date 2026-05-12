@@ -1210,6 +1210,26 @@ check_campaign_form_footer_review_shell() {
     "footer=$footer_line | marker=$marker_line | submit=$submit_line | builder_state=$state_line | html=$html_line | text=$text_line"
 }
 
+check_campaign_plain_text_placeholder_safety() {
+  local text_line placeholder_line state_line html_line unsafe_line
+  text_line="$(first_fixed_match 'id="text_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  placeholder_line="$(first_fixed_match 'marketing_campaign_text_content_placeholder' "$CAMPAIGN_FORM_VIEW_FILE")"
+  state_line="$(first_fixed_match 'id="builder_state"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  html_line="$(first_fixed_match 'id="html_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  unsafe_line="$(first_fixed_match 'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action' "$CAMPAIGN_FORM_VIEW_FILE")"
+
+  if [[ -z "$text_line" || -z "$placeholder_line" || -z "$state_line" || -z "$html_line" || -n "$unsafe_line" ]]; then
+    fail \
+      "campaign plain-text fallback stays placeholder-based and avoids hardcoded demo content in the form view" \
+      "expected text_content field, placeholder marker, builder_state/html_content fields, and no unsafe demo copy in $CAMPAIGN_FORM_VIEW_FILE; text=${text_line:-missing}; placeholder=${placeholder_line:-missing}; builder_state=${state_line:-missing}; html=${html_line:-missing}; unsafe_demo=${unsafe_line:-present}"
+    return
+  fi
+
+  pass \
+    "campaign plain-text fallback stays placeholder-based and avoids hardcoded demo content in the form view" \
+    "text=$text_line | placeholder=$placeholder_line | builder_state=$state_line | html=$html_line"
+}
+
 check_campaign_show_command_center() {
   local center_line marker_line title_line grid_line actions_line next_step_line readiness_line
   center_line="$(first_fixed_match 'marketing-campaign-command-center' "$CAMPAIGN_SHOW_VIEW_FILE")"
@@ -2237,6 +2257,7 @@ check_campaign_form_setup_guidance
 check_campaign_audience_estimate_shell
 check_campaign_delivery_settings_shell
 check_campaign_form_footer_review_shell
+check_campaign_plain_text_placeholder_safety
 check_campaign_builder_workspace_layout
 check_campaign_show_command_center
 check_campaign_send_schedule_guidance
