@@ -487,8 +487,24 @@ foreach ($errorMessages as $errorMessage) {
 	                            </div>
 	                        </div>
 
-	                        <h4 class="bold mtop30 marketing-email-fields"><?= _l('marketing_builder_heading'); ?></h4>
-	                        <div class="marketing-builder-shell marketing-email-fields">
+	                        <div class="marketing-campaign-builder-shell marketing-email-fields" data-marketing-campaign-builder-shell="1">
+	                            <div class="marketing-campaign-builder-header">
+	                                <div>
+	                                    <h4 class="marketing-campaign-builder-title"><?= _l('marketing_builder_heading'); ?></h4>
+	                                    <p class="marketing-campaign-builder-helper no-margin"><?= _l('marketing_campaign_builder_helper'); ?></p>
+	                                </div>
+	                                <div class="marketing-campaign-builder-actions">
+	                                    <span class="marketing-campaign-builder-action-chip"><?= _l('marketing_campaign_builder_action_blocks'); ?></span>
+	                                    <span class="marketing-campaign-builder-action-chip"><?= _l('marketing_campaign_builder_action_preview'); ?></span>
+	                                    <span class="marketing-campaign-builder-action-chip"><?= _l('marketing_campaign_builder_action_review'); ?></span>
+	                                </div>
+	                            </div>
+	                            <div class="marketing-campaign-builder-next-step">
+	                                <span class="marketing-campaign-builder-next-step-label"><?= _l('marketing_campaign_setup_next_step'); ?></span>
+	                                <span class="marketing-campaign-builder-next-step-copy"><?= _l('marketing_campaign_builder_next_step_helper'); ?></span>
+	                            </div>
+	                            <div class="marketing-campaign-builder-workspace">
+	                                <div class="marketing-builder-shell">
                             <div class="marketing-builder-topbar">
                                 <div class="marketing-builder-topbar-group">
                                     <button type="button" class="btn btn-default" id="marketing-builder-start-design"><?= _l('marketing_builder_start_design'); ?></button>
@@ -537,7 +553,7 @@ foreach ($errorMessages as $errorMessage) {
                         <input type="hidden" id="builder_state" name="builder_state" value="<?= html_escape(isset($campaign['builder_state']) ? $campaign['builder_state'] : ''); ?>">
                         <input type="file" id="marketing-builder-image-input" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" class="hide">
 
-                        <div class="panel_s marketing-builder-advanced mtop20 marketing-email-fields">
+                        <div class="panel_s marketing-builder-advanced mtop20">
                             <div class="panel-body">
                                 <h4 class="bold">
                                     <a data-toggle="collapse" href="#marketing-builder-advanced-panel" aria-expanded="false" aria-controls="marketing-builder-advanced-panel">
@@ -553,6 +569,8 @@ foreach ($errorMessages as $errorMessage) {
                                 </div>
                             </div>
                         </div>
+	                            </div>
+	                        </div>
 
                         <div class="mtop20">
                             <button type="submit" class="btn btn-primary"><?= _l('submit'); ?></button>

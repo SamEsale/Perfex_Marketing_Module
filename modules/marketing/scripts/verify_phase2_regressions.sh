@@ -1116,6 +1116,32 @@ check_campaign_form_setup_guidance() {
     "panel=$panel_line | marker=$marker_line | heading=$heading_line | checklist=$checklist_line | next_step=$next_step_line"
 }
 
+check_campaign_builder_workspace_layout() {
+  local shell_line marker_line header_line workspace_line canvas_line frame_line modal_line preview_frame_line state_line html_line text_line
+  shell_line="$(first_fixed_match 'marketing-campaign-builder-shell' "$CAMPAIGN_FORM_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-builder-shell="1"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  header_line="$(first_fixed_match 'marketing-campaign-builder-header' "$CAMPAIGN_FORM_VIEW_FILE")"
+  workspace_line="$(first_fixed_match 'marketing-campaign-builder-workspace' "$CAMPAIGN_FORM_VIEW_FILE")"
+  canvas_line="$(first_fixed_match 'id="marketing-builder-canvas"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  frame_line="$(first_fixed_match 'id="marketing-builder-canvas-frame"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  modal_line="$(first_fixed_match 'id="marketingBuilderPreviewModal"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  preview_frame_line="$(first_fixed_match 'id="marketing-builder-preview-frame"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  state_line="$(first_fixed_match 'id="builder_state"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  html_line="$(first_fixed_match 'id="html_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  text_line="$(first_fixed_match 'id="text_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
+
+  if [[ -z "$shell_line" || -z "$marker_line" || -z "$header_line" || -z "$workspace_line" || -z "$canvas_line" || -z "$frame_line" || -z "$modal_line" || -z "$preview_frame_line" || -z "$state_line" || -z "$html_line" || -z "$text_line" ]]; then
+    fail \
+      "campaign builder workspace stays wrapped while preserving JS-critical builder roots, modal preview, and hidden content fields" \
+      "expected builder shell marker, header, workspace wrapper, canvas ids, preview modal/frame, and hidden html/builder/text fields in $CAMPAIGN_FORM_VIEW_FILE; shell=${shell_line:-missing}; marker=${marker_line:-missing}; header=${header_line:-missing}; workspace=${workspace_line:-missing}; canvas=${canvas_line:-missing}; frame=${frame_line:-missing}; modal=${modal_line:-missing}; preview_frame=${preview_frame_line:-missing}; state=${state_line:-missing}; html=${html_line:-missing}; text=${text_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign builder workspace stays wrapped while preserving JS-critical builder roots, modal preview, and hidden content fields" \
+    "shell=$shell_line | marker=$marker_line | workspace=$workspace_line | canvas=$canvas_line | modal=$modal_line | state=$state_line"
+}
+
 check_campaign_show_command_center() {
   local center_line marker_line title_line grid_line actions_line next_step_line readiness_line
   center_line="$(first_fixed_match 'marketing-campaign-command-center' "$CAMPAIGN_SHOW_VIEW_FILE")"
@@ -2117,6 +2143,7 @@ check_retention_cleanup_scope
 check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_campaign_form_setup_guidance
+check_campaign_builder_workspace_layout
 check_campaign_show_command_center
 check_campaign_index_scanability
 check_campaign_preview_review_shell

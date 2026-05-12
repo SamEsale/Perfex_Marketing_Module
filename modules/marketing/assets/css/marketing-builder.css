@@ -263,6 +263,95 @@
     border-top: 1px solid #e2e8f0;
 }
 
+.marketing-campaign-builder-shell {
+    margin: 30px 0 0;
+}
+
+.marketing-campaign-builder-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.marketing-campaign-builder-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-builder-helper {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 760px;
+}
+
+.marketing-campaign-builder-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.marketing-campaign-builder-action-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 11px;
+    border-radius: 999px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+
+.marketing-campaign-builder-next-step {
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.marketing-campaign-builder-next-step-label {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.marketing-campaign-builder-next-step-copy {
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.marketing-campaign-builder-workspace {
+    border: 1px solid #dbe6f3;
+    border-radius: 24px;
+    background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.05), transparent 22%),
+        linear-gradient(180deg, #fbfdff 0%, #f4f8fd 100%);
+    padding: 16px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+}
+
+.marketing-campaign-builder-workspace .marketing-builder-shell {
+    border-radius: 20px;
+}
+
 .marketing-campaign-list-table td {
     vertical-align: middle !important;
 }
@@ -1092,6 +1181,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .marketing-campaign-builder-actions {
+        justify-content: flex-start;
+    }
+
     .marketing-campaign-preview-shell {
         padding: 16px 18px;
     }
@@ -1151,6 +1244,21 @@
 
     .marketing-campaign-command-grid {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .marketing-campaign-builder-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .marketing-campaign-builder-next-step {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .marketing-campaign-builder-workspace {
+        padding: 12px;
+        border-radius: 18px;
     }
 
     .marketing-campaign-preview-shell {
