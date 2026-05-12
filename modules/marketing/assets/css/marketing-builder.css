@@ -1,3 +1,142 @@
+.marketing-campaign-setup-panel {
+    margin: 24px 0 28px;
+    padding: 20px 22px;
+    border: 1px solid #dbe6f3;
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 28%),
+        linear-gradient(180deg, #f8fbff 0%, #eff5fc 100%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.marketing-campaign-setup-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.marketing-campaign-setup-heading {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-setup-helper {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.marketing-campaign-setup-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 58px;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: #e0ecff;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .03em;
+}
+
+.marketing-campaign-setup-checklist {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.marketing-campaign-setup-item {
+    min-width: 0;
+    padding: 14px 15px;
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.marketing-campaign-setup-item.is-complete {
+    border-color: #bbf7d0;
+    background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.marketing-campaign-setup-item.is-attention {
+    border-color: #fde68a;
+    background: linear-gradient(180deg, #ffffff 0%, #fffbeb 100%);
+}
+
+.marketing-campaign-setup-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.marketing-campaign-setup-item-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-setup-item-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+
+.marketing-campaign-setup-item.is-complete .marketing-campaign-setup-item-status {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.marketing-campaign-setup-item.is-attention .marketing-campaign-setup-item-status {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.marketing-campaign-setup-item-copy {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.marketing-campaign-setup-next-step {
+    margin-top: 16px;
+    padding-top: 15px;
+    border-top: 1px solid #dbe6f3;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.marketing-campaign-setup-next-step-label {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.marketing-campaign-setup-next-step-copy {
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
 .marketing-builder-shell {
     --mb-bg: #f3f6fb;
     --mb-panel: #ffffff;
@@ -668,6 +807,10 @@
 }
 
 @media (max-width: 1199px) {
+    .marketing-campaign-setup-checklist {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .marketing-builder-layout {
         grid-template-columns: 1fr;
         height: auto;
@@ -694,6 +837,24 @@
 }
 
 @media (max-width: 767px) {
+    .marketing-campaign-setup-panel {
+        padding: 18px;
+    }
+
+    .marketing-campaign-setup-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .marketing-campaign-setup-checklist {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .marketing-campaign-setup-next-step {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
     .marketing-builder-topbar {
         padding: 14px;
     }

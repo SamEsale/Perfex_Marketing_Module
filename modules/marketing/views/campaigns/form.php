@@ -12,7 +12,111 @@ $builderJsVer   = is_file($builderJsPath) ? (string) filemtime($builderJsPath) :
 <?php
 $errorMessages = !empty($form_error_message) ? (is_array($form_error_message) ? $form_error_message : [$form_error_message]) : [];
 $hasUnsubscribeSaveError = false;
+$audiences = isset($audiences) && is_array($audiences) ? $audiences : [];
 $targetingRules = isset($campaign['targeting_rules']) && is_array($campaign['targeting_rules']) ? $campaign['targeting_rules'] : [];
+$deliveryChannel = isset($campaign['delivery_channel']) && $campaign['delivery_channel'] === 'whatsapp' ? 'whatsapp' : 'email';
+$isWhatsappCampaign = $deliveryChannel === 'whatsapp';
+$campaignNameValue = trim((string) ($campaign['name'] ?? ''));
+$subjectValue = trim((string) ($campaign['subject'] ?? ''));
+$audienceId = (int) ($campaign['list_id'] ?? 0);
+$audienceName = '';
+$targetingMode = ($targetingRules['send_mode'] ?? 'full') === 'filtered' ? 'filtered' : 'full';
+$fromNameValue = trim((string) ($campaign['from_name'] ?? ''));
+$fromEmailValue = trim((string) ($campaign['from_email'] ?? ''));
+$whatsAppTemplateNameValue = trim((string) ($campaign['whatsapp_template_name'] ?? ''));
+$whatsAppTemplateLanguageValue = trim((string) ($campaign['whatsapp_template_language'] ?? ''));
+$builderStateValue = trim((string) ($campaign['builder_state'] ?? ''));
+$htmlContentValue = trim((string) ($campaign['html_content'] ?? ''));
+$scheduleMode = ($campaign['schedule_mode'] ?? 'now') === 'later' ? 'later' : 'now';
+$scheduledAtValue = trim((string) ($campaign['scheduled_at'] ?? ''));
+$scheduledAtDisplayValue = '';
+$trackOpensEnabled = !empty($campaign['track_opens']);
+$trackClicksEnabled = !empty($campaign['track_clicks']);
+
+foreach ($audiences as $audience) {
+    if ((int) ($audience['id'] ?? 0) === $audienceId) {
+        $audienceName = trim((string) ($audience['name'] ?? ''));
+        break;
+    }
+}
+
+if ($scheduledAtValue !== '') {
+    $scheduledTimestamp = strtotime($scheduledAtValue);
+    $scheduledAtDisplayValue = $scheduledTimestamp ? date('Y-m-d H:i', $scheduledTimestamp) : $scheduledAtValue;
+}
+
+$basicsReady = $campaignNameValue !== '' && ($isWhatsappCampaign || $subjectValue !== '');
+$audienceReady = $audienceId > 0;
+$senderReady = $isWhatsappCampaign || ($fromNameValue !== '' && $fromEmailValue !== '');
+$hasBuilderContent = $builderStateValue !== '' || $htmlContentValue !== '';
+$contentReady = $isWhatsappCampaign
+    ? ($whatsAppTemplateNameValue !== '' && $whatsAppTemplateLanguageValue !== '')
+    : $hasBuilderContent;
+$scheduleReady = $scheduleMode !== 'later' || $scheduledAtValue !== '';
+
+$trackingSummary = $isWhatsappCampaign
+    ? _l('marketing_campaign_setup_tracking_not_applicable')
+    : sprintf(
+        _l('marketing_campaign_setup_tracking_summary'),
+        $trackOpensEnabled ? _l('marketing_campaign_setup_tracking_on') : _l('marketing_campaign_setup_tracking_off'),
+        $trackClicksEnabled ? _l('marketing_campaign_setup_tracking_on') : _l('marketing_campaign_setup_tracking_off')
+    );
+
+$setupChecklist = [
+    [
+        'label' => _l('marketing_campaign_setup_basics'),
+        'complete' => $basicsReady,
+        'detail' => $basicsReady
+            ? ($isWhatsappCampaign ? _l('marketing_campaign_setup_basics_ready_whatsapp') : _l('marketing_campaign_setup_basics_ready_email'))
+            : ($isWhatsappCampaign ? _l('marketing_campaign_setup_basics_pending_whatsapp') : _l('marketing_campaign_setup_basics_pending_email')),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_audience'),
+        'complete' => $audienceReady,
+        'detail' => $audienceReady
+            ? trim($audienceName . ' - ' . ($targetingMode === 'filtered' ? _l('marketing_campaign_setup_audience_filtered') : _l('marketing_campaign_setup_audience_full')))
+            : _l('marketing_campaign_setup_audience_pending'),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_channel'),
+        'complete' => true,
+        'detail' => $isWhatsappCampaign ? _l('marketing_campaign_delivery_channel_whatsapp') : _l('marketing_campaign_delivery_channel_email'),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_sender'),
+        'complete' => $senderReady,
+        'detail' => $isWhatsappCampaign
+            ? _l('marketing_campaign_setup_sender_optional')
+            : ($senderReady ? _l('marketing_campaign_setup_sender_ready') : _l('marketing_campaign_setup_sender_pending')),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_content'),
+        'complete' => $contentReady,
+        'detail' => $isWhatsappCampaign
+            ? ($contentReady ? _l('marketing_campaign_setup_content_ready_whatsapp') : _l('marketing_campaign_setup_content_pending_whatsapp'))
+            : ($contentReady ? _l('marketing_campaign_setup_content_ready_email') : _l('marketing_campaign_setup_content_pending_email')),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_tracking'),
+        'complete' => true,
+        'detail' => $trackingSummary,
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_schedule'),
+        'complete' => $scheduleReady,
+        'detail' => $scheduleMode === 'later'
+            ? ($scheduleReady ? sprintf(_l('marketing_campaign_setup_schedule_later'), $scheduledAtDisplayValue) : _l('marketing_campaign_setup_schedule_missing'))
+            : _l('marketing_campaign_setup_schedule_now'),
+    ],
+];
+
+$setupChecklistCompleteCount = 0;
+foreach ($setupChecklist as $setupChecklistItem) {
+    if (!empty($setupChecklistItem['complete'])) {
+        $setupChecklistCompleteCount++;
+    }
+}
+
 foreach ($errorMessages as $errorMessage) {
     if (trim((string) $errorMessage) === _l('marketing_campaign_unsubscribe_save_required')) {
         $hasUnsubscribeSaveError = true;
@@ -353,13 +457,38 @@ foreach ($errorMessages as $errorMessage) {
                             </div>
                         </div>
 
-                        <div class="alert alert-info marketing-email-fields">
-                            <p class="no-margin"><strong><?= _l('marketing_builder_unsubscribe_help'); ?></strong></p>
-                            <p class="mtop10 no-margin"><?= _l('marketing_builder_ses_tracking_help'); ?></p>
-                        </div>
+	                        <div class="alert alert-info marketing-email-fields">
+	                            <p class="no-margin"><strong><?= _l('marketing_builder_unsubscribe_help'); ?></strong></p>
+	                            <p class="mtop10 no-margin"><?= _l('marketing_builder_ses_tracking_help'); ?></p>
+	                        </div>
 
-                        <h4 class="bold mtop30 marketing-email-fields"><?= _l('marketing_builder_heading'); ?></h4>
-                        <div class="marketing-builder-shell marketing-email-fields">
+	                        <div class="marketing-campaign-setup-panel" data-marketing-campaign-setup="1">
+	                            <div class="marketing-campaign-setup-header">
+	                                <div>
+	                                    <h4 class="marketing-campaign-setup-heading"><?= _l('marketing_campaign_setup_heading'); ?></h4>
+	                                    <p class="marketing-campaign-setup-helper no-margin"><?= _l('marketing_campaign_setup_helper'); ?></p>
+	                                </div>
+	                                <span class="marketing-campaign-setup-score"><?= (int) $setupChecklistCompleteCount; ?>/<?= count($setupChecklist); ?></span>
+	                            </div>
+	                            <div class="marketing-campaign-setup-checklist">
+	                                <?php foreach ($setupChecklist as $setupChecklistItem) { ?>
+	                                    <div class="marketing-campaign-setup-item <?= !empty($setupChecklistItem['complete']) ? 'is-complete' : 'is-attention'; ?>">
+	                                        <div class="marketing-campaign-setup-item-top">
+	                                            <span class="marketing-campaign-setup-item-label"><?= html_escape($setupChecklistItem['label']); ?></span>
+	                                            <span class="marketing-campaign-setup-item-status"><?= !empty($setupChecklistItem['complete']) ? _l('marketing_campaign_setup_complete') : _l('marketing_campaign_setup_needs_attention'); ?></span>
+	                                        </div>
+	                                        <p class="marketing-campaign-setup-item-copy no-margin"><?= html_escape($setupChecklistItem['detail']); ?></p>
+	                                    </div>
+	                                <?php } ?>
+	                            </div>
+	                            <div class="marketing-campaign-setup-next-step">
+	                                <span class="marketing-campaign-setup-next-step-label"><?= _l('marketing_campaign_setup_next_step'); ?></span>
+	                                <span class="marketing-campaign-setup-next-step-copy"><?= _l('marketing_campaign_setup_next_step_helper'); ?></span>
+	                            </div>
+	                        </div>
+
+	                        <h4 class="bold mtop30 marketing-email-fields"><?= _l('marketing_builder_heading'); ?></h4>
+	                        <div class="marketing-builder-shell marketing-email-fields">
                             <div class="marketing-builder-topbar">
                                 <div class="marketing-builder-topbar-group">
                                     <button type="button" class="btn btn-default" id="marketing-builder-start-design"><?= _l('marketing_builder_start_design'); ?></button>

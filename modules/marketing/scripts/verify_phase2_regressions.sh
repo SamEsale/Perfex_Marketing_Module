@@ -28,6 +28,7 @@ README_FILE="modules/marketing/README.md"
 INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
+CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
@@ -1092,6 +1093,26 @@ check_retention_dashboard_surface() {
     "dashboard=$dashboard_line | view=$view_line | candidate=$candidate_line | click_candidate=$click_candidate_line"
 }
 
+check_campaign_form_setup_guidance() {
+  local panel_line marker_line heading_line checklist_line next_step_line
+  panel_line="$(first_fixed_match 'marketing-campaign-setup-panel' "$CAMPAIGN_FORM_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-setup="1"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  heading_line="$(first_fixed_match 'marketing_campaign_setup_heading' "$CAMPAIGN_FORM_VIEW_FILE")"
+  checklist_line="$(first_fixed_match 'marketing-campaign-setup-checklist' "$CAMPAIGN_FORM_VIEW_FILE")"
+  next_step_line="$(first_fixed_match 'marketing_campaign_setup_next_step' "$CAMPAIGN_FORM_VIEW_FILE")"
+
+  if [[ -z "$panel_line" || -z "$marker_line" || -z "$heading_line" || -z "$checklist_line" || -z "$next_step_line" ]]; then
+    fail \
+      "campaign form surfaces compact setup guidance without send or model coupling" \
+      "expected setup panel, marker, heading key, checklist wrapper, and next-step helper in $CAMPAIGN_FORM_VIEW_FILE; panel=${panel_line:-missing}; marker=${marker_line:-missing}; heading=${heading_line:-missing}; checklist=${checklist_line:-missing}; next_step=${next_step_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign form surfaces compact setup guidance without send or model coupling" \
+    "panel=$panel_line | marker=$marker_line | heading=$heading_line | checklist=$checklist_line | next_step=$next_step_line"
+}
+
 check_no_destructive_event_history_clear() {
   local controller_post_line controller_model_line controller_flag_line model_guard_line safe_button_line destructive_button_line summary_line
   controller_post_line="$(first_fixed_match "if (\$this->input->post('run_retention_cleanup')) {" "$ANALYTICS_CONTROLLER_FILE")"
@@ -2025,6 +2046,7 @@ check_retention_excludes_audit_critical_events
 check_retention_cleanup_scope
 check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
+check_campaign_form_setup_guidance
 check_no_destructive_event_history_clear
 check_analytics_view_array_guards
 check_analytics_runtime_fail_closed_queries
