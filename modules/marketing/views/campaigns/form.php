@@ -628,9 +628,18 @@ foreach ($errorMessages as $errorMessage) {
 	                            </div>
 	                        </div>
 
-                        <div class="mtop20">
-                            <button type="submit" class="btn btn-primary"><?= _l('submit'); ?></button>
-                            <a href="<?= admin_url('marketing/campaigns'); ?>" class="btn btn-default"><?= _l('back'); ?></a>
+                        <div class="marketing-campaign-form-footer" data-marketing-campaign-form-footer="1">
+                            <div class="marketing-campaign-form-footer-main">
+                                <div>
+                                    <h4 class="marketing-campaign-form-footer-title"><?= _l('marketing_campaign_form_footer_heading'); ?></h4>
+                                    <p class="marketing-campaign-form-footer-copy no-margin"><?= _l('marketing_campaign_form_footer_helper'); ?></p>
+                                </div>
+                                <div class="marketing-campaign-form-footer-actions">
+                                    <button type="submit" class="btn btn-primary"><?= _l('submit'); ?></button>
+                                    <a href="<?= admin_url('marketing/campaigns'); ?>" class="btn btn-default"><?= _l('back'); ?></a>
+                                </div>
+                            </div>
+                            <p class="marketing-campaign-form-footer-note no-margin"><?= _l('marketing_campaign_form_footer_note'); ?></p>
                         </div>
                         <?= form_close(); ?>
                     </div>

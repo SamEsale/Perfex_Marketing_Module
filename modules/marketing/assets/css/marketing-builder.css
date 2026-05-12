@@ -624,6 +624,53 @@
     align-items: center;
 }
 
+.marketing-campaign-form-footer {
+    margin-top: 24px;
+    padding: 18px 20px;
+    border: 1px solid #dbe6f3;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.marketing-campaign-form-footer-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.marketing-campaign-form-footer-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-form-footer-copy {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 760px;
+}
+
+.marketing-campaign-form-footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.marketing-campaign-form-footer-note {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #dbe6f3;
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
 .marketing-campaign-list-table td {
     vertical-align: middle !important;
 }
@@ -1461,6 +1508,10 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
+    .marketing-campaign-form-footer-actions {
+        justify-content: flex-start;
+    }
+
     .marketing-campaign-builder-actions {
         justify-content: flex-start;
     }
@@ -1560,6 +1611,21 @@
     .marketing-campaign-delivery-tracking-row {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .marketing-campaign-form-footer {
+        padding: 16px;
+    }
+
+    .marketing-campaign-form-footer-main {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .marketing-campaign-form-footer-actions {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
     }
 
     .marketing-campaign-send-workflow-steps,

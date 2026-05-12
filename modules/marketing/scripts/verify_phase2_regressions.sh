@@ -1189,6 +1189,27 @@ check_campaign_delivery_settings_shell() {
     "shell=$shell_line | marker=$marker_line | channel=$channel_line | from_name=$from_name_line | track_opens=$opens_line | scheduled_at=$scheduled_line"
 }
 
+check_campaign_form_footer_review_shell() {
+  local footer_line marker_line submit_line state_line html_line text_line
+  footer_line="$(first_fixed_match 'marketing-campaign-form-footer' "$CAMPAIGN_FORM_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-form-footer="1"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  submit_line="$(first_fixed_match 'type="submit" class="btn btn-primary"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  state_line="$(first_fixed_match 'id="builder_state"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  html_line="$(first_fixed_match 'id="html_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  text_line="$(first_fixed_match 'id="text_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
+
+  if [[ -z "$footer_line" || -z "$marker_line" || -z "$submit_line" || -z "$state_line" || -z "$html_line" || -z "$text_line" ]]; then
+    fail \
+      "campaign form footer stays guided while preserving submit and hidden builder content fields" \
+      "expected form footer marker, primary submit button, and builder_state/html_content/text_content fields in $CAMPAIGN_FORM_VIEW_FILE; footer=${footer_line:-missing}; marker=${marker_line:-missing}; submit=${submit_line:-missing}; builder_state=${state_line:-missing}; html=${html_line:-missing}; text=${text_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign form footer stays guided while preserving submit and hidden builder content fields" \
+    "footer=$footer_line | marker=$marker_line | submit=$submit_line | builder_state=$state_line | html=$html_line | text=$text_line"
+}
+
 check_campaign_show_command_center() {
   local center_line marker_line title_line grid_line actions_line next_step_line readiness_line
   center_line="$(first_fixed_match 'marketing-campaign-command-center' "$CAMPAIGN_SHOW_VIEW_FILE")"
@@ -2215,6 +2236,7 @@ check_retention_dashboard_surface
 check_campaign_form_setup_guidance
 check_campaign_audience_estimate_shell
 check_campaign_delivery_settings_shell
+check_campaign_form_footer_review_shell
 check_campaign_builder_workspace_layout
 check_campaign_show_command_center
 check_campaign_send_schedule_guidance
