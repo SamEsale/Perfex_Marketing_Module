@@ -32,6 +32,7 @@ CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
 CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
 CAMPAIGN_INDEX_VIEW_FILE="modules/marketing/views/campaigns/index.php"
 CAMPAIGN_PREVIEW_VIEW_FILE="modules/marketing/views/campaigns/preview.php"
+BUILDER_JS_ASSET_FILE="modules/marketing/assets/js/marketing-builder.js"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
@@ -1211,23 +1212,29 @@ check_campaign_form_footer_review_shell() {
 }
 
 check_campaign_plain_text_placeholder_safety() {
-  local text_line placeholder_line state_line html_line unsafe_line
+  local text_line placeholder_line state_line html_line unsafe_line controller_normalize_line controller_guard_line js_guard_line step_shell_line step_chip_line legacy_action_line
   text_line="$(first_fixed_match 'id="text_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
   placeholder_line="$(first_fixed_match 'marketing_campaign_text_content_placeholder' "$CAMPAIGN_FORM_VIEW_FILE")"
   state_line="$(first_fixed_match 'id="builder_state"' "$CAMPAIGN_FORM_VIEW_FILE")"
   html_line="$(first_fixed_match 'id="html_content"' "$CAMPAIGN_FORM_VIEW_FILE")"
   unsafe_line="$(first_fixed_match 'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action' "$CAMPAIGN_FORM_VIEW_FILE")"
+  controller_normalize_line="$(first_fixed_match 'normalize_campaign_text_content' "$CAMPAIGNS_CONTROLLER_FILE")"
+  controller_guard_line="$(first_fixed_match 'UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURES' "$CAMPAIGNS_CONTROLLER_FILE")"
+  js_guard_line="$(first_fixed_match 'isUnsafeDefaultPlainText' "$BUILDER_JS_ASSET_FILE")"
+  step_shell_line="$(first_fixed_match 'marketing-campaign-builder-steps' "$CAMPAIGN_FORM_VIEW_FILE")"
+  step_chip_line="$(first_fixed_match 'marketing-campaign-builder-step-chip' "$CAMPAIGN_FORM_VIEW_FILE")"
+  legacy_action_line="$(first_fixed_match 'marketing-campaign-builder-action-chip' "$CAMPAIGN_FORM_VIEW_FILE")"
 
-  if [[ -z "$text_line" || -z "$placeholder_line" || -z "$state_line" || -z "$html_line" || -n "$unsafe_line" ]]; then
+  if [[ -z "$text_line" || -z "$placeholder_line" || -z "$state_line" || -z "$html_line" || -n "$unsafe_line" || -z "$controller_normalize_line" || -z "$controller_guard_line" || -z "$js_guard_line" || -z "$step_shell_line" || -z "$step_chip_line" || -n "$legacy_action_line" ]]; then
     fail \
-      "campaign plain-text fallback stays placeholder-based and avoids hardcoded demo content in the form view" \
-      "expected text_content field, placeholder marker, builder_state/html_content fields, and no unsafe demo copy in $CAMPAIGN_FORM_VIEW_FILE; text=${text_line:-missing}; placeholder=${placeholder_line:-missing}; builder_state=${state_line:-missing}; html=${html_line:-missing}; unsafe_demo=${unsafe_line:-present}"
+      "campaign plain-text fallback stays sanitized and builder guidance stays passive" \
+      "expected text_content field, placeholder marker, builder_state/html_content fields, controller normalizer, JS unsafe-demo guard, passive builder step chips, and no legacy action-chip or unsafe demo copy in $CAMPAIGN_FORM_VIEW_FILE; text=${text_line:-missing}; placeholder=${placeholder_line:-missing}; builder_state=${state_line:-missing}; html=${html_line:-missing}; normalize=${controller_normalize_line:-missing}; guard=${controller_guard_line:-missing}; js_guard=${js_guard_line:-missing}; steps=${step_shell_line:-missing}; chip=${step_chip_line:-missing}; legacy_action=${legacy_action_line:-none}; unsafe_demo=${unsafe_line:-present}"
     return
   fi
 
   pass \
-    "campaign plain-text fallback stays placeholder-based and avoids hardcoded demo content in the form view" \
-    "text=$text_line | placeholder=$placeholder_line | builder_state=$state_line | html=$html_line"
+    "campaign plain-text fallback stays sanitized and builder guidance stays passive" \
+    "text=$text_line | placeholder=$placeholder_line | builder_state=$state_line | html=$html_line | normalize=$controller_normalize_line | js_guard=$js_guard_line | steps=$step_shell_line"
 }
 
 check_campaign_show_command_center() {

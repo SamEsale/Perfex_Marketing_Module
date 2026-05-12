@@ -550,10 +550,10 @@ foreach ($errorMessages as $errorMessage) {
 	                                    <h4 class="marketing-campaign-builder-title"><?= _l('marketing_builder_heading'); ?></h4>
 	                                    <p class="marketing-campaign-builder-helper no-margin"><?= _l('marketing_campaign_builder_helper'); ?></p>
 	                                </div>
-	                                <div class="marketing-campaign-builder-actions">
-	                                    <span class="marketing-campaign-builder-action-chip"><?= _l('marketing_campaign_builder_action_blocks'); ?></span>
-	                                    <span class="marketing-campaign-builder-action-chip"><?= _l('marketing_campaign_builder_action_preview'); ?></span>
-	                                    <span class="marketing-campaign-builder-action-chip"><?= _l('marketing_campaign_builder_action_review'); ?></span>
+	                                <div class="marketing-campaign-builder-steps">
+	                                    <span class="marketing-campaign-builder-step-chip"><?= _l('marketing_campaign_builder_step_blocks'); ?></span>
+	                                    <span class="marketing-campaign-builder-step-chip"><?= _l('marketing_campaign_builder_step_preview'); ?></span>
+	                                    <span class="marketing-campaign-builder-step-chip"><?= _l('marketing_campaign_builder_step_review'); ?></span>
 	                                </div>
 	                            </div>
 	                            <div class="marketing-campaign-builder-next-step">
@@ -612,12 +612,8 @@ foreach ($errorMessages as $errorMessage) {
 
                         <div class="panel_s marketing-builder-advanced mtop20">
                             <div class="panel-body">
-                                <h4 class="bold">
-                                    <a data-toggle="collapse" href="#marketing-builder-advanced-panel" aria-expanded="false" aria-controls="marketing-builder-advanced-panel">
-                                        <?= _l('marketing_campaign_text_content'); ?>
-                                    </a>
-                                </h4>
-                                <div id="marketing-builder-advanced-panel" class="collapse">
+                                <h4 class="bold no-margin"><?= _l('marketing_campaign_text_content'); ?></h4>
+                                <div id="marketing-builder-advanced-panel" class="mtop15">
                                     <div class="form-group">
                                         <label for="text_content"><?= _l('marketing_campaign_text_content'); ?></label>
                                         <textarea id="text_content" name="text_content" class="form-control" rows="8" placeholder="<?= html_escape(_l('marketing_campaign_text_content_placeholder')); ?>"><?= html_escape($textContentValue); ?></textarea>

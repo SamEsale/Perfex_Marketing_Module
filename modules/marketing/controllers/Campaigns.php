@@ -7,7 +7,10 @@ class Campaigns extends AdminController
     private $saveCampaignErrorMessage = null;
     private const BUILDER_STATE_MARKER_PREFIX = '<!--marketing_builder_state:';
     private const BUILDER_STATE_MARKER_SUFFIX = '-->';
-    private const UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURE = 'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action';
+    private const UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURES = [
+        'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action',
+        'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action Add your marketing copy here. Shop now Your Company 123 Market Street City, State Unsubscribe',
+    ];
 
     private const STATUSES = [
         'draft',
@@ -1272,7 +1275,13 @@ class Campaigns extends AdminController
     {
         $normalized = preg_replace('/\s+/', ' ', html_entity_decode(trim((string) $text), ENT_QUOTES, 'UTF-8'));
 
-        return $normalized === self::UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURE;
+        foreach (self::UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURES as $signature) {
+            if ($normalized === $signature) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function respond_json(array $data, $statusCode = 200)

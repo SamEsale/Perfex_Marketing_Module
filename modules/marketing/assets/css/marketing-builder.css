@@ -374,26 +374,28 @@
     max-width: 760px;
 }
 
-.marketing-campaign-builder-actions {
+.marketing-campaign-builder-steps {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     justify-content: flex-end;
 }
 
-.marketing-campaign-builder-action-chip {
+.marketing-campaign-builder-step-chip {
     display: inline-flex;
     align-items: center;
     min-height: 30px;
     padding: 0 11px;
     border-radius: 999px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    color: #1d4ed8;
+    background: #f8fafc;
+    border: 1px solid #dbe6f3;
+    color: #475569;
     font-size: 12px;
     font-weight: 800;
     letter-spacing: .02em;
     white-space: nowrap;
+    cursor: default;
+    user-select: none;
 }
 
 .marketing-campaign-builder-next-step {
@@ -1512,7 +1514,7 @@
         justify-content: flex-start;
     }
 
-    .marketing-campaign-builder-actions {
+    .marketing-campaign-builder-steps {
         justify-content: flex-start;
     }
 

@@ -77,7 +77,13 @@
     }
 
     function isUnsafeDefaultPlainText(value) {
-        return normalizePlainTextValue(value) === 'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action';
+        var normalized = normalizePlainTextValue(value);
+        var signatures = [
+            'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action',
+            'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action Add your marketing copy here. Shop now Your Company 123 Market Street City, State Unsubscribe'
+        ];
+
+        return signatures.indexOf(normalized) !== -1;
     }
 
     function qrSvgDataUri(text, size, caption, foreground, background) {
