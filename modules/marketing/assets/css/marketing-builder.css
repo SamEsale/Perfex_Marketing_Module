@@ -263,6 +263,88 @@
     border-top: 1px solid #e2e8f0;
 }
 
+.marketing-campaign-list-table td {
+    vertical-align: middle !important;
+}
+
+.marketing-campaign-list-title {
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.marketing-campaign-list-subtitle {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.marketing-campaign-list-audience {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.marketing-campaign-status-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 11px;
+    border-radius: 999px;
+    border: 1px solid #dbe6f3;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+
+.marketing-campaign-status-chip.is-draft {
+    background: #fef3c7;
+    border-color: #fde68a;
+    color: #92400e;
+}
+
+.marketing-campaign-status-chip.is-scheduled {
+    background: #dbeafe;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+}
+
+.marketing-campaign-status-chip.is-sending {
+    background: #ede9fe;
+    border-color: #ddd6fe;
+    color: #6d28d9;
+}
+
+.marketing-campaign-status-chip.is-sent {
+    background: #dcfce7;
+    border-color: #bbf7d0;
+    color: #166534;
+}
+
+.marketing-campaign-status-chip.is-paused,
+.marketing-campaign-status-chip.is-cancelled,
+.marketing-campaign-status-chip.is-failed {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.marketing-campaign-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.marketing-campaign-actions .inline-block {
+    margin-left: 0 !important;
+}
+
 .marketing-builder-shell {
     --mb-bg: #f3f6fb;
     --mb-panel: #ffffff;

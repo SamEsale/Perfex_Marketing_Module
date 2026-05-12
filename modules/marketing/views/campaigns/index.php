@@ -1,5 +1,17 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
+<?php
+$campaigns = isset($campaigns) && is_array($campaigns) ? $campaigns : [];
+$statusClassMap = [
+    'draft' => 'is-draft',
+    'scheduled' => 'is-scheduled',
+    'sending' => 'is-sending',
+    'sent' => 'is-sent',
+    'paused' => 'is-paused',
+    'cancelled' => 'is-cancelled',
+    'failed' => 'is-failed',
+];
+?>
 <div id="wrapper">
     <div class="content">
         <div class="row">
@@ -21,13 +33,12 @@
                         <?php if (empty($campaigns)) { ?>
                             <p class="text-muted no-margin"><?= _l('marketing_no_records_yet'); ?></p>
                         <?php } else { ?>
-                            <div class="table-responsive">
-                                <table class="table dt-table">
+                            <div class="table-responsive marketing-campaign-list" data-marketing-campaign-list="1">
+                                <table class="table dt-table marketing-campaign-list-table">
                                     <thead>
                                         <tr>
                                             <th><?= _l('id'); ?></th>
-                                            <th><?= _l('marketing_name'); ?></th>
-                                            <th><?= _l('marketing_subject'); ?></th>
+                                            <th><?= _l('marketing_campaign_detail'); ?></th>
                                             <th><?= _l('marketing_campaign_list'); ?></th>
                                             <th><?= _l('marketing_status'); ?></th>
                                             <th><?= _l('options'); ?></th>
@@ -35,13 +46,27 @@
                                     </thead>
                                     <tbody>
                                         <?php foreach ($campaigns as $campaign) { ?>
+                                            <?php
+                                            $campaignStatus = strtolower(trim((string) ($campaign['status'] ?? 'draft')));
+                                            $statusClass = isset($statusClassMap[$campaignStatus]) ? $statusClassMap[$campaignStatus] : 'is-neutral';
+                                            $queuedRecipients = (int) ($campaign['queued_recipients'] ?? 0);
+                                            $audienceName = trim((string) ($campaign['audience_name'] ?? ''));
+                                            ?>
                                             <tr>
                                                 <td><?= (int) $campaign['id']; ?></td>
-                                                <td><?= html_escape($campaign['name']); ?></td>
-                                                <td><?= html_escape($campaign['subject']); ?></td>
-                                                <td><?= html_escape($campaign['audience_name'] ?: '-'); ?></td>
-                                                <td><?= html_escape($campaign['status']); ?></td>
                                                 <td>
+                                                    <div class="marketing-campaign-list-title"><?= html_escape($campaign['name']); ?></div>
+                                                    <div class="marketing-campaign-list-subtitle"><?= html_escape(trim((string) ($campaign['subject'] ?? '')) !== '' ? (string) $campaign['subject'] : '-'); ?></div>
+                                                </td>
+                                                <td>
+                                                    <div class="marketing-campaign-list-audience"><?= html_escape($audienceName !== '' ? $audienceName : '-'); ?></div>
+                                                    <div class="marketing-campaign-list-subtitle"><?= html_escape(_l('marketing_campaign_total_queued') . ': ' . $queuedRecipients); ?></div>
+                                                </td>
+                                                <td>
+                                                    <span class="marketing-campaign-status-chip <?= html_escape($statusClass); ?>"><?= html_escape(ucfirst($campaignStatus)); ?></span>
+                                                </td>
+                                                <td>
+                                                    <div class="marketing-campaign-actions">
                                                     <a href="<?= admin_url('marketing/campaigns/show/' . $campaign['id']); ?>" class="btn btn-default">
                                                         <?= _l('view'); ?>
                                                     </a>
@@ -85,6 +110,7 @@
                                                             </button>
                                                         <?= form_close(); ?>
                                                     <?php } ?>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php } ?>

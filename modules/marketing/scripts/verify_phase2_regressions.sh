@@ -30,6 +30,7 @@ OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
 CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
+CAMPAIGN_INDEX_VIEW_FILE="modules/marketing/views/campaigns/index.php"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
@@ -1136,6 +1137,30 @@ check_campaign_show_command_center() {
     "center=$center_line | marker=$marker_line | title=$title_line | grid=$grid_line | actions=$actions_line | next_step=$next_step_line"
 }
 
+check_campaign_index_scanability() {
+  local list_line marker_line title_line status_line actions_line prepare_line send_line delete_line reset_line
+  list_line="$(first_fixed_match 'marketing-campaign-list' "$CAMPAIGN_INDEX_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-list="1"' "$CAMPAIGN_INDEX_VIEW_FILE")"
+  title_line="$(first_fixed_match 'marketing-campaign-list-title' "$CAMPAIGN_INDEX_VIEW_FILE")"
+  status_line="$(first_fixed_match 'marketing-campaign-status-chip' "$CAMPAIGN_INDEX_VIEW_FILE")"
+  actions_line="$(first_fixed_match 'marketing-campaign-actions' "$CAMPAIGN_INDEX_VIEW_FILE")"
+  prepare_line="$(first_fixed_match 'marketing_campaign_prepare_recipients' "$CAMPAIGN_INDEX_VIEW_FILE")"
+  send_line="$(first_fixed_match 'marketing_campaign_send_campaign' "$CAMPAIGN_INDEX_VIEW_FILE")"
+  delete_line="$(first_fixed_match "name=\"delete_campaign_id\"" "$CAMPAIGN_INDEX_VIEW_FILE")"
+  reset_line="$(first_fixed_match 'marketing_campaign_reset_to_draft_button' "$CAMPAIGN_INDEX_VIEW_FILE")"
+
+  if [[ -z "$list_line" || -z "$marker_line" || -z "$title_line" || -z "$status_line" || -z "$actions_line" || -z "$prepare_line" || -z "$send_line" || -z "$delete_line" || -z "$reset_line" ]]; then
+    fail \
+      "campaign list remains scannable while preserving existing action markers" \
+      "expected list wrapper, marker, title, status chip, action cluster, and prepare/send/delete/reset markers in $CAMPAIGN_INDEX_VIEW_FILE; list=${list_line:-missing}; marker=${marker_line:-missing}; title=${title_line:-missing}; status=${status_line:-missing}; actions=${actions_line:-missing}; prepare=${prepare_line:-missing}; send=${send_line:-missing}; delete=${delete_line:-missing}; reset=${reset_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign list remains scannable while preserving existing action markers" \
+    "list=$list_line | marker=$marker_line | title=$title_line | status=$status_line | actions=$actions_line"
+}
+
 check_no_destructive_event_history_clear() {
   local controller_post_line controller_model_line controller_flag_line model_guard_line safe_button_line destructive_button_line summary_line
   controller_post_line="$(first_fixed_match "if (\$this->input->post('run_retention_cleanup')) {" "$ANALYTICS_CONTROLLER_FILE")"
@@ -2071,6 +2096,7 @@ check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_campaign_form_setup_guidance
 check_campaign_show_command_center
+check_campaign_index_scanability
 check_no_destructive_event_history_clear
 check_analytics_view_array_guards
 check_analytics_runtime_fail_closed_queries
