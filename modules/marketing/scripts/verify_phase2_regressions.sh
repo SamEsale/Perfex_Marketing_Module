@@ -1171,20 +1171,43 @@ check_campaign_show_command_center() {
   marker_line="$(first_fixed_match 'data-marketing-campaign-command-center="1"' "$CAMPAIGN_SHOW_VIEW_FILE")"
   title_line="$(first_fixed_match 'marketing_campaign_command_center' "$CAMPAIGN_SHOW_VIEW_FILE")"
   grid_line="$(first_fixed_match 'marketing-campaign-command-grid' "$CAMPAIGN_SHOW_VIEW_FILE")"
-  actions_line="$(first_fixed_match 'marketing-campaign-command-actions' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  actions_line="$(first_fixed_match 'marketing-campaign-send-workflow' "$CAMPAIGN_SHOW_VIEW_FILE")"
   next_step_line="$(first_fixed_match 'marketing_campaign_command_next_step' "$CAMPAIGN_SHOW_VIEW_FILE")"
   readiness_line="$(first_fixed_match 'marketing_campaign_readiness_status' "$CAMPAIGN_SHOW_VIEW_FILE")"
 
   if [[ -z "$center_line" || -z "$marker_line" || -z "$title_line" || -z "$grid_line" || -z "$actions_line" || -z "$next_step_line" || -z "$readiness_line" ]]; then
     fail \
       "campaign show page surfaces a compact command center using existing readiness and action markers" \
-      "expected command center marker, title, grid, actions wrapper, next-step label, and readiness label in $CAMPAIGN_SHOW_VIEW_FILE; center=${center_line:-missing}; marker=${marker_line:-missing}; title=${title_line:-missing}; grid=${grid_line:-missing}; actions=${actions_line:-missing}; next_step=${next_step_line:-missing}; readiness=${readiness_line:-missing}"
+      "expected command center marker, title, grid, workflow wrapper, next-step label, and readiness label in $CAMPAIGN_SHOW_VIEW_FILE; center=${center_line:-missing}; marker=${marker_line:-missing}; title=${title_line:-missing}; grid=${grid_line:-missing}; workflow=${actions_line:-missing}; next_step=${next_step_line:-missing}; readiness=${readiness_line:-missing}"
     return
   fi
 
   pass \
     "campaign show page surfaces a compact command center using existing readiness and action markers" \
-    "center=$center_line | marker=$marker_line | title=$title_line | grid=$grid_line | actions=$actions_line | next_step=$next_step_line"
+    "center=$center_line | marker=$marker_line | title=$title_line | grid=$grid_line | workflow=$actions_line | next_step=$next_step_line"
+}
+
+check_campaign_send_schedule_guidance() {
+  local workflow_line marker_line danger_line prepare_line send_line schedule_line reset_line delete_line
+  workflow_line="$(first_fixed_match 'marketing-campaign-send-workflow' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-send-workflow="1"' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  danger_line="$(first_fixed_match 'data-marketing-campaign-danger-actions="1"' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  prepare_line="$(first_fixed_match 'prepare_campaign_id' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  send_line="$(first_fixed_match 'send_campaign_id' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  schedule_line="$(first_fixed_match "form_open(admin_url('marketing/campaigns/schedule/' . \$campaign['id']))" "$CAMPAIGN_SHOW_VIEW_FILE")"
+  reset_line="$(first_fixed_match 'reset_campaign_id' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  delete_line="$(first_fixed_match 'delete_campaign_id' "$CAMPAIGN_SHOW_VIEW_FILE")"
+
+  if [[ -z "$workflow_line" || -z "$marker_line" || -z "$danger_line" || -z "$prepare_line" || -z "$send_line" || -z "$schedule_line" || -z "$reset_line" || -z "$delete_line" ]]; then
+    fail \
+      "campaign send and schedule workflow stays grouped while preserving action markers" \
+      "expected send workflow marker, danger grouping marker, and prepare/send/schedule/reset/delete markers in $CAMPAIGN_SHOW_VIEW_FILE; workflow=${workflow_line:-missing}; marker=${marker_line:-missing}; danger=${danger_line:-missing}; prepare=${prepare_line:-missing}; send=${send_line:-missing}; schedule=${schedule_line:-missing}; reset=${reset_line:-missing}; delete=${delete_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign send and schedule workflow stays grouped while preserving action markers" \
+    "workflow=$workflow_line | marker=$marker_line | danger=$danger_line | prepare=$prepare_line | send=$send_line | schedule=$schedule_line"
 }
 
 check_campaign_index_scanability() {
@@ -2169,6 +2192,7 @@ check_campaign_form_setup_guidance
 check_campaign_audience_estimate_shell
 check_campaign_builder_workspace_layout
 check_campaign_show_command_center
+check_campaign_send_schedule_guidance
 check_campaign_index_scanability
 check_campaign_preview_review_shell
 check_no_destructive_event_history_clear

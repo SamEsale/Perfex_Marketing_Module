@@ -167,66 +167,92 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                 </div>
                                 <div class="marketing-campaign-command-card">
                                     <span class="marketing-campaign-command-label"><?= _l('marketing_campaign_command_actions'); ?></span>
-                                    <div class="marketing-campaign-command-actions">
-                                        <a href="<?= admin_url('marketing/campaigns/preview/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('marketing_preview_campaign_button'); ?></a>
-                                        <?php if ($can_edit_campaign) { ?>
-                                            <a href="<?= admin_url('marketing/campaigns/edit/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('edit'); ?></a>
+                                    <div class="marketing-campaign-send-workflow" data-marketing-campaign-send-workflow="1">
+                                        <div class="marketing-campaign-send-workflow-header">
+                                            <div>
+                                                <h5 class="marketing-campaign-send-workflow-title"><?= _l('marketing_campaign_send_workflow_heading'); ?></h5>
+                                                <p class="marketing-campaign-send-workflow-helper no-margin"><?= _l('marketing_campaign_send_workflow_helper'); ?></p>
+                                            </div>
+                                        </div>
+                                        <div class="marketing-campaign-send-workflow-steps">
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_review'); ?></span>
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_prepare'); ?></span>
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_send'); ?></span>
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_monitor'); ?></span>
+                                        </div>
+                                        <div class="marketing-campaign-send-workflow-actions">
+                                            <a href="<?= admin_url('marketing/campaigns/preview/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('marketing_preview_campaign_button'); ?></a>
+                                            <?php if ($can_edit_campaign) { ?>
+                                                <a href="<?= admin_url('marketing/campaigns/edit/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('edit'); ?></a>
+                                            <?php } ?>
+                                            <?php if ($can_prepare_recipients && (int) $recipient_summary['queued'] === 0) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="prepare_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-info btn-sm"><?= _l('marketing_campaign_prepare_recipients'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                            <?php if ($can_send && in_array($campaign['status'], ['draft', 'sending'], true) && (int) $recipient_summary['queued'] > 0) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="send_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-success btn-sm"><?= _l('marketing_campaign_send_campaign'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                            <?php if ($can_retry_failed) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="retry_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-warning btn-sm"><?= _l('marketing_campaign_retry_failed_button'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                        </div>
+                                        <?php if ($can_send && $campaign['status'] === 'draft') { ?>
+                                            <div class="marketing-campaign-command-schedule mtop15">
+                                                <span class="marketing-campaign-send-workflow-section-label"><?= _l('marketing_campaign_send_workflow_schedule_heading'); ?></span>
+                                                <p class="marketing-campaign-send-workflow-helper no-margin"><?= _l('marketing_campaign_send_workflow_schedule_helper'); ?></p>
+                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id'])); ?>
+                                                    <div class="form-group mtop15 no-margin">
+                                                        <label for="marketing-campaign-command-scheduled-at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
+                                                        <input type="datetime-local" id="marketing-campaign-command-scheduled-at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
+                                                        <p class="text-muted mtop5"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
+                                                    </div>
+                                                    <button type="submit" class="btn btn-success btn-sm mtop15"><?= _l('marketing_campaign_schedule'); ?></button>
+                                                <?= form_close(); ?>
+                                            </div>
                                         <?php } ?>
-                                        <?php if ($can_prepare_recipients && (int) $recipient_summary['queued'] === 0) { ?>
-                                            <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                <input type="hidden" name="prepare_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                <button type="submit" class="btn btn-info btn-sm"><?= _l('marketing_campaign_prepare_recipients'); ?></button>
-                                            <?= form_close(); ?>
+                                        <?php if ($can_send && $campaign['status'] === 'scheduled') { ?>
+                                            <div class="marketing-campaign-send-workflow-actions mtop15">
+                                                <span class="marketing-campaign-send-workflow-section-label marketing-campaign-send-workflow-section-label--full"><?= _l('marketing_campaign_send_workflow_schedule_heading'); ?></span>
+                                                <p class="marketing-campaign-send-workflow-helper marketing-campaign-send-workflow-helper--full no-margin"><?= _l('marketing_campaign_send_workflow_scheduled_helper'); ?></p>
+                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="action" value="draft">
+                                                    <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_move_to_draft'); ?></button>
+                                                <?= form_close(); ?>
+                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="action" value="cancelled">
+                                                    <button type="submit" class="btn btn-danger btn-sm"><?= _l('marketing_campaign_cancel_scheduled'); ?></button>
+                                                <?= form_close(); ?>
+                                            </div>
                                         <?php } ?>
-                                        <?php if ($can_send && in_array($campaign['status'], ['draft', 'sending'], true) && (int) $recipient_summary['queued'] > 0) { ?>
-                                            <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                <input type="hidden" name="send_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                <button type="submit" class="btn btn-success btn-sm"><?= _l('marketing_campaign_send_campaign'); ?></button>
-                                            <?= form_close(); ?>
-                                        <?php } ?>
-                                        <?php if ($can_retry_failed) { ?>
-                                            <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                <input type="hidden" name="retry_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                <button type="submit" class="btn btn-warning btn-sm"><?= _l('marketing_campaign_retry_failed_button'); ?></button>
-                                            <?= form_close(); ?>
-                                        <?php } ?>
-                                        <?php if ($can_reset_campaign) { ?>
-                                            <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                <input type="hidden" name="reset_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_reset_to_draft_button'); ?></button>
-                                            <?= form_close(); ?>
-                                        <?php } ?>
-                                        <?php if ($can_delete_campaign) { ?>
-                                            <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block', 'onsubmit' => "return confirm('Delete this campaign?');"]); ?>
-                                                <input type="hidden" name="delete_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                <button type="submit" class="btn btn-danger btn-sm"><?= _l('delete'); ?></button>
-                                            <?= form_close(); ?>
+                                        <?php if ($can_reset_campaign || $can_delete_campaign) { ?>
+                                            <div class="marketing-campaign-danger-actions" data-marketing-campaign-danger-actions="1">
+                                                <span class="marketing-campaign-send-workflow-section-label marketing-campaign-send-workflow-section-label--danger"><?= _l('marketing_campaign_send_workflow_danger_heading'); ?></span>
+                                                <p class="marketing-campaign-send-workflow-helper marketing-campaign-send-workflow-helper--danger no-margin"><?= _l('marketing_campaign_send_workflow_danger_helper'); ?></p>
+                                                <div class="marketing-campaign-send-workflow-actions mtop15">
+                                                    <?php if ($can_reset_campaign) { ?>
+                                                        <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                            <input type="hidden" name="reset_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                            <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_reset_to_draft_button'); ?></button>
+                                                        <?= form_close(); ?>
+                                                    <?php } ?>
+                                                    <?php if ($can_delete_campaign) { ?>
+                                                        <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block', 'onsubmit' => "return confirm('Delete this campaign?');"]); ?>
+                                                            <input type="hidden" name="delete_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                            <button type="submit" class="btn btn-danger btn-sm"><?= _l('delete'); ?></button>
+                                                        <?= form_close(); ?>
+                                                    <?php } ?>
+                                                </div>
+                                            </div>
                                         <?php } ?>
                                     </div>
-                                    <?php if ($can_send && $campaign['status'] === 'draft') { ?>
-                                        <div class="marketing-campaign-command-schedule mtop15">
-                                            <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id'])); ?>
-                                                <div class="form-group no-margin">
-                                                    <label for="marketing-campaign-command-scheduled-at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
-                                                    <input type="datetime-local" id="marketing-campaign-command-scheduled-at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
-                                                    <p class="text-muted mtop5"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
-                                                </div>
-                                                <button type="submit" class="btn btn-success btn-sm"><?= _l('marketing_campaign_schedule'); ?></button>
-                                            <?= form_close(); ?>
-                                        </div>
-                                    <?php } ?>
-                                    <?php if ($can_send && $campaign['status'] === 'scheduled') { ?>
-                                        <div class="marketing-campaign-command-actions mtop15">
-                                            <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
-                                                <input type="hidden" name="action" value="draft">
-                                                <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_move_to_draft'); ?></button>
-                                            <?= form_close(); ?>
-                                            <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
-                                                <input type="hidden" name="action" value="cancelled">
-                                                <button type="submit" class="btn btn-danger btn-sm"><?= _l('marketing_campaign_cancel_scheduled'); ?></button>
-                                            <?= form_close(); ?>
-                                        </div>
-                                    <?php } ?>
                                 </div>
                             </div>
                         </div>
