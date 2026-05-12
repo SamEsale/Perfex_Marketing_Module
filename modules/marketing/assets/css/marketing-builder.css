@@ -551,6 +551,79 @@
     line-height: 1.6;
 }
 
+.marketing-campaign-delivery-shell {
+    margin: 24px 0;
+    padding: 20px 22px;
+    border: 1px solid #dbe6f3;
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at top left, rgba(249, 115, 22, 0.08), transparent 24%),
+        linear-gradient(180deg, #fffdf8 0%, #f8fbff 100%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.marketing-campaign-delivery-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.marketing-campaign-delivery-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-delivery-helper {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 760px;
+}
+
+.marketing-campaign-delivery-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.marketing-campaign-delivery-card {
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.95);
+}
+
+.marketing-campaign-delivery-card-title {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-delivery-card-copy {
+    margin: 0 0 14px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.marketing-campaign-delivery-card .marketing-channel-panel {
+    margin-bottom: 0;
+}
+
+.marketing-campaign-delivery-tracking-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 18px;
+    align-items: center;
+}
+
 .marketing-campaign-list-table td {
     vertical-align: middle !important;
 }
@@ -1384,6 +1457,10 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
+    .marketing-campaign-delivery-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .marketing-campaign-builder-actions {
         justify-content: flex-start;
     }
@@ -1462,9 +1539,27 @@
         padding: 18px;
     }
 
+    .marketing-campaign-delivery-shell {
+        padding: 18px;
+    }
+
     .marketing-campaign-audience-meta-row {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .marketing-campaign-delivery-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .marketing-campaign-delivery-card {
+        padding: 16px;
+    }
+
+    .marketing-campaign-delivery-tracking-row {
+        flex-direction: column;
+        align-items: flex-start;
     }
 
     .marketing-campaign-send-workflow-steps,

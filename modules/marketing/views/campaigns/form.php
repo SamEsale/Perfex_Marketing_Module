@@ -261,56 +261,140 @@ foreach ($errorMessages as $errorMessage) {
                                 </div>
                             </div>
 
-                        <div class="marketing-channel-panel">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="delivery_channel"><?= _l('marketing_campaign_delivery_channel'); ?></label>
-                                        <select id="delivery_channel" name="delivery_channel" class="form-control">
-                                            <option value="email" <?= ($campaign['delivery_channel'] ?? 'email') === 'email' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_email'); ?></option>
-                                            <option value="whatsapp" <?= ($campaign['delivery_channel'] ?? '') === 'whatsapp' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_whatsapp'); ?></option>
-                                        </select>
-                                        <p class="marketing-channel-note mtop10 no-margin"><?= _l('marketing_campaign_delivery_channel_help'); ?></p>
-                                    </div>
+                        <div class="marketing-campaign-delivery-shell" data-marketing-campaign-delivery-shell="1">
+                            <div class="marketing-campaign-delivery-header">
+                                <div>
+                                    <h4 class="marketing-campaign-delivery-title"><?= _l('marketing_campaign_delivery_settings_heading'); ?></h4>
+                                    <p class="marketing-campaign-delivery-helper no-margin"><?= _l('marketing_campaign_delivery_settings_helper'); ?></p>
                                 </div>
                             </div>
-                            <div id="marketing-whatsapp-fields" class="<?= ($campaign['delivery_channel'] ?? 'email') === 'whatsapp' ? '' : 'hide'; ?>">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_name"><?= _l('marketing_campaign_whatsapp_template_name'); ?></label>
-                                            <input type="text" id="whatsapp_template_name" name="whatsapp_template_name" class="form-control" value="<?= html_escape($campaign['whatsapp_template_name'] ?? ''); ?>">
+                            <div class="marketing-campaign-delivery-grid">
+                                <div class="marketing-campaign-delivery-card">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_channel_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_channel_copy'); ?></p>
+                                    <div class="marketing-channel-panel no-margin">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label for="delivery_channel"><?= _l('marketing_campaign_delivery_channel'); ?></label>
+                                                    <select id="delivery_channel" name="delivery_channel" class="form-control">
+                                                        <option value="email" <?= ($campaign['delivery_channel'] ?? 'email') === 'email' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_email'); ?></option>
+                                                        <option value="whatsapp" <?= ($campaign['delivery_channel'] ?? '') === 'whatsapp' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_whatsapp'); ?></option>
+                                                    </select>
+                                                    <p class="marketing-channel-note mtop10 no-margin"><?= _l('marketing_campaign_delivery_channel_help'); ?></p>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_language"><?= _l('marketing_campaign_whatsapp_template_language'); ?></label>
-                                            <input type="text" id="whatsapp_template_language" name="whatsapp_template_language" class="form-control" value="<?= html_escape($campaign['whatsapp_template_language'] ?? 'en_US'); ?>">
+                                        <div id="marketing-whatsapp-fields" class="<?= ($campaign['delivery_channel'] ?? 'email') === 'whatsapp' ? '' : 'hide'; ?>">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_name"><?= _l('marketing_campaign_whatsapp_template_name'); ?></label>
+                                                        <input type="text" id="whatsapp_template_name" name="whatsapp_template_name" class="form-control" value="<?= html_escape($campaign['whatsapp_template_name'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_language"><?= _l('marketing_campaign_whatsapp_template_language'); ?></label>
+                                                        <input type="text" id="whatsapp_template_language" name="whatsapp_template_language" class="form-control" value="<?= html_escape($campaign['whatsapp_template_language'] ?? 'en_US'); ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_var1"><?= _l('marketing_campaign_whatsapp_template_var1'); ?></label>
+                                                        <input type="text" id="whatsapp_template_var1" name="whatsapp_template_var1" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var1'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_var2"><?= _l('marketing_campaign_whatsapp_template_var2'); ?></label>
+                                                        <input type="text" id="whatsapp_template_var2" name="whatsapp_template_var2" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var2'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_var3"><?= _l('marketing_campaign_whatsapp_template_var3'); ?></label>
+                                                        <input type="text" id="whatsapp_template_var3" name="whatsapp_template_var3" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var3'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="alert alert-info no-margin">
+                                                <?= _l('marketing_campaign_whatsapp_template_help'); ?>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-md-4">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_var1"><?= _l('marketing_campaign_whatsapp_template_var1'); ?></label>
-                                            <input type="text" id="whatsapp_template_var1" name="whatsapp_template_var1" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var1'] ?? ''); ?>">
+
+                                <div class="marketing-campaign-delivery-card">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_sender_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_sender_copy'); ?></p>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="form-group">
+                                                <label for="from_name"><?= _l('marketing_campaign_from_name'); ?></label>
+                                                <input type="text" id="from_name" name="from_name" class="form-control" value="<?= html_escape($campaign['from_name']); ?>">
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_var2"><?= _l('marketing_campaign_whatsapp_template_var2'); ?></label>
-                                            <input type="text" id="whatsapp_template_var2" name="whatsapp_template_var2" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var2'] ?? ''); ?>">
+                                        <div class="col-md-4">
+                                            <div class="form-group">
+                                                <label for="from_email"><?= _l('marketing_campaign_from_email'); ?></label>
+                                                <input type="email" id="from_email" name="from_email" class="form-control" value="<?= html_escape($campaign['from_email']); ?>">
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_var3"><?= _l('marketing_campaign_whatsapp_template_var3'); ?></label>
-                                            <input type="text" id="whatsapp_template_var3" name="whatsapp_template_var3" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var3'] ?? ''); ?>">
+                                        <div class="col-md-4">
+                                            <div class="form-group no-margin">
+                                                <label for="reply_to_email"><?= _l('marketing_campaign_reply_to_email'); ?></label>
+                                                <input type="email" id="reply_to_email" name="reply_to_email" class="form-control" value="<?= html_escape($campaign['reply_to_email']); ?>">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="alert alert-info no-margin">
-                                    <?= _l('marketing_campaign_whatsapp_template_help'); ?>
+
+                                <div class="marketing-campaign-delivery-card marketing-email-fields">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_tracking_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_tracking_copy'); ?></p>
+                                    <div class="marketing-campaign-delivery-tracking-row">
+                                        <div class="checkbox checkbox-inline">
+                                            <input type="hidden" name="track_opens" value="0">
+                                            <input type="checkbox" id="track_opens" name="track_opens" value="1" <?= $campaign['track_opens'] ? 'checked' : ''; ?>>
+                                            <label for="track_opens"><?= _l('marketing_campaign_track_opens'); ?></label>
+                                        </div>
+                                        <div class="checkbox checkbox-inline">
+                                            <input type="hidden" name="track_clicks" value="0">
+                                            <input type="checkbox" id="track_clicks" name="track_clicks" value="1" <?= $campaign['track_clicks'] ? 'checked' : ''; ?>>
+                                            <label for="track_clicks"><?= _l('marketing_campaign_track_clicks'); ?></label>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted mtop10 no-margin"><?= _l('marketing_campaign_tracking_runtime_help'); ?></p>
+                                </div>
+
+                                <div class="marketing-campaign-delivery-card">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_schedule_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_schedule_copy'); ?></p>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label class="control-label"><?= _l('marketing_campaign_delivery_timing'); ?></label>
+                                                <div class="radio radio-primary">
+                                                    <input type="radio" id="schedule_mode_now" name="schedule_mode" value="now" <?= ($campaign['schedule_mode'] ?? 'now') !== 'later' ? 'checked' : ''; ?>>
+                                                    <label for="schedule_mode_now"><?= _l('marketing_campaign_send_now'); ?></label>
+                                                </div>
+                                                <div class="radio radio-primary">
+                                                    <input type="radio" id="schedule_mode_later" name="schedule_mode" value="later" <?= ($campaign['schedule_mode'] ?? '') === 'later' ? 'checked' : ''; ?>>
+                                                    <label for="schedule_mode_later"><?= _l('marketing_campaign_schedule_for_later'); ?></label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-group no-margin">
+                                                <label for="scheduled_at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
+                                                <input type="datetime-local" id="scheduled_at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
+                                                <p class="text-muted mtop5 no-margin"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -427,63 +511,6 @@ foreach ($errorMessages as $errorMessage) {
                                 </div>
                             </div>
                             <input type="hidden" id="marketing-campaign-id" value="<?= (int) ($campaign['id'] ?? 0); ?>">
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="from_name"><?= _l('marketing_campaign_from_name'); ?></label>
-                                    <input type="text" id="from_name" name="from_name" class="form-control" value="<?= html_escape($campaign['from_name']); ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="from_email"><?= _l('marketing_campaign_from_email'); ?></label>
-                                    <input type="email" id="from_email" name="from_email" class="form-control" value="<?= html_escape($campaign['from_email']); ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="reply_to_email"><?= _l('marketing_campaign_reply_to_email'); ?></label>
-                                    <input type="email" id="reply_to_email" name="reply_to_email" class="form-control" value="<?= html_escape($campaign['reply_to_email']); ?>">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label class="control-label"><?= _l('marketing_campaign_delivery_timing'); ?></label>
-                                    <div class="radio radio-primary">
-                                        <input type="radio" id="schedule_mode_now" name="schedule_mode" value="now" <?= ($campaign['schedule_mode'] ?? 'now') !== 'later' ? 'checked' : ''; ?>>
-                                        <label for="schedule_mode_now"><?= _l('marketing_campaign_send_now'); ?></label>
-                                    </div>
-                                    <div class="radio radio-primary">
-                                        <input type="radio" id="schedule_mode_later" name="schedule_mode" value="later" <?= ($campaign['schedule_mode'] ?? '') === 'later' ? 'checked' : ''; ?>>
-                                        <label for="schedule_mode_later"><?= _l('marketing_campaign_schedule_for_later'); ?></label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="scheduled_at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
-                                    <input type="datetime-local" id="scheduled_at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
-                                    <p class="text-muted mtop5"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
-                                </div>
-                            </div>
-                            <div class="col-md-4 marketing-email-fields">
-                                <div class="checkbox checkbox-inline mtop30">
-                                    <input type="hidden" name="track_opens" value="0">
-                                    <input type="checkbox" id="track_opens" name="track_opens" value="1" <?= $campaign['track_opens'] ? 'checked' : ''; ?>>
-                                    <label for="track_opens"><?= _l('marketing_campaign_track_opens'); ?></label>
-                                </div>
-                                <div class="checkbox checkbox-inline mtop30">
-                                    <input type="hidden" name="track_clicks" value="0">
-                                    <input type="checkbox" id="track_clicks" name="track_clicks" value="1" <?= $campaign['track_clicks'] ? 'checked' : ''; ?>>
-                                    <label for="track_clicks"><?= _l('marketing_campaign_track_clicks'); ?></label>
-                                </div>
-                                <p class="text-muted mtop10 no-margin"><?= _l('marketing_campaign_tracking_runtime_help'); ?></p>
-                            </div>
                         </div>
 
 	                        <div class="alert alert-info marketing-email-fields">

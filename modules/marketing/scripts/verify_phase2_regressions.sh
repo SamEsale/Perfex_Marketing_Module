@@ -1165,6 +1165,30 @@ check_campaign_audience_estimate_shell() {
     "shell=$shell_line | marker=$marker_line | list=$list_line | targeting=$targeting_fields_line | estimate_button=$estimate_button_line | estimate_result=$estimate_result_line"
 }
 
+check_campaign_delivery_settings_shell() {
+  local shell_line marker_line channel_line from_name_line from_email_line reply_to_line opens_line clicks_line scheduled_line
+  shell_line="$(first_fixed_match 'marketing-campaign-delivery-shell' "$CAMPAIGN_FORM_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-delivery-shell="1"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  channel_line="$(first_fixed_match 'id="delivery_channel"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  from_name_line="$(first_fixed_match 'id="from_name"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  from_email_line="$(first_fixed_match 'id="from_email"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  reply_to_line="$(first_fixed_match 'id="reply_to_email"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  opens_line="$(first_fixed_match 'id="track_opens"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  clicks_line="$(first_fixed_match 'id="track_clicks"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  scheduled_line="$(first_fixed_match 'id="scheduled_at"' "$CAMPAIGN_FORM_VIEW_FILE")"
+
+  if [[ -z "$shell_line" || -z "$marker_line" || -z "$channel_line" || -z "$from_name_line" || -z "$from_email_line" || -z "$reply_to_line" || -z "$opens_line" || -z "$clicks_line" || -z "$scheduled_line" ]]; then
+    fail \
+      "campaign delivery settings stay grouped while preserving delivery, sender, tracking, and schedule field hooks" \
+      "expected delivery shell marker and delivery_channel/from_name/from_email/reply_to_email/track_opens/track_clicks/scheduled_at hooks in $CAMPAIGN_FORM_VIEW_FILE; shell=${shell_line:-missing}; marker=${marker_line:-missing}; channel=${channel_line:-missing}; from_name=${from_name_line:-missing}; from_email=${from_email_line:-missing}; reply_to=${reply_to_line:-missing}; track_opens=${opens_line:-missing}; track_clicks=${clicks_line:-missing}; scheduled_at=${scheduled_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign delivery settings stay grouped while preserving delivery, sender, tracking, and schedule field hooks" \
+    "shell=$shell_line | marker=$marker_line | channel=$channel_line | from_name=$from_name_line | track_opens=$opens_line | scheduled_at=$scheduled_line"
+}
+
 check_campaign_show_command_center() {
   local center_line marker_line title_line grid_line actions_line next_step_line readiness_line
   center_line="$(first_fixed_match 'marketing-campaign-command-center' "$CAMPAIGN_SHOW_VIEW_FILE")"
@@ -2190,6 +2214,7 @@ check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_campaign_form_setup_guidance
 check_campaign_audience_estimate_shell
+check_campaign_delivery_settings_shell
 check_campaign_builder_workspace_layout
 check_campaign_show_command_center
 check_campaign_send_schedule_guidance
