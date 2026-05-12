@@ -29,6 +29,7 @@ INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
+CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
@@ -1113,6 +1114,28 @@ check_campaign_form_setup_guidance() {
     "panel=$panel_line | marker=$marker_line | heading=$heading_line | checklist=$checklist_line | next_step=$next_step_line"
 }
 
+check_campaign_show_command_center() {
+  local center_line marker_line title_line grid_line actions_line next_step_line readiness_line
+  center_line="$(first_fixed_match 'marketing-campaign-command-center' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-command-center="1"' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  title_line="$(first_fixed_match 'marketing_campaign_command_center' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  grid_line="$(first_fixed_match 'marketing-campaign-command-grid' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  actions_line="$(first_fixed_match 'marketing-campaign-command-actions' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  next_step_line="$(first_fixed_match 'marketing_campaign_command_next_step' "$CAMPAIGN_SHOW_VIEW_FILE")"
+  readiness_line="$(first_fixed_match 'marketing_campaign_readiness_status' "$CAMPAIGN_SHOW_VIEW_FILE")"
+
+  if [[ -z "$center_line" || -z "$marker_line" || -z "$title_line" || -z "$grid_line" || -z "$actions_line" || -z "$next_step_line" || -z "$readiness_line" ]]; then
+    fail \
+      "campaign show page surfaces a compact command center using existing readiness and action markers" \
+      "expected command center marker, title, grid, actions wrapper, next-step label, and readiness label in $CAMPAIGN_SHOW_VIEW_FILE; center=${center_line:-missing}; marker=${marker_line:-missing}; title=${title_line:-missing}; grid=${grid_line:-missing}; actions=${actions_line:-missing}; next_step=${next_step_line:-missing}; readiness=${readiness_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign show page surfaces a compact command center using existing readiness and action markers" \
+    "center=$center_line | marker=$marker_line | title=$title_line | grid=$grid_line | actions=$actions_line | next_step=$next_step_line"
+}
+
 check_no_destructive_event_history_clear() {
   local controller_post_line controller_model_line controller_flag_line model_guard_line safe_button_line destructive_button_line summary_line
   controller_post_line="$(first_fixed_match "if (\$this->input->post('run_retention_cleanup')) {" "$ANALYTICS_CONTROLLER_FILE")"
@@ -2047,6 +2070,7 @@ check_retention_cleanup_scope
 check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_campaign_form_setup_guidance
+check_campaign_show_command_center
 check_no_destructive_event_history_clear
 check_analytics_view_array_guards
 check_analytics_runtime_fail_closed_queries

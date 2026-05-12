@@ -137,6 +137,132 @@
     line-height: 1.5;
 }
 
+.marketing-campaign-command-center {
+    margin-bottom: 24px;
+    padding: 20px 22px;
+    border: 1px solid #dbe6f3;
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 24%),
+        linear-gradient(180deg, #fbfdff 0%, #eff6ff 100%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.marketing-campaign-command-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.marketing-campaign-command-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-command-helper {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.marketing-campaign-command-status-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    white-space: nowrap;
+}
+
+.marketing-campaign-command-status-pill.is-success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.marketing-campaign-command-status-pill.is-info {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.marketing-campaign-command-status-pill.is-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.marketing-campaign-command-status-pill.is-danger {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.marketing-campaign-command-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.marketing-campaign-command-card {
+    min-width: 0;
+    padding: 14px 15px;
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.94);
+}
+
+.marketing-campaign-command-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.marketing-campaign-command-value {
+    margin-bottom: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.4;
+}
+
+.marketing-campaign-command-copy {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.marketing-campaign-command-copy + .marketing-campaign-command-copy {
+    margin-top: 8px;
+}
+
+.marketing-campaign-command-copy--warning {
+    color: #92400e;
+}
+
+.marketing-campaign-command-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.marketing-campaign-command-actions .inline-block {
+    margin-left: 0 !important;
+}
+
+.marketing-campaign-command-schedule {
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+}
+
 .marketing-builder-shell {
     --mb-bg: #f3f6fb;
     --mb-panel: #ffffff;
@@ -811,6 +937,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .marketing-campaign-command-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .marketing-builder-layout {
         grid-template-columns: 1fr;
         height: auto;
@@ -853,6 +983,19 @@
     .marketing-campaign-setup-next-step {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .marketing-campaign-command-center {
+        padding: 18px;
+    }
+
+    .marketing-campaign-command-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .marketing-campaign-command-grid {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .marketing-builder-topbar {
