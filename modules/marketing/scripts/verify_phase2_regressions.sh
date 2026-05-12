@@ -1142,6 +1142,29 @@ check_campaign_builder_workspace_layout() {
     "shell=$shell_line | marker=$marker_line | workspace=$workspace_line | canvas=$canvas_line | modal=$modal_line | state=$state_line"
 }
 
+check_campaign_audience_estimate_shell() {
+  local shell_line marker_line list_line targeting_fields_line filtered_line estimate_button_line estimate_result_line campaign_id_line
+  shell_line="$(first_fixed_match 'marketing-campaign-audience-shell' "$CAMPAIGN_FORM_VIEW_FILE")"
+  marker_line="$(first_fixed_match 'data-marketing-campaign-audience-shell="1"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  list_line="$(first_fixed_match 'id="list_id"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  targeting_fields_line="$(first_fixed_match 'id="marketing-targeting-fields"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  filtered_line="$(first_fixed_match 'id="targeting_send_mode_filtered"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  estimate_button_line="$(first_fixed_match 'id="marketing-estimate-recipients"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  estimate_result_line="$(first_fixed_match 'id="marketing-estimate-recipients-result"' "$CAMPAIGN_FORM_VIEW_FILE")"
+  campaign_id_line="$(first_fixed_match 'id="marketing-campaign-id"' "$CAMPAIGN_FORM_VIEW_FILE")"
+
+  if [[ -z "$shell_line" || -z "$marker_line" || -z "$list_line" || -z "$targeting_fields_line" || -z "$filtered_line" || -z "$estimate_button_line" || -z "$estimate_result_line" || -z "$campaign_id_line" ]]; then
+    fail \
+      "campaign audience and estimate UI stays grouped while preserving audience, targeting, and estimate hooks" \
+      "expected audience shell marker, list field, targeting markers, estimate button/result, and campaign id hook in $CAMPAIGN_FORM_VIEW_FILE; shell=${shell_line:-missing}; marker=${marker_line:-missing}; list=${list_line:-missing}; targeting=${targeting_fields_line:-missing}; filtered=${filtered_line:-missing}; estimate_button=${estimate_button_line:-missing}; estimate_result=${estimate_result_line:-missing}; campaign_id=${campaign_id_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign audience and estimate UI stays grouped while preserving audience, targeting, and estimate hooks" \
+    "shell=$shell_line | marker=$marker_line | list=$list_line | targeting=$targeting_fields_line | estimate_button=$estimate_button_line | estimate_result=$estimate_result_line"
+}
+
 check_campaign_show_command_center() {
   local center_line marker_line title_line grid_line actions_line next_step_line readiness_line
   center_line="$(first_fixed_match 'marketing-campaign-command-center' "$CAMPAIGN_SHOW_VIEW_FILE")"
@@ -2143,6 +2166,7 @@ check_retention_cleanup_scope
 check_retention_cleanup_not_auto_cron
 check_retention_dashboard_surface
 check_campaign_form_setup_guidance
+check_campaign_audience_estimate_shell
 check_campaign_builder_workspace_layout
 check_campaign_show_command_center
 check_campaign_index_scanability

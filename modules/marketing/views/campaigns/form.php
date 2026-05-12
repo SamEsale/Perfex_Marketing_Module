@@ -32,6 +32,10 @@ $scheduledAtValue = trim((string) ($campaign['scheduled_at'] ?? ''));
 $scheduledAtDisplayValue = '';
 $trackOpensEnabled = !empty($campaign['track_opens']);
 $trackClicksEnabled = !empty($campaign['track_clicks']);
+$audienceModeLabel = $targetingMode === 'filtered'
+    ? _l('marketing_campaign_targeting_filtered_segment')
+    : _l('marketing_campaign_targeting_full_audience');
+$audienceSummaryLabel = $audienceReady ? $audienceName : _l('marketing_campaign_audience_summary_none');
 
 foreach ($audiences as $audience) {
     if ((int) ($audience['id'] ?? 0) === $audienceId) {
@@ -208,23 +212,54 @@ foreach ($errorMessages as $errorMessage) {
                                     <input type="text" id="preview_text" name="preview_text" class="form-control" value="<?= html_escape($campaign['preview_text']); ?>">
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="list_id"><?= _l('marketing_campaign_list'); ?></label>
-                                    <select id="list_id" name="list_id" class="form-control" required>
-                                        <option value=""><?= _l('marketing_choose_list'); ?></option>
-                                        <?php foreach ($audiences as $audience) { ?>
-                                            <option value="<?= (int) $audience['id']; ?>" <?= (string) $campaign['list_id'] === (string) $audience['id'] ? 'selected' : ''; ?>>
-                                                <?= html_escape($audience['name']); ?>
-                                            </option>
-                                        <?php } ?>
-                                    </select>
-                                    <?php if (empty($audiences)) { ?>
-                                        <p class="text-muted mtop10"><?= _l('marketing_import_no_lists'); ?></p>
-                                    <?php } ?>
+                        </div>
+
+                        <div class="marketing-campaign-audience-shell" data-marketing-campaign-audience-shell="1">
+                            <div class="marketing-campaign-audience-header">
+                                <div>
+                                    <h4 class="marketing-campaign-audience-title"><?= _l('marketing_campaign_audience_heading'); ?></h4>
+                                    <p class="marketing-campaign-audience-helper no-margin"><?= _l('marketing_campaign_audience_helper'); ?></p>
                                 </div>
                             </div>
-                        </div>
+                            <div class="marketing-campaign-audience-grid">
+                                <div class="marketing-campaign-audience-card">
+                                    <div class="form-group no-margin">
+                                        <label for="list_id"><?= _l('marketing_campaign_list'); ?></label>
+                                        <select id="list_id" name="list_id" class="form-control" required>
+                                            <option value=""><?= _l('marketing_choose_list'); ?></option>
+                                            <?php foreach ($audiences as $audience) { ?>
+                                                <option value="<?= (int) $audience['id']; ?>" <?= (string) $campaign['list_id'] === (string) $audience['id'] ? 'selected' : ''; ?>>
+                                                    <?= html_escape($audience['name']); ?>
+                                                </option>
+                                            <?php } ?>
+                                        </select>
+                                        <?php if (empty($audiences)) { ?>
+                                            <p class="text-muted mtop10"><?= _l('marketing_import_no_lists'); ?></p>
+                                        <?php } ?>
+                                    </div>
+                                    <div class="marketing-campaign-audience-meta">
+                                        <div class="marketing-campaign-audience-meta-row">
+                                            <span class="marketing-campaign-audience-meta-label"><?= _l('marketing_campaign_audience_selected_label'); ?></span>
+                                            <span class="marketing-campaign-audience-chip"><?= html_escape($audienceSummaryLabel); ?></span>
+                                        </div>
+                                        <div class="marketing-campaign-audience-meta-row">
+                                            <span class="marketing-campaign-audience-meta-label"><?= _l('marketing_campaign_audience_segment_label'); ?></span>
+                                            <span class="marketing-campaign-audience-chip"><?= html_escape($audienceModeLabel); ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="marketing-campaign-estimate-card">
+                                    <h5 class="marketing-campaign-estimate-title"><?= _l('marketing_campaign_estimate_recipients'); ?></h5>
+                                    <p class="marketing-campaign-audience-helper no-margin"><?= _l('marketing_campaign_audience_estimate_helper'); ?></p>
+                                    <div class="mtop15">
+                                        <button type="button" class="btn btn-default" id="marketing-estimate-recipients"><?= _l('marketing_campaign_estimate_recipients'); ?></button>
+                                    </div>
+                                    <div class="marketing-campaign-estimate-result-shell">
+                                        <span id="marketing-estimate-recipients-result" class="text-muted"></span>
+                                    </div>
+                                    <p class="marketing-campaign-audience-next-step no-margin"><?= _l('marketing_campaign_audience_next_step_helper'); ?></p>
+                                </div>
+                            </div>
 
                         <div class="marketing-channel-panel">
                             <div class="row">
@@ -280,10 +315,9 @@ foreach ($errorMessages as $errorMessage) {
                             </div>
                         </div>
 
-                        <div class="panel_s">
-                            <div class="panel-body">
+                            <div class="marketing-campaign-targeting-card mtop20">
                                 <h4 class="bold no-margin"><?= _l('marketing_campaign_targeting_rules_heading'); ?></h4>
-                                <p class="text-muted mtop10"><?= _l('marketing_campaign_targeting_rules_help'); ?></p>
+                                <p class="marketing-campaign-audience-helper mtop10"><?= _l('marketing_campaign_targeting_rules_help'); ?></p>
                                 <div class="marketing-targeting-panel mtop15">
                                     <div class="marketing-targeting-mode">
                                         <div class="radio radio-primary">
@@ -390,14 +424,9 @@ foreach ($errorMessages as $errorMessage) {
                                             </div>
                                         </div>
                                     </div>
-
-                                    <div class="mtop20">
-                                        <input type="hidden" id="marketing-campaign-id" value="<?= (int) ($campaign['id'] ?? 0); ?>">
-                                        <button type="button" class="btn btn-default" id="marketing-estimate-recipients"><?= _l('marketing_campaign_estimate_recipients'); ?></button>
-                                        <span id="marketing-estimate-recipients-result" class="text-muted mleft10"></span>
-                                    </div>
                                 </div>
                             </div>
+                            <input type="hidden" id="marketing-campaign-id" value="<?= (int) ($campaign['id'] ?? 0); ?>">
                         </div>
 
                         <div class="row">

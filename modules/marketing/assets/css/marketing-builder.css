@@ -352,6 +352,121 @@
     border-radius: 20px;
 }
 
+.marketing-campaign-audience-shell {
+    margin: 8px 0 24px;
+    padding: 20px 22px;
+    border: 1px solid #dbe6f3;
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at top right, rgba(16, 185, 129, 0.07), transparent 24%),
+        linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.marketing-campaign-audience-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.marketing-campaign-audience-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-audience-helper {
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.marketing-campaign-audience-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr);
+    gap: 14px;
+}
+
+.marketing-campaign-audience-card,
+.marketing-campaign-estimate-card,
+.marketing-campaign-targeting-card {
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.94);
+}
+
+.marketing-campaign-audience-card,
+.marketing-campaign-estimate-card {
+    padding: 16px;
+}
+
+.marketing-campaign-targeting-card {
+    margin-top: 16px;
+    padding: 18px;
+}
+
+.marketing-campaign-audience-meta {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.marketing-campaign-audience-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.marketing-campaign-audience-meta-label {
+    font-size: 12px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.marketing-campaign-audience-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.marketing-campaign-estimate-title {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.marketing-campaign-estimate-result-shell {
+    min-height: 28px;
+    margin: 12px 0 10px;
+}
+
+.marketing-campaign-estimate-result-shell #marketing-estimate-recipients-result {
+    display: inline-block;
+    margin-left: 0 !important;
+    line-height: 1.55;
+}
+
+.marketing-campaign-audience-next-step {
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
 .marketing-campaign-list-table td {
     vertical-align: middle !important;
 }
@@ -1181,6 +1296,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .marketing-campaign-audience-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .marketing-campaign-builder-actions {
         justify-content: flex-start;
     }
@@ -1249,6 +1368,15 @@
     .marketing-campaign-builder-header {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .marketing-campaign-audience-shell {
+        padding: 18px;
+    }
+
+    .marketing-campaign-audience-meta-row {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     .marketing-campaign-builder-next-step {
