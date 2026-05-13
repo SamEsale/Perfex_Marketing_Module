@@ -189,8 +189,8 @@ if ($crmRoot === null) {
 $categories = [];
 
 $categories[] = [
-    'label' => 'Orphaned Event Recipient Refs',
-    'severity' => 'critical',
+    'label' => 'Audit-Preserved Orphaned Event Recipient Refs',
+    'severity' => 'warning',
     'count' => marketing_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null"),
     'rows' => marketing_fetch_rows($mysqli, "select e.id, e.campaign_recipient_id from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null order by e.id asc"),
 ];

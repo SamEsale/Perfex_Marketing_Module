@@ -140,14 +140,16 @@ class Marketing_integrity_model extends App_Model
     protected function check_orphaned_event_recipient_refs($sampleLimit)
     {
         if (!$this->table_exists($this->eventsTable) || !$this->table_exists($this->recipientsTable) || !$this->field_exists($this->eventsTable, 'campaign_recipient_id')) {
-            return $this->category('orphaned_event_recipient_refs', 'Orphaned Event Recipient Refs', 'critical', 0);
+            return $this->category('orphaned_event_recipient_refs', 'Audit-Preserved Orphaned Event Recipient Refs', 'warning', 0);
         }
 
         $where = " FROM {$this->eventsTable} e LEFT JOIN {$this->recipientsTable} r ON r.id = e.campaign_recipient_id WHERE e.campaign_recipient_id IS NOT NULL AND r.id IS NULL";
         $count = $this->fetch_count('SELECT COUNT(*) AS total' . $where);
         $rows = $this->fetch_rows('SELECT e.id, e.event_type, e.campaign_id, e.campaign_recipient_id, e.provider, e.event_at' . $where . ' ORDER BY e.id ASC', $sampleLimit);
 
-        return $this->category('orphaned_event_recipient_refs', 'Orphaned Event Recipient Refs', 'critical', $count, $rows);
+        return $this->category('orphaned_event_recipient_refs', 'Audit-Preserved Orphaned Event Recipient Refs', 'warning', $count, $rows, [
+            'policy' => 'preserved_audit_events_missing_recipient_rows',
+        ]);
     }
 
     protected function check_duplicate_provider_event_identities($sampleLimit)

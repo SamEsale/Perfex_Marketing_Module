@@ -243,7 +243,7 @@ $repairTargets = [
 ];
 
 $nonRepairable = [
-    'title' => 'Orphaned Event Recipient Refs',
+    'title' => 'Audit-Preserved Orphaned Event Recipient Refs',
     'count' => marketing_repair_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null"),
     'rows' => marketing_repair_fetch_rows($mysqli, "select e.id from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null order by e.id asc"),
 ];
@@ -263,7 +263,7 @@ foreach ($repairTargets as &$target) {
 }
 unset($target);
 
-echo $nonRepairable['title'] . ': ' . (int) $nonRepairable['count'] . " (diagnostic-only; no automatic repair)\n";
+echo $nonRepairable['title'] . ': ' . (int) $nonRepairable['count'] . " (diagnostic-only; preserved audit events with no automatic relink/delete)\n";
 marketing_repair_print_samples($nonRepairable['rows']);
 echo "Schema drift remains diagnostic-only in this patch.\n";
 echo "------------------------------\n";

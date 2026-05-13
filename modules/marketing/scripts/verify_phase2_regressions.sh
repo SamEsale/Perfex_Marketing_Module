@@ -2099,7 +2099,7 @@ check_inbound_reply_hardening() {
 }
 
 check_phase4_integrity_diagnostics() {
-  local model_helper runtime_script runtime_method dashboard_controller_load dashboard_view_title dashboard_view_note inbound_message_channel inbound_message_provider whatsapp_message_channel destructive_sql cli_guard bootstrap_guard db_prefix_guard exit_zero exit_one exit_two
+  local model_helper runtime_script runtime_method dashboard_controller_load dashboard_view_title dashboard_view_note inbound_message_channel inbound_message_provider whatsapp_message_channel destructive_sql cli_guard bootstrap_guard db_prefix_guard exit_zero exit_one exit_two orphaned_warning_model orphaned_warning_runtime orphaned_reported_runtime
   model_helper="$(first_match 'class[[:space:]]+Marketing_integrity_model' "$INTEGRITY_MODEL_FILE")"
   runtime_script="$(first_fixed_match 'Marketing Integrity Diagnostics' "$INTEGRITY_RUNTIME_FILE")"
   runtime_method="$(first_match 'function[[:space:]]+get_integrity_diagnostics' "$INTEGRITY_MODEL_FILE")"
@@ -2115,18 +2115,21 @@ check_phase4_integrity_diagnostics() {
   exit_zero="$(first_fixed_match "\$exitStatus = \$criticalCount > 0 ? 1 : 0;" "$INTEGRITY_RUNTIME_FILE")"
   exit_one="$(first_fixed_match "marketing_exit_with_status(2, \"Perfex CRM root not found. Run this from the deployed CRM root.\");" "$INTEGRITY_RUNTIME_FILE")"
   exit_two="$(first_fixed_match "marketing_exit_with_status(\$exitStatus, '', false);" "$INTEGRITY_RUNTIME_FILE")"
+  orphaned_warning_model="$(first_fixed_match "Audit-Preserved Orphaned Event Recipient Refs', 'warning'" "$INTEGRITY_MODEL_FILE")"
+  orphaned_warning_runtime="$(first_fixed_match "'label' => 'Audit-Preserved Orphaned Event Recipient Refs'" "$INTEGRITY_RUNTIME_FILE")"
+  orphaned_reported_runtime="$(first_fixed_match "'severity' => 'warning'" "$INTEGRITY_RUNTIME_FILE")"
   destructive_sql="$(grep -nE '\b(DELETE|UPDATE|INSERT|TRUNCATE|DROP|ALTER|CREATE)\b' "$INTEGRITY_RUNTIME_FILE" || true)"
 
-  if [[ -z "$model_helper" || -z "$runtime_script" || -z "$runtime_method" || -z "$dashboard_controller_load" || -z "$dashboard_view_title" || -z "$dashboard_view_note" || -z "$inbound_message_channel" || -z "$inbound_message_provider" || -z "$whatsapp_message_channel" || -z "$cli_guard" || -z "$bootstrap_guard" || -z "$db_prefix_guard" || -z "$exit_zero" || -z "$exit_one" || -z "$exit_two" || -n "$destructive_sql" ]]; then
+  if [[ -z "$model_helper" || -z "$runtime_script" || -z "$runtime_method" || -z "$dashboard_controller_load" || -z "$dashboard_view_title" || -z "$dashboard_view_note" || -z "$inbound_message_channel" || -z "$inbound_message_provider" || -z "$whatsapp_message_channel" || -z "$cli_guard" || -z "$bootstrap_guard" || -z "$db_prefix_guard" || -z "$exit_zero" || -z "$exit_one" || -z "$exit_two" || -z "$orphaned_warning_model" || -z "$orphaned_warning_runtime" || -z "$orphaned_reported_runtime" || -n "$destructive_sql" ]]; then
     fail \
       "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
-      "expected integrity model/runtime script/dashboard wiring, safe CLI bootstrap/db_prefix/exit handling, plus inbound email message channel metadata and preserved WhatsApp markers; model=${model_helper:-missing}; runtime=${runtime_script:-missing}; method=${runtime_method:-missing}; controller=${dashboard_controller_load:-missing}; title=${dashboard_view_title:-missing}; note=${dashboard_view_note:-missing}; cli=${cli_guard:-missing}; basepath=${bootstrap_guard:-missing}; db_prefix=${db_prefix_guard:-missing}; exit0=${exit_zero:-missing}; exit2=${exit_one:-missing}; exit_final=${exit_two:-missing}; inbound_channel=${inbound_message_channel:-missing}; inbound_provider=${inbound_message_provider:-missing}; whatsapp_channel=${whatsapp_message_channel:-missing}; destructive=${destructive_sql:-none}"
+      "expected integrity model/runtime script/dashboard wiring, safe CLI bootstrap/db_prefix/exit handling, warning-only orphaned audit refs, plus inbound email message channel metadata and preserved WhatsApp markers; model=${model_helper:-missing}; runtime=${runtime_script:-missing}; method=${runtime_method:-missing}; controller=${dashboard_controller_load:-missing}; title=${dashboard_view_title:-missing}; note=${dashboard_view_note:-missing}; cli=${cli_guard:-missing}; basepath=${bootstrap_guard:-missing}; db_prefix=${db_prefix_guard:-missing}; exit0=${exit_zero:-missing}; exit2=${exit_one:-missing}; exit_final=${exit_two:-missing}; orphaned_model=${orphaned_warning_model:-missing}; orphaned_runtime=${orphaned_warning_runtime:-missing}; orphaned_severity=${orphaned_reported_runtime:-missing}; inbound_channel=${inbound_message_channel:-missing}; inbound_provider=${inbound_message_provider:-missing}; whatsapp_channel=${whatsapp_message_channel:-missing}; destructive=${destructive_sql:-none}"
     return
   fi
 
   pass \
     "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
-    "model=$model_helper | runtime=$runtime_script | cli=$cli_guard | db_prefix=$db_prefix_guard | dashboard=$dashboard_view_title"
+    "model=$model_helper | runtime=$runtime_script | orphaned=$orphaned_warning_model | cli=$cli_guard | db_prefix=$db_prefix_guard | dashboard=$dashboard_view_title"
 }
 
 check_phase4_integrity_repair() {
@@ -2141,7 +2144,7 @@ check_phase4_integrity_repair() {
   repair_exit_dry="$(first_fixed_match "marketing_repair_exit(1, '', false);" "$INTEGRITY_REPAIR_FILE")"
   repair_exit_bootstrap="$(first_fixed_match "marketing_repair_exit(2, \"Perfex CRM root not found. Run this from the deployed CRM root.\");" "$INTEGRITY_REPAIR_FILE")"
   repair_exit_apply="$(first_fixed_match "marketing_repair_exit(3, \"Apply failed while repairing: \" . \$target['title']);" "$INTEGRITY_REPAIR_FILE")"
-  repair_orphaned_note="$(first_fixed_match 'diagnostic-only; no automatic repair' "$INTEGRITY_REPAIR_FILE")"
+  repair_orphaned_note="$(first_fixed_match 'preserved audit events with no automatic relink/delete' "$INTEGRITY_REPAIR_FILE")"
   dashboard_repair_note="$(first_fixed_match 'repair_phase4_integrity_runtime.php' "$DASHBOARD_VIEW_FILE")"
   dashboard_repair_apply="$(first_fixed_match 'repair_phase4_integrity_runtime.php --apply' "$DASHBOARD_VIEW_FILE")"
   validator_runtime="$(first_fixed_match 'Marketing Integrity Diagnostics' "$INTEGRITY_RUNTIME_FILE")"
