@@ -293,8 +293,8 @@ $categories[] = [
 $categories[] = [
     'label' => 'Schema Drift Snapshot',
     'severity' => 'warning',
-    'count' => marketing_fetch_count($mysqli, "select count(*) as total from information_schema.columns where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and ((table_name='tblmarketing_conversations' and column_name='channel' and is_nullable!='YES') or (table_name='tblmarketing_messages' and column_name='channel' and is_nullable!='YES'))"),
-    'rows' => marketing_fetch_rows($mysqli, "select table_name as id, column_name, is_nullable from information_schema.columns where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and ((table_name='tblmarketing_conversations' and column_name='channel' and is_nullable!='YES') or (table_name='tblmarketing_messages' and column_name='channel' and is_nullable!='YES'))"),
+    'count' => marketing_fetch_count($mysqli, "select count(*) as total from information_schema.columns where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and ((table_name='tblmarketing_conversations' and column_name='channel' and is_nullable!='NO') or (table_name='tblmarketing_messages' and column_name='channel' and is_nullable!='NO'))"),
+    'rows' => marketing_fetch_rows($mysqli, "select table_name as id, column_name, is_nullable from information_schema.columns where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and ((table_name='tblmarketing_conversations' and column_name='channel' and is_nullable!='NO') or (table_name='tblmarketing_messages' and column_name='channel' and is_nullable!='NO'))"),
 ];
 
 $criticalCount = 0;

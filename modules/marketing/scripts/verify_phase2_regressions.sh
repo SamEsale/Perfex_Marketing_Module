@@ -1845,8 +1845,8 @@ check_whatsapp_active_social_scope() {
 
 check_whatsapp_conversation_schema_readiness() {
   local conv_channel conv_provider conv_phone conv_norm_phone conv_thread conv_lead conv_assigned conv_unread conv_inbound conv_outbound conv_notes
-  local msg_provider msg_type msg_thread msg_status msg_media msg_context
-  conv_channel="$(first_fixed_match "'channel' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  local msg_channel msg_provider msg_type msg_thread msg_status msg_media msg_context
+  conv_channel="$(first_fixed_match "'channel' => ['sql' => \"VARCHAR(50) NOT NULL DEFAULT 'email'\", 'repairable' => true]" "$SCHEMA_FILE")"
   conv_provider="$(first_fixed_match "'provider' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
   conv_phone="$(first_fixed_match "'contact_phone' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
   conv_norm_phone="$(first_fixed_match "'normalized_phone' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
@@ -1857,6 +1857,7 @@ check_whatsapp_conversation_schema_readiness() {
   conv_inbound="$(first_fixed_match "'last_inbound_at' => ['sql' => 'DATETIME NULL', 'repairable' => true]" "$SCHEMA_FILE")"
   conv_outbound="$(first_fixed_match "'last_outbound_at' => ['sql' => 'DATETIME NULL', 'repairable' => true]" "$SCHEMA_FILE")"
   conv_notes="$(first_fixed_match "'internal_notes' => ['sql' => 'TEXT NULL', 'repairable' => true]" "$SCHEMA_FILE")"
+  msg_channel="$(first_fixed_match "'channel' => ['sql' => \"VARCHAR(50) NOT NULL DEFAULT 'email'\", 'repairable' => true]" "$SCHEMA_FILE")"
   msg_provider="$(first_fixed_match "'provider' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
   msg_type="$(first_fixed_match "'message_type' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
   msg_thread="$(first_fixed_match "'provider_thread_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
@@ -1864,16 +1865,16 @@ check_whatsapp_conversation_schema_readiness() {
   msg_media="$(first_fixed_match "'media_meta_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true]" "$SCHEMA_FILE")"
   msg_context="$(first_fixed_match "'context_provider_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true]" "$SCHEMA_FILE")"
 
-  if [[ -z "$conv_channel" || -z "$conv_provider" || -z "$conv_phone" || -z "$conv_norm_phone" || -z "$conv_thread" || -z "$conv_lead" || -z "$conv_assigned" || -z "$conv_unread" || -z "$conv_inbound" || -z "$conv_outbound" || -z "$conv_notes" || -z "$msg_provider" || -z "$msg_type" || -z "$msg_thread" || -z "$msg_status" || -z "$msg_media" || -z "$msg_context" ]]; then
+  if [[ -z "$conv_channel" || -z "$conv_provider" || -z "$conv_phone" || -z "$conv_norm_phone" || -z "$conv_thread" || -z "$conv_lead" || -z "$conv_assigned" || -z "$conv_unread" || -z "$conv_inbound" || -z "$conv_outbound" || -z "$conv_notes" || -z "$msg_channel" || -z "$msg_provider" || -z "$msg_type" || -z "$msg_thread" || -z "$msg_status" || -z "$msg_media" || -z "$msg_context" ]]; then
     fail \
       "WhatsApp-ready conversation and message schema fields are repairable and bootstrap-managed" \
-      "expected new conversation/message fields in $SCHEMA_FILE; conv_channel=${conv_channel:-missing}; conv_provider=${conv_provider:-missing}; conv_phone=${conv_phone:-missing}; conv_thread=${conv_thread:-missing}; conv_unread=${conv_unread:-missing}; msg_type=${msg_type:-missing}; msg_media=${msg_media:-missing}; msg_context=${msg_context:-missing}"
+      "expected new conversation/message fields in $SCHEMA_FILE; conv_channel=${conv_channel:-missing}; conv_provider=${conv_provider:-missing}; conv_phone=${conv_phone:-missing}; conv_thread=${conv_thread:-missing}; conv_unread=${conv_unread:-missing}; msg_channel=${msg_channel:-missing}; msg_type=${msg_type:-missing}; msg_media=${msg_media:-missing}; msg_context=${msg_context:-missing}"
     return
   fi
 
   pass \
     "WhatsApp-ready conversation and message schema fields are repairable and bootstrap-managed" \
-    "conv_channel=$conv_channel | conv_unread=$conv_unread | msg_type=$msg_type | msg_media=$msg_media"
+    "conv_channel=$conv_channel | conv_unread=$conv_unread | msg_channel=$msg_channel | msg_type=$msg_type | msg_media=$msg_media"
 }
 
 check_conversation_model_optional_column_guards() {

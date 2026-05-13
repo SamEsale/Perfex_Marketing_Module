@@ -439,11 +439,11 @@ class Marketing_integrity_model extends App_Model
         $databaseName = $this->db->escape(APP_DB_NAME);
         $expected = [
             $this->conversationsTable => [
-                'channel' => ['nullable' => true],
+                'channel' => ['nullable' => false],
                 'provider' => ['nullable' => true],
             ],
             $this->messagesTable => [
-                'channel' => ['nullable' => true],
+                'channel' => ['nullable' => false],
                 'provider' => ['nullable' => true],
                 'dedupe_key' => ['nullable' => true],
             ],
