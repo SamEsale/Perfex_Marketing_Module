@@ -5,6 +5,20 @@ if (PHP_SAPI !== 'cli') {
     exit(2);
 }
 
+function marketing_print_banner()
+{
+    echo "Marketing Integrity Diagnostics\n";
+}
+
+function marketing_exit_with_status($status, $message = '', $stderr = true)
+{
+    if ($message !== '') {
+        fwrite($stderr ? STDERR : STDOUT, rtrim($message) . "\n");
+    }
+
+    exit((int) $status);
+}
+
 function marketing_find_crm_root($startDir)
 {
     $dir = $startDir;
@@ -22,16 +36,40 @@ function marketing_find_crm_root($startDir)
     return null;
 }
 
+function marketing_define_bootstrap_guards($crmRoot)
+{
+    if (!defined('BASEPATH')) {
+        define('BASEPATH', $crmRoot . '/system/');
+    }
+
+    if (!defined('APPPATH')) {
+        define('APPPATH', $crmRoot . '/application/');
+    }
+
+    if (!defined('FCPATH')) {
+        define('FCPATH', rtrim($crmRoot, '/\\') . DIRECTORY_SEPARATOR);
+    }
+
+    if (!defined('ENVIRONMENT')) {
+        define('ENVIRONMENT', 'production');
+    }
+}
+
 function marketing_connect_db($crmRoot)
 {
+    marketing_define_bootstrap_guards($crmRoot);
+
     require $crmRoot . '/application/config/app-config.php';
     require $crmRoot . '/application/config/database.php';
+
+    if (!isset($db['default']) || !is_array($db['default'])) {
+        marketing_exit_with_status(2, "Database configuration is unavailable.");
+    }
 
     $config = $db['default'];
     $mysqli = @new mysqli($config['hostname'], $config['username'], $config['password'], $config['database']);
     if ($mysqli->connect_errno) {
-        fwrite(STDERR, "Database connection failed.\n");
-        exit(2);
+        marketing_exit_with_status(2, "Database connection failed.");
     }
 
     $charset = defined('APP_DB_CHARSET') ? APP_DB_CHARSET : 'utf8mb4';
@@ -90,10 +128,12 @@ function marketing_print_section($label, $severity, $count, array $rows = [])
     }
 }
 
+$exitStatus = 0;
+marketing_print_banner();
+
 $crmRoot = marketing_find_crm_root(dirname(__DIR__, 3));
 if ($crmRoot === null) {
-    fwrite(STDERR, "Perfex CRM root not found. Run this from the deployed CRM root.\n");
-    exit(2);
+    marketing_exit_with_status(2, "Perfex CRM root not found. Run this from the deployed CRM root.");
 }
 
 [$mysqli, $databaseName] = marketing_connect_db($crmRoot);
@@ -212,7 +252,6 @@ $categories[] = [
 $criticalCount = 0;
 $warningCount = 0;
 
-echo "Marketing Integrity Diagnostics\n";
 echo "Generated at: " . gmdate('c') . "\n";
 echo "CRM root: " . $crmRoot . "\n";
 echo "------------------------------\n";
@@ -231,4 +270,6 @@ echo "------------------------------\n";
 echo "critical_count=" . $criticalCount . "\n";
 echo "warning_count=" . $warningCount . "\n";
 
-exit($criticalCount > 0 ? 1 : 0);
+$exitStatus = $criticalCount > 0 ? 1 : 0;
+
+marketing_exit_with_status($exitStatus, '', false);
