@@ -92,9 +92,18 @@ class Marketing_conversations_model extends App_Model
         $email = isset($data['email']) ? trim((string) $data['email']) : '';
         $normalizedPhone = $this->normalize_phone($data['normalized_phone'] ?? ($data['contact_phone'] ?? ''));
         $providerThreadId = trim((string) ($data['provider_thread_id'] ?? ''));
+        $sourceType = isset($data['source_type']) ? trim((string) $data['source_type']) : '';
+        $provider = isset($data['provider']) ? trim((string) $data['provider']) : '';
+        $channel = isset($data['channel']) ? trim((string) $data['channel']) : '';
+        if ($channel === '' && ($sourceType === 'email_reply' || $provider === 'inbound_email')) {
+            $channel = 'email';
+        }
+        if ($channel === '') {
+            $channel = 'email';
+        }
         $existing = $this->find_conversation($campaignId, $contactId ?: null, $email, [
-            'channel' => isset($data['channel']) ? trim((string) $data['channel']) : '',
-            'provider' => isset($data['provider']) ? trim((string) $data['provider']) : '',
+            'channel' => $channel,
+            'provider' => $provider,
             'normalized_phone' => $normalizedPhone,
             'provider_thread_id' => $providerThreadId,
         ]);
@@ -109,8 +118,8 @@ class Marketing_conversations_model extends App_Model
             'marketing_contact_id' => $contactId ?: null,
             'email' => $email !== '' ? mb_strtolower($email) : null,
             'contact_email' => $email !== '' ? mb_strtolower($email) : null,
-            'channel' => isset($data['channel']) ? trim((string) $data['channel']) : null,
-            'provider' => isset($data['provider']) ? trim((string) $data['provider']) : null,
+            'channel' => $channel,
+            'provider' => $provider !== '' ? $provider : null,
             'contact_phone' => $normalizedPhone !== '' ? $normalizedPhone : null,
             'normalized_phone' => $normalizedPhone !== '' ? $normalizedPhone : null,
             'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,

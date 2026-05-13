@@ -699,6 +699,8 @@ class Webhooks extends CI_Controller
                 'campaign_id' => $campaignId,
                 'marketing_contact_id' => $contactId,
                 'email' => $senderEmail,
+                'channel' => 'email',
+                'provider' => 'inbound_email',
                 'subject' => $subject,
                 'last_message_at' => $receivedAt,
                 'status' => 'open',
