@@ -27,6 +27,7 @@ ANALYTICS_CONTROLLER_FILE="modules/marketing/controllers/Analytics.php"
 SETTINGS_CONTROLLER_FILE="modules/marketing/controllers/Settings.php"
 INTEGRITY_MODEL_FILE="modules/marketing/models/Marketing_integrity_model.php"
 INTEGRITY_RUNTIME_FILE="modules/marketing/scripts/verify_phase4_integrity_runtime.php"
+INTEGRITY_REPAIR_FILE="modules/marketing/scripts/repair_phase4_integrity_runtime.php"
 README_FILE="modules/marketing/README.md"
 INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
@@ -2128,6 +2129,36 @@ check_phase4_integrity_diagnostics() {
     "model=$model_helper | runtime=$runtime_script | cli=$cli_guard | db_prefix=$db_prefix_guard | dashboard=$dashboard_view_title"
 }
 
+check_phase4_integrity_repair() {
+  local repair_script repair_cli_guard repair_bootstrap_guard repair_db_prefix_guard repair_help repair_apply repair_dry_run repair_exit_dry repair_exit_bootstrap repair_exit_apply repair_orphaned_note dashboard_repair_note dashboard_repair_apply forbidden_sql validator_runtime
+  repair_script="$(first_fixed_match 'Marketing Integrity Repair' "$INTEGRITY_REPAIR_FILE")"
+  repair_cli_guard="$(first_fixed_match "PHP_SAPI !== 'cli'" "$INTEGRITY_REPAIR_FILE")"
+  repair_bootstrap_guard="$(first_fixed_match "define('BASEPATH', \$crmRoot . '/system/');" "$INTEGRITY_REPAIR_FILE")"
+  repair_db_prefix_guard="$(first_fixed_match "function db_prefix()" "$INTEGRITY_REPAIR_FILE")"
+  repair_help="$(first_fixed_match "--help" "$INTEGRITY_REPAIR_FILE")"
+  repair_apply="$(first_fixed_match "--apply" "$INTEGRITY_REPAIR_FILE")"
+  repair_dry_run="$(first_fixed_match "\$applyMode = false;" "$INTEGRITY_REPAIR_FILE")"
+  repair_exit_dry="$(first_fixed_match "marketing_repair_exit(1, '', false);" "$INTEGRITY_REPAIR_FILE")"
+  repair_exit_bootstrap="$(first_fixed_match "marketing_repair_exit(2, \"Perfex CRM root not found. Run this from the deployed CRM root.\");" "$INTEGRITY_REPAIR_FILE")"
+  repair_exit_apply="$(first_fixed_match "marketing_repair_exit(3, \"Apply failed while repairing: \" . \$target['title']);" "$INTEGRITY_REPAIR_FILE")"
+  repair_orphaned_note="$(first_fixed_match 'diagnostic-only; no automatic repair' "$INTEGRITY_REPAIR_FILE")"
+  dashboard_repair_note="$(first_fixed_match 'repair_phase4_integrity_runtime.php' "$DASHBOARD_VIEW_FILE")"
+  dashboard_repair_apply="$(first_fixed_match 'repair_phase4_integrity_runtime.php --apply' "$DASHBOARD_VIEW_FILE")"
+  validator_runtime="$(first_fixed_match 'Marketing Integrity Diagnostics' "$INTEGRITY_RUNTIME_FILE")"
+  forbidden_sql="$(grep -nE '\b(DELETE|TRUNCATE|DROP|ALTER|CREATE)\b' "$INTEGRITY_REPAIR_FILE" || true)"
+
+  if [[ -z "$repair_script" || -z "$repair_cli_guard" || -z "$repair_bootstrap_guard" || -z "$repair_db_prefix_guard" || -z "$repair_help" || -z "$repair_apply" || -z "$repair_dry_run" || -z "$repair_exit_dry" || -z "$repair_exit_bootstrap" || -z "$repair_exit_apply" || -z "$repair_orphaned_note" || -z "$dashboard_repair_note" || -z "$dashboard_repair_apply" || -z "$validator_runtime" || -n "$forbidden_sql" ]]; then
+    fail \
+      "phase 4 integrity repair remains explicit, CLI-only, and non-destructive" \
+      "expected repair runtime script with CLI bootstrap, db_prefix fallback, dry-run default, apply-only writes, explicit exit handling, orphaned-event diagnostic note, dashboard repair commands, and preserved read-only validator; script=${repair_script:-missing}; cli=${repair_cli_guard:-missing}; basepath=${repair_bootstrap_guard:-missing}; db_prefix=${repair_db_prefix_guard:-missing}; help=${repair_help:-missing}; apply=${repair_apply:-missing}; dry_run=${repair_dry_run:-missing}; exit1=${repair_exit_dry:-missing}; exit2=${repair_exit_bootstrap:-missing}; exit3=${repair_exit_apply:-missing}; orphaned=${repair_orphaned_note:-missing}; dashboard=${dashboard_repair_note:-missing}; dashboard_apply=${dashboard_repair_apply:-missing}; validator=${validator_runtime:-missing}; forbidden=${forbidden_sql:-none}"
+    return
+  fi
+
+  pass \
+    "phase 4 integrity repair remains explicit, CLI-only, and non-destructive" \
+    "script=$repair_script | cli=$repair_cli_guard | dry_run=$repair_dry_run | apply=$repair_apply"
+}
+
 check_option_repair_idempotence() {
   local defaults_helper_line option_names_line ensure_helper_line install_usage_line uninstall_usage_line add_only_line
   defaults_helper_line="$(first_match 'function[[:space:]]+marketing_get_default_options' "$BOOTSTRAP_FILE")"
@@ -2410,6 +2441,7 @@ check_ses_sns_verifier_strictness
 check_sns_message_id_idempotency
 check_inbound_reply_hardening
 check_phase4_integrity_diagnostics
+check_phase4_integrity_repair
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   printf 'FAILED phase2-regressions %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"

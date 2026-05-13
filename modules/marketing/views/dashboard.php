@@ -486,7 +486,7 @@
                                         </div>
                                         <div class="marketing-ops-section">
                                             <h5 class="marketing-ops-section-title">Integrity Health</h5>
-                                            <p class="marketing-ops-section-copy">Read-only runtime integrity checks for queue state, provider events, inbound replies, and schema drift. Run <code>php modules/marketing/scripts/verify_phase4_integrity_runtime.php</code> from the CRM root for detailed samples.</p>
+                                            <p class="marketing-ops-section-copy">Read-only runtime integrity checks for queue state, provider events, inbound replies, and schema drift. Run <code>php modules/marketing/scripts/verify_phase4_integrity_runtime.php</code> for diagnostics, <code>php modules/marketing/scripts/repair_phase4_integrity_runtime.php</code> for dry-run repair planning, and <code>php modules/marketing/scripts/repair_phase4_integrity_runtime.php --apply</code> for explicit metadata repair from the CRM root.</p>
                                             <?php if (empty($integrityDiagnostics['available'])) { ?>
                                                 <div class="marketing-ops-empty">Integrity diagnostics are currently unavailable. The dashboard fell back safely without breaking queue operations.</div>
                                             <?php } else { ?>
