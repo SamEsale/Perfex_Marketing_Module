@@ -937,21 +937,31 @@ class Marketing_campaigns_model extends App_Model
 
     public function recover_stale_recipient_processing($campaignId = null, $staffId = null)
     {
-        $recovered = $this->recover_stuck_processing($campaignId !== null ? (int) $campaignId : null);
+        $recoveryDetails = [];
+        $recovered = $this->recover_stuck_processing($campaignId !== null ? (int) $campaignId : null, $recoveryDetails);
 
         $this->record_operator_action(
             'recover_stale_recipient_processing',
             [
                 'campaign_id' => $campaignId !== null ? (int) $campaignId : null,
                 'recovered' => $recovered,
+                'recovered_with_outbound_attempt' => (int) ($recoveryDetails['with_outbound_attempt'] ?? 0),
             ],
             $campaignId,
             $staffId
         );
 
+        $warnings = [];
+        if ($recovered > 0) {
+            $warnings[] = 'stale_recipient_processing_recovered';
+        }
+        if (!empty($recoveryDetails['with_outbound_attempt'])) {
+            $warnings[] = 'stale_processing_recovered_with_outbound_attempt';
+        }
+
         return [
             'recovered' => (int) $recovered,
-            'warnings' => $recovered > 0 ? ['stale_recipient_processing_recovered'] : [],
+            'warnings' => $warnings,
         ];
     }
 
@@ -1228,13 +1238,18 @@ class Marketing_campaigns_model extends App_Model
                     continue;
                 }
 
-                $campaignRecovered = $this->recover_stuck_processing($campaign['id']);
+                $campaignRecoveryDetails = [];
+                $campaignRecovered = $this->recover_stuck_processing($campaign['id'], $campaignRecoveryDetails);
                 $summary['recovered'] += $campaignRecovered;
                 if ($campaignRecovered > 0) {
                     $this->append_unique_warning($summary['warnings'], 'stale_recipient_processing_recovered');
                     $this->append_unique_warning($summary['warnings'], 'stale_processing_recovered');
                     $this->append_unique_warning($campaignWarnings, 'stale_recipient_processing_recovered');
                     $this->append_unique_warning($campaignWarnings, 'stale_processing_recovered');
+                }
+                if (!empty($campaignRecoveryDetails['with_outbound_attempt'])) {
+                    $this->append_unique_warning($summary['warnings'], 'stale_processing_recovered_with_outbound_attempt');
+                    $this->append_unique_warning($campaignWarnings, 'stale_processing_recovered_with_outbound_attempt');
                 }
 
                 $queued = $this->count_sendable_recipients($campaign['id']);
@@ -1340,12 +1355,17 @@ class Marketing_campaigns_model extends App_Model
                 $this->touch_campaign_worker_lease((int) $campaign['id'], $campaignWorkerToken);
 
                 if (!$this->is_within_send_window()) {
-                    $recoveredNow = $this->recover_stuck_processing($campaign['id']);
+                    $recoveryDetails = [];
+                    $recoveredNow = $this->recover_stuck_processing($campaign['id'], $recoveryDetails);
                     $summary['recovered'] += $recoveredNow;
                     $campaignRecovered += $recoveredNow;
                     if ($recoveredNow > 0) {
                         $this->append_unique_warning($summary['warnings'], 'stale_recipient_processing_recovered');
                         $this->append_unique_warning($campaignWarnings, 'stale_recipient_processing_recovered');
+                    }
+                    if (!empty($recoveryDetails['with_outbound_attempt'])) {
+                        $this->append_unique_warning($summary['warnings'], 'stale_processing_recovered_with_outbound_attempt');
+                        $this->append_unique_warning($campaignWarnings, 'stale_processing_recovered_with_outbound_attempt');
                     }
                     $summary['warnings'][] = 'outside_send_window';
                     $campaignWarnings[] = 'outside_send_window';
@@ -1355,12 +1375,17 @@ class Marketing_campaigns_model extends App_Model
 
                 $liveRateSnapshot = $this->get_rate_limit_snapshot();
                 if ($liveRateSnapshot['hourly_remaining'] !== null && $liveRateSnapshot['hourly_remaining'] <= 0) {
-                    $recoveredNow = $this->recover_stuck_processing($campaign['id']);
+                    $recoveryDetails = [];
+                    $recoveredNow = $this->recover_stuck_processing($campaign['id'], $recoveryDetails);
                     $summary['recovered'] += $recoveredNow;
                     $campaignRecovered += $recoveredNow;
                     if ($recoveredNow > 0) {
                         $this->append_unique_warning($summary['warnings'], 'stale_recipient_processing_recovered');
                         $this->append_unique_warning($campaignWarnings, 'stale_recipient_processing_recovered');
+                    }
+                    if (!empty($recoveryDetails['with_outbound_attempt'])) {
+                        $this->append_unique_warning($summary['warnings'], 'stale_processing_recovered_with_outbound_attempt');
+                        $this->append_unique_warning($campaignWarnings, 'stale_processing_recovered_with_outbound_attempt');
                     }
                     $summary['warnings'][] = 'hourly_cap_reached';
                     $this->append_unique_warning($summary['warnings'], 'rate_limit_exhausted');
@@ -1371,12 +1396,17 @@ class Marketing_campaigns_model extends App_Model
                 }
 
                 if ($liveRateSnapshot['daily_remaining'] !== null && $liveRateSnapshot['daily_remaining'] <= 0) {
-                    $recoveredNow = $this->recover_stuck_processing($campaign['id']);
+                    $recoveryDetails = [];
+                    $recoveredNow = $this->recover_stuck_processing($campaign['id'], $recoveryDetails);
                     $summary['recovered'] += $recoveredNow;
                     $campaignRecovered += $recoveredNow;
                     if ($recoveredNow > 0) {
                         $this->append_unique_warning($summary['warnings'], 'stale_recipient_processing_recovered');
                         $this->append_unique_warning($campaignWarnings, 'stale_recipient_processing_recovered');
+                    }
+                    if (!empty($recoveryDetails['with_outbound_attempt'])) {
+                        $this->append_unique_warning($summary['warnings'], 'stale_processing_recovered_with_outbound_attempt');
+                        $this->append_unique_warning($campaignWarnings, 'stale_processing_recovered_with_outbound_attempt');
                     }
                     $summary['warnings'][] = 'daily_cap_reached';
                     $this->append_unique_warning($summary['warnings'], 'rate_limit_exhausted');
@@ -2172,7 +2202,7 @@ class Marketing_campaigns_model extends App_Model
         return (string) ($row['campaign_lock'] ?? '0') === '1';
     }
 
-    private function recover_stuck_processing($campaignId = null)
+    private function recover_stuck_processing($campaignId = null, ?array &$details = null)
     {
         $campaign = $campaignId !== null ? $this->get((int) $campaignId) : null;
         $cutoffTimestamp = time() - self::PROCESSING_STALE_TIMEOUT_SECONDS;
@@ -2180,18 +2210,45 @@ class Marketing_campaigns_model extends App_Model
         $recipientHasDateUpdated = $this->column_exists($this->recipientsTable, 'dateupdated');
         $campaignSendStartedAtIsStale = $campaign !== null && $this->campaign_send_started_before($campaign, $cutoffTimestamp);
 
+        $details = [
+            'recovered' => 0,
+            'with_outbound_attempt' => 0,
+        ];
+
         if (!$recipientHasDateUpdated && !$campaignSendStartedAtIsStale) {
             return 0;
+        }
+
+        $recoveredWithOutboundAttempt = 0;
+        if ($this->column_exists($this->recipientsTable, 'outbound_attempt_token')) {
+            $this->db->from($this->recipientsTable);
+            $this->apply_stale_processing_recovery_filters($campaignId, $recipientHasDateUpdated, $cutoffDateTime, $campaignSendStartedAtIsStale);
+            $this->db->where('outbound_attempt_token IS NOT NULL', null, false);
+            $this->db->where('outbound_attempt_token !=', '');
+            $recoveredWithOutboundAttempt = (int) $this->db->count_all_results();
         }
 
         $update = [
             'status' => 'queued',
             'processing_token' => null,
+            'outbound_attempt_token' => null,
             'queued_at' => date('Y-m-d H:i:s'),
             'dateupdated' => date('Y-m-d H:i:s'),
         ];
         $update = $this->filter_existing_columns($this->recipientsTable, $update);
 
+        $this->apply_stale_processing_recovery_filters($campaignId, $recipientHasDateUpdated, $cutoffDateTime, $campaignSendStartedAtIsStale);
+
+        $this->db->update($this->recipientsTable, $update);
+
+        $details['recovered'] = (int) $this->db->affected_rows();
+        $details['with_outbound_attempt'] = min($details['recovered'], $recoveredWithOutboundAttempt);
+
+        return $details['recovered'];
+    }
+
+    private function apply_stale_processing_recovery_filters($campaignId, $recipientHasDateUpdated, $cutoffDateTime, $campaignSendStartedAtIsStale)
+    {
         $this->db->where('status', 'processing');
         if ($campaignId !== null) {
             $this->db->where('campaign_id', (int) $campaignId);
@@ -2205,10 +2262,6 @@ class Marketing_campaigns_model extends App_Model
             }
             $this->db->group_end();
         }
-
-        $this->db->update($this->recipientsTable, $update);
-
-        return (int) $this->db->affected_rows();
     }
 
     private function acquire_campaign_worker_lease($campaignId, $workerToken)
@@ -2645,6 +2698,7 @@ class Marketing_campaigns_model extends App_Model
         $shouldUpdateLastEventAt = !array_key_exists('update_last_event_at', $event) || !empty($event['update_last_event_at']);
         $update = [];
         $countersUpdated = false;
+        $recoveredFailedRecipient = !empty($reconciliation['recovered_failed_recipient']);
 
         if (!empty($reconciliation['adopt_message_id']) && empty($recipient['message_id'])) {
             $messageId = $this->normalize_message_identifier(
@@ -2667,19 +2721,19 @@ class Marketing_campaigns_model extends App_Model
         }
 
         if ($eventType === 'delivered') {
-            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true)) {
+            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true) || $recoveredFailedRecipient) {
                 $update['status'] = 'sent';
             }
             $countersUpdated = $this->increment_recipient_counts($recipientId, ['delivered_count' => 1]) || $countersUpdated;
         } elseif ($eventType === 'open') {
-            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true)) {
+            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true) || $recoveredFailedRecipient) {
                 $update['status'] = 'sent';
             }
             $countersUpdated = $this->increment_recipient_counts($recipientId, ['open_count' => 1]) || $countersUpdated;
         } elseif ($eventType === 'click') {
             $this->ensure_recipient_click_metric_columns();
 
-            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true)) {
+            if (in_array($currentStatus, self::SENDABLE_RECIPIENT_STATUSES, true) || $recoveredFailedRecipient) {
                 $update['status'] = 'sent';
             }
             $countMetric = array_key_exists('count_metric', $event)
@@ -2715,7 +2769,7 @@ class Marketing_campaigns_model extends App_Model
             'matched' => true,
             'mutated' => $recordUpdated || $countersUpdated,
             'skipped' => false,
-            'reason' => null,
+            'reason' => $reconciliation['reason_code'] ?? null,
             'normalized_failure_code' => $this->normalize_provider_failure_metric_code($event),
             'status_before' => $currentStatus,
             'status_after' => $statusAfter,
@@ -2727,6 +2781,12 @@ class Marketing_campaigns_model extends App_Model
         $eventType = strtolower(trim((string) ($event['event_type'] ?? '')));
         $currentStatus = strtolower(trim((string) ($recipient['status'] ?? '')));
         $identityCheck = $this->event_matches_active_outbound_identity($recipient, $event);
+        $strongIdentitySources = [
+            'outbound_attempt_token',
+            'message_identifier',
+            'outbound_attempt_token_recovered_recipient',
+            'message_identifier_recovered_recipient',
+        ];
 
         if (empty($identityCheck['matched'])) {
             return [
@@ -2734,9 +2794,12 @@ class Marketing_campaigns_model extends App_Model
                 'reason' => $identityCheck['reason'] ?? 'provider_identity_mismatch',
                 'adopt_message_id' => false,
                 'adopt_provider_message_id' => false,
+                'recovered_failed_recipient' => false,
+                'reason_code' => null,
             ];
         }
 
+        $recoveredFailedRecipient = false;
         if (in_array($eventType, ['delivered', 'open', 'click'], true)) {
             if ($this->recipient_status_blocks_engagement_events($currentStatus)) {
                 return [
@@ -2744,6 +2807,19 @@ class Marketing_campaigns_model extends App_Model
                     'reason' => 'terminal_status_blocks_event',
                     'adopt_message_id' => false,
                     'adopt_provider_message_id' => false,
+                    'recovered_failed_recipient' => false,
+                    'reason_code' => null,
+                ];
+            }
+
+            if ($currentStatus === 'failed' && !in_array((string) ($identityCheck['source'] ?? ''), $strongIdentitySources, true)) {
+                return [
+                    'allow_mutation' => false,
+                    'reason' => 'failed_status_requires_strong_identity',
+                    'adopt_message_id' => false,
+                    'adopt_provider_message_id' => false,
+                    'recovered_failed_recipient' => false,
+                    'reason_code' => null,
                 ];
             }
 
@@ -2753,8 +2829,12 @@ class Marketing_campaigns_model extends App_Model
                     'reason' => 'contact_state_blocks_engagement',
                     'adopt_message_id' => false,
                     'adopt_provider_message_id' => false,
+                    'recovered_failed_recipient' => false,
+                    'reason_code' => null,
                 ];
             }
+
+            $recoveredFailedRecipient = $currentStatus === 'failed';
         }
 
         if (in_array($eventType, ['bounce', 'complaint', 'rejected', 'rendering_failure', 'rendering_failed', 'failed'], true)
@@ -2764,16 +2844,20 @@ class Marketing_campaigns_model extends App_Model
                 'reason' => 'terminal_status_blocks_failure',
                 'adopt_message_id' => false,
                 'adopt_provider_message_id' => false,
+                'recovered_failed_recipient' => false,
+                'reason_code' => null,
             ];
         }
 
-        $canAdoptIdentifiers = in_array((string) ($identityCheck['source'] ?? ''), ['outbound_attempt_token', 'message_identifier'], true);
+        $canAdoptIdentifiers = in_array((string) ($identityCheck['source'] ?? ''), $strongIdentitySources, true);
 
         return [
             'allow_mutation' => true,
             'reason' => null,
             'adopt_message_id' => $canAdoptIdentifiers,
             'adopt_provider_message_id' => $canAdoptIdentifiers,
+            'recovered_failed_recipient' => $recoveredFailedRecipient,
+            'reason_code' => $recoveredFailedRecipient ? 'provider_event_recovered_failed_recipient' : null,
         ];
     }
 
@@ -2781,9 +2865,18 @@ class Marketing_campaigns_model extends App_Model
     {
         $recipientAttemptToken = trim((string) ($recipient['outbound_attempt_token'] ?? ''));
         $eventAttemptToken = trim((string) ($event['outbound_attempt_token'] ?? ''));
+        $explicitRecipientIdentity = $this->event_matches_explicit_recipient_identity($recipient, $event);
 
         if ($eventAttemptToken !== '') {
             if ($recipientAttemptToken === '') {
+                if ($explicitRecipientIdentity) {
+                    return [
+                        'matched' => true,
+                        'reason' => null,
+                        'source' => 'outbound_attempt_token_recovered_recipient',
+                    ];
+                }
+
                 return [
                     'matched' => false,
                     'reason' => 'outbound_attempt_token_mismatch',
@@ -2843,6 +2936,14 @@ class Marketing_campaigns_model extends App_Model
             ];
         }
 
+        if ($explicitRecipientIdentity && !empty($eventIdentifiers)) {
+            return [
+                'matched' => true,
+                'reason' => null,
+                'source' => 'message_identifier_recovered_recipient',
+            ];
+        }
+
         return [
             'matched' => true,
             'reason' => null,
@@ -2854,7 +2955,21 @@ class Marketing_campaigns_model extends App_Model
     {
         $status = strtolower(trim((string) $status));
 
-        return in_array($status, ['failed', 'suppressed', 'skipped'], true);
+        return in_array($status, ['suppressed', 'skipped'], true);
+    }
+
+    protected function event_matches_explicit_recipient_identity(array $recipient, array $event)
+    {
+        $recipientId = (int) ($recipient['id'] ?? 0);
+        $eventRecipientId = (int) ($event['recipient_id'] ?? 0);
+        if ($recipientId <= 0 || $eventRecipientId <= 0 || $recipientId !== $eventRecipientId) {
+            return false;
+        }
+
+        $recipientCampaignId = (int) ($recipient['campaign_id'] ?? 0);
+        $eventCampaignId = (int) ($event['campaign_id'] ?? 0);
+
+        return $eventCampaignId <= 0 || $recipientCampaignId <= 0 || $recipientCampaignId === $eventCampaignId;
     }
 
     protected function recipient_contact_state_blocks_engagement_events(array $recipient)

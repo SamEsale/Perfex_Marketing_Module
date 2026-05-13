@@ -451,21 +451,22 @@ check_event_reconciliation_helper_exists() {
 }
 
 check_event_terminal_state_precedence() {
-  local status_guard_line block_reason_line failure_block_line
-  status_guard_line="$(first_fixed_match "['failed', 'suppressed', 'skipped']" "$CAMPAIGNS_FILE")"
+  local status_guard_line failed_guard_line block_reason_line failure_block_line
+  status_guard_line="$(first_fixed_match "return in_array(\$status, ['suppressed', 'skipped'], true);" "$CAMPAIGNS_FILE")"
+  failed_guard_line="$(first_fixed_match 'failed_status_requires_strong_identity' "$CAMPAIGNS_FILE")"
   block_reason_line="$(first_fixed_match 'terminal_status_blocks_event' "$CAMPAIGNS_FILE")"
   failure_block_line="$(first_fixed_match 'terminal_status_blocks_failure' "$CAMPAIGNS_FILE")"
 
-  if [[ -z "$status_guard_line" || -z "$block_reason_line" || -z "$failure_block_line" ]]; then
+  if [[ -z "$status_guard_line" || -z "$failed_guard_line" || -z "$block_reason_line" || -z "$failure_block_line" ]]; then
     fail \
-      "delivery, open, and click cannot overwrite stronger terminal recipient states" \
-      "expected terminal status precedence guards in $CAMPAIGNS_FILE; statuses=${status_guard_line:-missing}; engagement=${block_reason_line:-missing}; failure=${failure_block_line:-missing}"
+      "delivery, open, and click preserve suppressed or skipped terminal states while requiring strong identity for failed recovery" \
+      "expected suppressed/skipped terminal guards, failed strong-identity gate, and failure-event blocking in $CAMPAIGNS_FILE; statuses=${status_guard_line:-missing}; failed=${failed_guard_line:-missing}; engagement=${block_reason_line:-missing}; failure=${failure_block_line:-missing}"
     return
   fi
 
   pass \
-    "delivery, open, and click cannot overwrite stronger terminal recipient states" \
-    "statuses=$status_guard_line | engagement=$block_reason_line | failure=$failure_block_line"
+    "delivery, open, and click preserve suppressed or skipped terminal states while requiring strong identity for failed recovery" \
+    "statuses=$status_guard_line | failed=$failed_guard_line | failure=$failure_block_line"
 }
 
 check_stale_outbound_identity_guard() {
@@ -719,6 +720,29 @@ check_queue_warning_telemetry_propagation() {
   pass \
     "queue recovery and worker-lease warnings propagate into batch telemetry" \
     "recovered=$recovered_warning_line | lease=$lease_warning_line | payload=$payload_warning_line"
+}
+
+check_queue_recovery_late_event_safety() {
+  local recovery_signature update_reset warning_line replay_line failed_gate_line strong_identity_line suppressed_gate_line skipped_gate_line
+  recovery_signature="$(first_fixed_match "private function recover_stuck_processing(\$campaignId = null, ?array &\$details = null)" "$CAMPAIGNS_FILE")"
+  update_reset="$(first_fixed_match "'outbound_attempt_token' => null" "$CAMPAIGNS_FILE")"
+  warning_line="$(first_fixed_match 'stale_processing_recovered_with_outbound_attempt' "$CAMPAIGNS_FILE")"
+  replay_line="$(first_fixed_match 'outbound_attempt_replay_blocked' "$CAMPAIGNS_FILE")"
+  failed_gate_line="$(first_fixed_match "failed_status_requires_strong_identity" "$CAMPAIGNS_FILE")"
+  strong_identity_line="$(first_fixed_match "provider_event_recovered_failed_recipient" "$CAMPAIGNS_FILE")"
+  suppressed_gate_line="$(first_fixed_match "return in_array(\$status, ['suppressed', 'skipped'], true);" "$CAMPAIGNS_FILE")"
+  skipped_gate_line="$(first_fixed_match "terminal_status_blocks_failure" "$CAMPAIGNS_FILE")"
+
+  if [[ -z "$recovery_signature" || -z "$update_reset" || -z "$warning_line" || -z "$replay_line" || -z "$failed_gate_line" || -z "$strong_identity_line" || -z "$suppressed_gate_line" || -z "$skipped_gate_line" ]]; then
+    fail \
+      "stale processing recovery preserves late-event reconciliation safety without weakening suppressed or skipped terminals" \
+      "expected recovery details, outbound attempt reset, recovery warning, replay block guard, strong failed identity gate, reconciliation code, and suppressed/skipped terminal protections in $CAMPAIGNS_FILE; recovery=${recovery_signature:-missing}; reset=${update_reset:-missing}; warning=${warning_line:-missing}; replay=${replay_line:-missing}; failed_gate=${failed_gate_line:-missing}; strong=${strong_identity_line:-missing}; terminal=${suppressed_gate_line:-missing}; failure_terminal=${skipped_gate_line:-missing}"
+    return
+  fi
+
+  pass \
+    "stale processing recovery preserves late-event reconciliation safety without weakening suppressed or skipped terminals" \
+    "recovery=$recovery_signature | warning=$warning_line | failed_gate=$failed_gate_line | terminal=$suppressed_gate_line"
 }
 
 check_provider_failure_normalization_helper() {
@@ -2240,6 +2264,7 @@ check_queue_diagnostics_stale_processing_count
 check_dashboard_queue_diagnostics_surface
 check_dashboard_view_array_guards
 check_queue_warning_telemetry_propagation
+check_queue_recovery_late_event_safety
 check_provider_failure_normalization_helper
 check_provider_failure_categories_distinguishable
 check_provider_throttle_not_bounce

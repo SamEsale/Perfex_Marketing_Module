@@ -1367,6 +1367,9 @@ class Campaigns extends AdminController
                 case 'stale_recipient_processing_recovered':
                     $messages[] = 'Stale recipient processing rows were recovered safely.';
                     break;
+                case 'stale_processing_recovered_with_outbound_attempt':
+                    $messages[] = 'Recovered stale recipients were re-queued after preserving late-event reconciliation safety.';
+                    break;
                 default:
                     if (strpos($warning, 'campaign_') === 0 && substr($warning, -10) === '_not_ready') {
                         $messages[] = _l('marketing_campaign_process_queue_not_ready');
@@ -1409,6 +1412,8 @@ class Campaigns extends AdminController
                 $messages[] = 'A stale campaign worker lease was recovered safely.';
             } elseif ($warning === 'stale_recipient_processing_recovered') {
                 $messages[] = 'Stale recipient processing rows were recovered safely.';
+            } elseif ($warning === 'stale_processing_recovered_with_outbound_attempt') {
+                $messages[] = 'Recovered stale recipients were re-queued after preserving late-event reconciliation safety.';
             } elseif (strpos($warning, 'campaign_') === 0 && substr($warning, -10) === '_not_ready') {
                 $messages[] = 'Campaign is not ready to send. Check subject, HTML content, unsubscribe link, image URLs, SMTP settings, and audience.';
             } elseif (strpos($warning, 'campaign_') === 0 && substr($warning, -20) === '_no_queued_recipients') {
