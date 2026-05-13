@@ -5,6 +5,32 @@ if (PHP_SAPI !== 'cli') {
     exit(2);
 }
 
+$marketingRuntimeExitHandled = false;
+
+register_shutdown_function(function () use (&$marketingRuntimeExitHandled) {
+    if ($marketingRuntimeExitHandled) {
+        return;
+    }
+
+    $error = error_get_last();
+    if (!is_array($error)) {
+        return;
+    }
+
+    $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
+    if (!in_array((int) ($error['type'] ?? 0), $fatalTypes, true)) {
+        return;
+    }
+
+    $message = trim((string) ($error['message'] ?? 'Runtime bootstrap failure.'));
+    if ($message === '') {
+        $message = 'Runtime bootstrap failure.';
+    }
+
+    fwrite(STDERR, "Runtime bootstrap failure: " . $message . "\n");
+    exit(2);
+});
+
 function marketing_print_banner()
 {
     echo "Marketing Integrity Diagnostics\n";
@@ -12,6 +38,9 @@ function marketing_print_banner()
 
 function marketing_exit_with_status($status, $message = '', $stderr = true)
 {
+    global $marketingRuntimeExitHandled;
+    $marketingRuntimeExitHandled = true;
+
     if ($message !== '') {
         fwrite($stderr ? STDERR : STDOUT, rtrim($message) . "\n");
     }
@@ -55,12 +84,31 @@ function marketing_define_bootstrap_guards($crmRoot)
     }
 }
 
+function marketing_define_runtime_db_prefix_fallback()
+{
+    if (!function_exists('db_prefix')) {
+        /**
+         * Minimal fallback for loading Perfex database config in this CLI validator.
+         * This does not replace the full Perfex runtime bootstrap.
+         */
+        function db_prefix()
+        {
+            return 'tbl';
+        }
+    }
+}
+
 function marketing_connect_db($crmRoot)
 {
     marketing_define_bootstrap_guards($crmRoot);
+    marketing_define_runtime_db_prefix_fallback();
 
-    require $crmRoot . '/application/config/app-config.php';
-    require $crmRoot . '/application/config/database.php';
+    try {
+        require $crmRoot . '/application/config/app-config.php';
+        require $crmRoot . '/application/config/database.php';
+    } catch (Throwable $exception) {
+        marketing_exit_with_status(2, "Runtime bootstrap failure: " . $exception->getMessage());
+    }
 
     if (!isset($db['default']) || !is_array($db['default'])) {
         marketing_exit_with_status(2, "Database configuration is unavailable.");
