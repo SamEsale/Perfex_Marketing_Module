@@ -12,7 +12,7 @@ Requires at least: 3.2.*
 define('MARKETING_MODULE_NAME', 'marketing');
 define('MARKETING_MODULE_VERSION', '1.1.0');
 define('MARKETING_COMMERCIAL_PREPARE_THRESHOLD', 100);
-define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-11-safe-bootstrap-v9');
+define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-13-safe-bootstrap-v10');
 
 hooks()->add_action('admin_init', 'marketing_module_init_menu_items');
 hooks()->add_action('admin_init', 'marketing_register_permissions');
@@ -249,6 +249,7 @@ function marketing_get_default_options()
         'marketing_reply_to_lead_source' => '0',
         'marketing_reply_to_lead_assigned_staff' => '0',
         'marketing_reply_to_lead_name_prefix' => 'Marketing Reply',
+        'marketing_inbound_email_secret' => '',
         'marketing_whatsapp_enabled' => '0',
         'marketing_whatsapp_graph_version' => 'v23.0',
         'marketing_whatsapp_phone_number_id' => '',

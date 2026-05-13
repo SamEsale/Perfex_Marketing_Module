@@ -165,6 +165,7 @@ class Marketing_conversations_model extends App_Model
             'media_meta_json' => $this->encode_media_meta_json($data['media_meta_json'] ?? ($data['media_meta'] ?? null)),
             'context_provider_message_id' => isset($data['context_provider_message_id']) ? trim((string) $data['context_provider_message_id']) : null,
             'provider_message_id' => isset($data['provider_message_id']) ? trim((string) $data['provider_message_id']) : null,
+            'dedupe_key' => isset($data['dedupe_key']) ? trim((string) $data['dedupe_key']) : null,
             'datecreated' => isset($data['datecreated']) ? (string) $data['datecreated'] : date('Y-m-d H:i:s'),
         ];
 
@@ -190,6 +191,126 @@ class Marketing_conversations_model extends App_Model
         }
 
         return $messageId;
+    }
+
+    public function find_message_by_provider_message_id($providerMessageId, $provider = null)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('provider_message_id', $this->messagesTable)) {
+            return null;
+        }
+
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId === '') {
+            return null;
+        }
+
+        $this->db->from($this->messagesTable);
+        $this->db->where('provider_message_id', $providerMessageId);
+        if ($provider !== null && $provider !== '' && $this->db->field_exists('provider', $this->messagesTable)) {
+            $this->db->where('provider', trim((string) $provider));
+        }
+
+        return $this->db->order_by('id', 'DESC')->limit(1)->get()->row_array();
+    }
+
+    public function find_message_by_dedupe_key($dedupeKey)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('dedupe_key', $this->messagesTable)) {
+            return null;
+        }
+
+        $dedupeKey = trim((string) $dedupeKey);
+        if ($dedupeKey === '') {
+            return null;
+        }
+
+        return $this->db->from($this->messagesTable)
+            ->where('dedupe_key', $dedupeKey)
+            ->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
+    public function add_message_idempotent(array $data)
+    {
+        $providerMessageId = trim((string) ($data['provider_message_id'] ?? ''));
+        $provider = trim((string) ($data['provider'] ?? ''));
+        $dedupeKey = trim((string) ($data['dedupe_key'] ?? ''));
+
+        if ($providerMessageId !== '') {
+            $existingByProvider = $this->find_message_by_provider_message_id($providerMessageId, $provider !== '' ? $provider : null);
+            if ($existingByProvider) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByProvider['id'],
+                    'conversation_id' => (int) ($existingByProvider['conversation_id'] ?? 0),
+                    'reason' => 'provider_message_id',
+                ];
+            }
+        }
+
+        if ($dedupeKey !== '') {
+            $existingByDedupeKey = $this->find_message_by_dedupe_key($dedupeKey);
+            if ($existingByDedupeKey) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByDedupeKey['id'],
+                    'conversation_id' => (int) ($existingByDedupeKey['conversation_id'] ?? 0),
+                    'reason' => 'dedupe_key',
+                ];
+            }
+        }
+
+        $messageId = $this->add_message($data);
+        if ($messageId > 0) {
+            return [
+                'success' => true,
+                'inserted' => true,
+                'duplicate' => false,
+                'id' => (int) $messageId,
+                'conversation_id' => (int) ($data['conversation_id'] ?? 0),
+            ];
+        }
+
+        if ($providerMessageId !== '') {
+            $existingByProvider = $this->find_message_by_provider_message_id($providerMessageId, $provider !== '' ? $provider : null);
+            if ($existingByProvider) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByProvider['id'],
+                    'conversation_id' => (int) ($existingByProvider['conversation_id'] ?? 0),
+                    'reason' => 'provider_message_id',
+                ];
+            }
+        }
+
+        if ($dedupeKey !== '') {
+            $existingByDedupeKey = $this->find_message_by_dedupe_key($dedupeKey);
+            if ($existingByDedupeKey) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByDedupeKey['id'],
+                    'conversation_id' => (int) ($existingByDedupeKey['conversation_id'] ?? 0),
+                    'reason' => 'dedupe_key',
+                ];
+            }
+        }
+
+        return [
+            'success' => false,
+            'inserted' => false,
+            'duplicate' => false,
+            'id' => 0,
+        ];
     }
 
     public function get_campaign_replies($campaignId, $limit = 20)

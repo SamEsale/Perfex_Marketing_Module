@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 TRACK_FILE="modules/marketing/controllers/Track.php"
 EVENTS_FILE="modules/marketing/models/Marketing_events_model.php"
+CONVERSATIONS_FILE="modules/marketing/models/Marketing_conversations_model.php"
 CAMPAIGNS_FILE="modules/marketing/models/Marketing_campaigns_model.php"
 DASHBOARD_FILE="modules/marketing/models/Marketing_dashboard_model.php"
 PUBLIC_LINKS_FILE="modules/marketing/models/Marketing_public_links_model.php"
@@ -2053,6 +2054,37 @@ check_required_config_and_public_endpoints() {
     "ses=$ses_route | inbound=$inbound_route | whatsapp=$whatsapp_route"
 }
 
+check_inbound_reply_hardening() {
+  local option_default auth_helper hash_line compat_line header_line normalize_regex unambiguous_helper latest_call dedupe_helper provider_lookup dedupe_lookup duplicate_branch lead_skip event_store settings_field settings_runtime
+  option_default="$(first_fixed_match "'marketing_inbound_email_secret' => ''" "$BOOTSTRAP_FILE")"
+  auth_helper="$(first_match 'function[[:space:]]+validateInboundEmailAuthentication' "$WEBHOOKS_FILE")"
+  hash_line="$(first_fixed_match "hash_equals(\$configuredSecret, \$presentedSecret)" "$WEBHOOKS_FILE")"
+  compat_line="$(first_fixed_match "'warning' => 'inbound_email_auth_not_configured'" "$WEBHOOKS_FILE")"
+  header_line="$(first_fixed_match "x-marketing-inbound-secret" "$WEBHOOKS_FILE")"
+  normalize_regex="$(first_fixed_match "preg_match('/<([^<>@\\s]+@[^<>@\\s]+)>/'" "$WEBHOOKS_FILE")"
+  unambiguous_helper="$(first_match 'function[[:space:]]+findUnambiguousRecipientByEmail' "$WEBHOOKS_FILE")"
+  latest_call="$(first_fixed_match 'findLatestRecipientByEmail(' "$WEBHOOKS_FILE")"
+  dedupe_helper="$(first_match 'function[[:space:]]+add_message_idempotent' "$CONVERSATIONS_FILE")"
+  provider_lookup="$(first_match 'function[[:space:]]+find_message_by_provider_message_id' "$CONVERSATIONS_FILE")"
+  dedupe_lookup="$(first_match 'function[[:space:]]+find_message_by_dedupe_key' "$CONVERSATIONS_FILE")"
+  duplicate_branch="$(first_fixed_match "if (!empty(\$messageStoreResult['duplicate'])) {" "$WEBHOOKS_FILE")"
+  lead_skip="$(first_fixed_match "'lead_error' => \$messageId <= 0" "$WEBHOOKS_FILE")"
+  event_store="$(first_fixed_match "\$this->marketing_events_model->add_event_idempotent([" "$WEBHOOKS_FILE")"
+  settings_field="$(first_fixed_match "marketing_inbound_email_secret" "$SETTINGS_VIEW_FILE")"
+  settings_runtime="$(first_fixed_match "marketing_inbound_email_secret_runtime_" "$SETTINGS_VIEW_FILE")"
+
+  if [[ -z "$option_default" || -z "$auth_helper" || -z "$hash_line" || -z "$compat_line" || -z "$header_line" || -z "$normalize_regex" || -z "$unambiguous_helper" || -n "$latest_call" || -z "$dedupe_helper" || -z "$provider_lookup" || -z "$dedupe_lookup" || -z "$duplicate_branch" || -z "$lead_skip" || -z "$event_store" || -z "$settings_field" || -z "$settings_runtime" ]]; then
+    fail \
+      "inbound email reply handling remains authenticated, ambiguity-aware, and idempotent" \
+      "expected inbound secret default and auth guard in $BOOTSTRAP_FILE/$WEBHOOKS_FILE, unambiguous sender fallback without legacy latest-recipient call, idempotent message helpers in $CONVERSATIONS_FILE, duplicate lead-skip branch, idempotent reply events, and settings field/runtime note in $SETTINGS_VIEW_FILE; option=${option_default:-missing}; auth=${auth_helper:-missing}; hash=${hash_line:-missing}; compat=${compat_line:-missing}; header=${header_line:-missing}; normalize=${normalize_regex:-missing}; unambiguous=${unambiguous_helper:-missing}; legacy_latest=${latest_call:-absent}; dedupe=${dedupe_helper:-missing}; provider_lookup=${provider_lookup:-missing}; dedupe_lookup=${dedupe_lookup:-missing}; duplicate=${duplicate_branch:-missing}; lead_skip=${lead_skip:-missing}; event=${event_store:-missing}; settings=${settings_field:-missing}; runtime=${settings_runtime:-missing}"
+    return
+  fi
+
+  pass \
+    "inbound email reply handling remains authenticated, ambiguity-aware, and idempotent" \
+    "auth=$auth_helper | hash=$hash_line | fallback=$unambiguous_helper | dedupe=$dedupe_helper | event=$event_store"
+}
+
 check_option_repair_idempotence() {
   local defaults_helper_line option_names_line ensure_helper_line install_usage_line uninstall_usage_line add_only_line
   defaults_helper_line="$(first_match 'function[[:space:]]+marketing_get_default_options' "$BOOTSTRAP_FILE")"
@@ -2333,6 +2365,7 @@ check_transient_provider_backoff_safety
 check_ses_sns_signature_enforcement
 check_ses_sns_verifier_strictness
 check_sns_message_id_idempotency
+check_inbound_reply_hardening
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   printf 'FAILED phase2-regressions %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"

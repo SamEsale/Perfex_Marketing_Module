@@ -345,6 +345,13 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <input type="text" id="marketing_reply_to_lead_name_prefix" name="<?= html_escape($settingFieldName('marketing_reply_to_lead_name_prefix')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_reply_to_lead_name_prefix', 'Marketing Reply')); ?>">
                                         </div>
 
+                                        <div class="form-group">
+                                            <label for="marketing_inbound_email_secret" class="control-label"><?= _l('marketing_inbound_email_secret'); ?></label>
+                                            <input type="password" id="marketing_inbound_email_secret" name="<?= html_escape($settingFieldName('marketing_inbound_email_secret')); ?>" class="form-control" value="" autocomplete="new-password">
+                                            <p class="text-muted mtop5"><?= _l('marketing_inbound_email_secret_help'); ?></p>
+                                            <p class="text-muted no-margin"><?= $inbound_email_secret_configured ? _l('marketing_inbound_email_secret_status_configured') : _l('marketing_inbound_email_secret_status_missing'); ?></p>
+                                        </div>
+
                                         <div class="marketing-settings-form-actions">
                                             <button type="submit" class="btn btn-primary"><?= _l('save'); ?></button>
                                         </div>
@@ -360,6 +367,7 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <label class="control-label"><?= _l('marketing_inbound_reply_webhook_url'); ?></label>
                                             <input type="text" class="form-control" readonly value="<?= e(site_url('marketing/webhooks/inbound_email')); ?>">
                                             <p class="text-muted mtop5"><?= _l('marketing_webhook_url_runtime_note'); ?></p>
+                                            <p class="text-muted no-margin"><?= $inbound_email_secret_configured ? _l('marketing_inbound_email_secret_runtime_configured') : _l('marketing_inbound_email_secret_runtime_missing'); ?></p>
                                         </div>
                                     </div>
                                 </div>

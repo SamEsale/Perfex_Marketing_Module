@@ -557,14 +557,28 @@ class Webhooks extends CI_Controller
             ], 400);
         }
 
+        $headers = $this->getRequestHeaders();
+        $authentication = $this->validateInboundEmailAuthentication($payload, $headers);
+        if (empty($authentication['accepted'])) {
+            log_message('warning', 'Marketing inbound email rejected due to authentication failure.');
+
+            return $this->respondJson([
+                'success' => false,
+                'status' => 'error',
+                'message' => 'Inbound email authentication failed.',
+            ], 401);
+        }
+
         $senderEmail = $this->normalizeEmail($payload['sender_email'] ?? $payload['from'] ?? '');
         $subject = $this->sanitizeInboundSubject($payload['subject'] ?? '');
         $bodyHtml = $this->sanitizeInboundHtml($payload['body_html'] ?? $payload['html'] ?? '');
         $bodyText = $this->sanitizeInboundText($payload['body_text'] ?? $payload['text'] ?? $bodyHtml);
-        $headers = is_array($payload['headers'] ?? null) ? $payload['headers'] : [];
+        $payloadHeaders = is_array($payload['headers'] ?? null) ? $payload['headers'] : [];
         $rawBody = (string) ($payload['_raw_body'] ?? '');
-        $providerMessageId = trim((string) ($payload['message_id'] ?? $payload['provider_message_id'] ?? ''));
-        $receivedAt = date('Y-m-d H:i:s');
+        $providerMessageId = $this->extractInboundProviderMessageId($payload, $headers, $payloadHeaders);
+        $receivedAt = $this->resolveInboundReceivedAt($payload, $headers, $payloadHeaders);
+        $messagePreview = $bodyText !== '' ? $bodyText : strip_tags($bodyHtml);
+        $dedupeKey = $this->buildInboundMessageDedupeKey($senderEmail, $subject, $messagePreview, $payload, $headers, $payloadHeaders, $receivedAt);
 
         if ($senderEmail === '' || ($bodyText === '' && $bodyHtml === '')) {
             return $this->respondJson([
@@ -575,37 +589,88 @@ class Webhooks extends CI_Controller
         }
 
         log_message('info', 'Marketing inbound email received: sender=' . $senderEmail . ' subject=' . ($subject !== '' ? mb_substr($subject, 0, 120) : 'n/a'));
+        if (!empty($authentication['warning'])) {
+            log_message('warning', 'Marketing inbound email accepted in compatibility mode: warning=' . $authentication['warning'] . ' sender=' . $senderEmail);
+        }
 
-        $replyMatch = $this->extractReplyTrackingIdentifier($subject, $bodyHtml, $bodyText, $headers, $rawBody);
+        $replyEventDedupeId = $providerMessageId !== '' ? $providerMessageId : 'inbound_reply:' . $dedupeKey;
+        $dedupeCriteria = [
+            'provider' => 'inbound_email',
+            'event_type' => 'reply',
+            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+            'provider_event_id' => $replyEventDedupeId,
+            'email' => $senderEmail,
+            'event_at' => $receivedAt,
+        ];
+        $eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);
+        $eventLockKey = trim((string) ($eventLock['lock_key'] ?? ''));
+        if (empty($eventLock['acquired'])) {
+            log_message('warning', 'Marketing inbound email skipped because a stable dedupe lock is already active: sender=' . $senderEmail);
+
+            return $this->respondJson([
+                'success' => true,
+                'status' => 'processing',
+                'message' => 'Inbound email is already being processed.',
+            ], 202);
+        }
+
+        try {
+        $replyMatch = $this->extractReplyTrackingIdentifier($subject, $bodyHtml, $bodyText, array_merge($payloadHeaders, $headers), $rawBody);
         $recipient = null;
         $campaignId = null;
         $contactId = null;
-        $matchMode = 'fallback_email';
+        $matchMode = 'unmatched';
+        $matchConfidence = 'none';
         $warning = null;
         $campaign = null;
+        $leadConversionAllowed = false;
+        $messageStoreResult = [
+            'success' => false,
+            'inserted' => false,
+            'duplicate' => false,
+            'id' => 0,
+        ];
 
         if ($replyMatch !== null) {
             log_message('info', 'Marketing inbound email reply_id parsed: campaign_id=' . (int) $replyMatch['campaign_id'] . ' recipient_id=' . (int) $replyMatch['recipient_id']);
             $candidateRecipient = $this->marketing_campaigns_model->get_recipient_by_id((int) $replyMatch['recipient_id']);
             if ($candidateRecipient
                 && (int) $candidateRecipient['campaign_id'] === (int) $replyMatch['campaign_id']) {
-                $recipient = $candidateRecipient;
-                $campaignId = (int) $replyMatch['campaign_id'];
-                $contactId = (int) $candidateRecipient['marketing_contact_id'];
-                $matchMode = 'reply_id';
-                log_message('info', 'Marketing inbound email matched by reply_id: campaign_id=' . $campaignId . ' recipient_id=' . (int) $recipient['id']);
+                if ($this->senderMatchesRecipient($senderEmail, $candidateRecipient)) {
+                    $recipient = $candidateRecipient;
+                    $campaignId = (int) $replyMatch['campaign_id'];
+                    $contactId = (int) $candidateRecipient['marketing_contact_id'];
+                    $matchMode = 'reply_id';
+                    $matchConfidence = 'strong';
+                    $leadConversionAllowed = true;
+                    log_message('info', 'Marketing inbound email matched by reply_id: campaign_id=' . $campaignId . ' recipient_id=' . (int) $recipient['id']);
+                } else {
+                    $warning = 'reply_id_sender_mismatch';
+                    $matchMode = 'reply_id_sender_mismatch';
+                    $matchConfidence = 'suspicious';
+                    log_message('warning', 'Marketing inbound email reply_id sender mismatch: campaign_id=' . (int) $replyMatch['campaign_id'] . ' recipient_id=' . (int) $replyMatch['recipient_id'] . ' sender=' . $senderEmail);
+                }
             } else {
                 $warning = 'reply_id_not_matched';
                 log_message('warning', 'Marketing inbound email reply_id did not resolve to a valid campaign recipient: campaign_id=' . (int) $replyMatch['campaign_id'] . ' recipient_id=' . (int) $replyMatch['recipient_id']);
             }
         }
 
-        if ($recipient === null) {
-            $recipient = $this->findLatestRecipientByEmail($senderEmail);
-            if ($recipient) {
+        if ($recipient === null && $replyMatch === null) {
+            $fallbackMatch = $this->findUnambiguousRecipientByEmail($senderEmail);
+            if (!empty($fallbackMatch['ambiguous'])) {
+                $warning = $warning ?: 'sender_email_ambiguous';
+                $matchMode = 'sender_email_ambiguous';
+                $matchConfidence = 'none';
+                log_message('warning', 'Marketing inbound email sender fallback is ambiguous and will stay unmatched: sender=' . $senderEmail);
+            } elseif (!empty($fallbackMatch['recipient']) && is_array($fallbackMatch['recipient'])) {
+                $recipient = $fallbackMatch['recipient'];
                 $campaignId = (int) $recipient['campaign_id'];
                 $contactId = (int) $recipient['marketing_contact_id'];
-                log_message('info', 'Marketing inbound email matched by sender fallback: campaign_id=' . $campaignId . ' recipient_id=' . (int) $recipient['id']);
+                $matchMode = 'sender_email_unique';
+                $matchConfidence = 'safe_fallback';
+                $warning = $warning ?: 'sender_email_unique_fallback';
+                log_message('info', 'Marketing inbound email matched by unique sender fallback: campaign_id=' . $campaignId . ' recipient_id=' . (int) $recipient['id']);
             }
         }
 
@@ -641,20 +706,28 @@ class Webhooks extends CI_Controller
             ]);
 
             if ($conversation) {
-                $messageId = (int) $this->marketing_conversations_model->add_message([
+                $messageStoreResult = $this->marketing_conversations_model->add_message_idempotent([
                     'conversation_id' => (int) $conversation['id'],
                     'campaign_id' => $campaignId,
                     'marketing_contact_id' => $contactId,
                     'direction' => 'inbound',
                     'email' => $senderEmail,
+                    'from_email' => $senderEmail,
                     'subject' => $subject,
-                    'message' => $bodyText !== '' ? $bodyText : strip_tags($bodyHtml),
+                    'message' => $messagePreview,
                     'body_text' => $bodyText,
                     'body_html' => $bodyHtml !== '' ? $bodyHtml : null,
+                    'provider' => 'inbound_email',
                     'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                    'dedupe_key' => $dedupeKey,
                     'datecreated' => $receivedAt,
                 ]);
-                log_message('info', 'Marketing conversation stored for inbound email: conversation_id=' . (int) $conversation['id'] . ' message_id=' . $messageId);
+                $messageId = (int) ($messageStoreResult['id'] ?? 0);
+                if (!empty($messageStoreResult['duplicate'])) {
+                    log_message('info', 'Marketing inbound email duplicate replay skipped: conversation_id=' . (int) $conversation['id'] . ' message_id=' . $messageId . ' reason=' . ($messageStoreResult['reason'] ?? 'duplicate'));
+                } else {
+                    log_message('info', 'Marketing conversation stored for inbound email: conversation_id=' . (int) $conversation['id'] . ' message_id=' . $messageId);
+                }
             }
         } else {
             log_message('warning', 'Marketing inbound email could not create conversation because conversation tables are unavailable.');
@@ -672,40 +745,62 @@ class Webhooks extends CI_Controller
             'lead_error' => null,
         ];
 
-        try {
-            $leadResult = $this->marketing_reply_leads_model->convert_reply_to_lead([
-                'email' => $senderEmail,
-                'sender_name' => trim((string) ($payload['sender_name'] ?? '')),
-                'subject' => $subject,
-                'preview' => $bodyText !== '' ? $bodyText : strip_tags($bodyHtml),
-                'campaign_id' => $campaignId,
-                'campaign_name' => $campaign['name'] ?? '',
-                'conversation_id' => $conversation['id'] ?? null,
-                'message_id' => $messageId ?: null,
-                'existing_marketing_contact' => $senderWasExistingMarketingContact,
-            ]);
-        } catch (Throwable $e) {
-            $safeLeadError = mb_substr(preg_replace('/\s+/', ' ', trim(strip_tags((string) $e->getMessage()))), 0, 200);
-            log_message('error', 'Marketing reply-to-lead failed safely: email=' . $senderEmail . ' message=' . $safeLeadError);
+        if (!empty($messageStoreResult['duplicate'])) {
             $leadResult = [
                 'lead_id' => null,
-                'lead_status' => 'failed',
-                'lead_action' => 'failed',
-                'event_type' => 'reply_lead_failed',
-                'lead_error' => 'Native Perfex lead creation failed.',
+                'lead_status' => 'duplicate',
+                'lead_action' => 'skipped_duplicate',
+                'event_type' => 'reply_lead_skipped',
+                'lead_error' => null,
             ];
+        } elseif (!$leadConversionAllowed || empty($authentication['lead_conversion_allowed']) || $messageId <= 0) {
+            $leadResult = [
+                'lead_id' => null,
+                'lead_status' => 'not_converted',
+                'lead_action' => 'skipped',
+                'event_type' => 'reply_lead_skipped',
+                'lead_error' => $messageId <= 0
+                    ? 'Inbound email message could not be stored safely for automatic lead conversion.'
+                    : ($leadConversionAllowed ? 'Inbound email authentication is not configured for lead conversion.' : 'Inbound email reply could not be matched strongly enough for automatic lead conversion.'),
+            ];
+        } else {
+            try {
+                $leadResult = $this->marketing_reply_leads_model->convert_reply_to_lead([
+                    'email' => $senderEmail,
+                    'sender_name' => trim((string) ($payload['sender_name'] ?? '')),
+                    'subject' => $subject,
+                    'preview' => $messagePreview,
+                    'campaign_id' => $campaignId,
+                    'campaign_name' => $campaign['name'] ?? '',
+                    'conversation_id' => $conversation['id'] ?? null,
+                    'message_id' => $messageId ?: null,
+                    'existing_marketing_contact' => $senderWasExistingMarketingContact,
+                ]);
+            } catch (Throwable $e) {
+                $safeLeadError = mb_substr(preg_replace('/\s+/', ' ', trim(strip_tags((string) $e->getMessage()))), 0, 200);
+                log_message('error', 'Marketing reply-to-lead failed safely: email=' . $senderEmail . ' message=' . $safeLeadError);
+                $leadResult = [
+                    'lead_id' => null,
+                    'lead_status' => 'failed',
+                    'lead_action' => 'failed',
+                    'event_type' => 'reply_lead_failed',
+                    'lead_error' => 'Native Perfex lead creation failed.',
+                ];
+            }
         }
 
         if (!empty($leadResult['event_type'])) {
-            $this->marketing_events_model->add_event([
+            $this->marketing_events_model->add_event_idempotent([
                 'campaign_id' => $campaignId,
                 'campaign_recipient_id' => $recipient ? (int) $recipient['id'] : null,
                 'marketing_contact_id' => $contactId ?: null,
                 'event_type' => $leadResult['event_type'],
                 'provider' => 'inbound_email',
+                'provider_event_id' => 'reply_lead:' . $replyEventDedupeId,
+                'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
                 'email' => $senderEmail,
                 'event_at' => $receivedAt,
-                'payload_json' => json_encode([
+                'payload_json' => $this->safeJsonEncode([
                     'lead_id' => $leadResult['lead_id'] ?? null,
                     'lead_status' => $leadResult['lead_status'] ?? null,
                     'lead_action' => $leadResult['lead_action'] ?? null,
@@ -713,42 +808,59 @@ class Webhooks extends CI_Controller
                     'conversation_id' => $conversation['id'] ?? null,
                     'message_id' => $messageId ?: null,
                     'subject' => $subject,
+                    'match_mode' => $matchMode,
+                    'match_confidence' => $matchConfidence,
+                    'authenticated' => !empty($authentication['authenticated']),
                 ]),
             ]);
         }
 
-        $this->marketing_events_model->add_event([
+        $replyEventResult = $this->marketing_events_model->add_event_idempotent([
             'campaign_id' => $campaignId,
             'campaign_recipient_id' => $recipient ? (int) $recipient['id'] : null,
             'marketing_contact_id' => $contactId ?: null,
             'event_type' => 'reply',
             'provider' => 'inbound_email',
+            'provider_event_id' => $replyEventDedupeId,
             'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
             'email' => $senderEmail,
             'event_at' => $receivedAt,
-            'payload_json' => json_encode([
+            'payload_json' => $this->safeJsonEncode([
                 'match_mode' => $matchMode,
+                'match_confidence' => $matchConfidence,
                 'conversation_id' => $conversation['id'] ?? null,
                 'message_id' => $messageId ?: null,
                 'subject' => $subject,
+                'authenticated' => !empty($authentication['authenticated']),
+                'auth_mode' => $authentication['mode'] ?? 'compatibility',
+                'warning' => $warning ?: ($authentication['warning'] ?? null),
+                'duplicate_message' => !empty($messageStoreResult['duplicate']),
             ]),
         ]);
 
         return $this->respondJson([
             'success' => true,
-            'status' => 'ok',
-            'message' => 'Inbound email processed.',
+            'status' => !empty($messageStoreResult['duplicate']) ? 'duplicate' : 'ok',
+            'message' => !empty($messageStoreResult['duplicate']) ? 'Inbound email duplicate ignored.' : 'Inbound email processed.',
             'campaign_id' => $campaignId,
             'contact_id' => $contactId ?: null,
             'conversation_id' => $conversation['id'] ?? null,
             'match_mode' => $matchMode,
             'matched_by' => $matchMode,
-            'warning' => $warning,
+            'warning' => $warning ?: ($authentication['warning'] ?? null),
+            'authenticated' => !empty($authentication['authenticated']),
+            'duplicate_message' => !empty($messageStoreResult['duplicate']),
+            'event_duplicate' => !empty($replyEventResult['duplicate']),
             'lead_id' => $leadResult['lead_id'] ?? null,
             'lead_status' => $leadResult['lead_status'] ?? null,
             'lead_action' => $leadResult['lead_action'] ?? null,
             'lead_error' => $leadResult['lead_error'] ?? null,
         ], 200);
+        } finally {
+            if ($eventLockKey !== '') {
+                $this->marketing_events_model->release_event_lock($eventLockKey);
+            }
+        }
     }
 
     protected function parseSesNotification(array $message)
@@ -1238,29 +1350,64 @@ class Webhooks extends CI_Controller
         }
 
         $normalizedEmail = $this->normalizeEmail($email);
+        if ($normalizedEmail === '') {
+            return null;
+        }
 
         return $this->db->where('normalized_email', $normalizedEmail)
             ->get(db_prefix() . 'marketing_contacts')
             ->row_array();
     }
 
-    protected function findLatestRecipientByEmail($email)
+    protected function findUnambiguousRecipientByEmail($email)
     {
-        if (empty($email)) {
-            return null;
+        $normalizedEmail = $this->normalizeEmail($email);
+        if ($normalizedEmail === '') {
+            return [
+                'recipient' => null,
+                'ambiguous' => false,
+                'count' => 0,
+            ];
         }
 
-        return $this->db->from(db_prefix() . 'marketing_campaign_recipients')
-            ->where('email', $this->normalizeEmail($email))
+        $rows = $this->db->from(db_prefix() . 'marketing_campaign_recipients')
+            ->where('email', $normalizedEmail)
             ->order_by('id', 'DESC')
-            ->limit(1)
+            ->limit(2)
             ->get()
-            ->row_array();
+            ->result_array();
+
+        if (count($rows) === 1) {
+            return [
+                'recipient' => $rows[0],
+                'ambiguous' => false,
+                'count' => 1,
+            ];
+        }
+
+        return [
+            'recipient' => null,
+            'ambiguous' => count($rows) > 1,
+            'count' => count($rows),
+        ];
     }
 
     protected function normalizeEmail($email)
     {
-        return trim(strtolower((string) $email));
+        $email = trim((string) $email);
+        if ($email === '') {
+            return '';
+        }
+
+        if (preg_match('/<([^<>@\s]+@[^<>@\s]+)>/', $email, $matches) === 1) {
+            $email = $matches[1];
+        }
+
+        $email = trim($email, "\"' \t\n\r\0\x0B");
+        $email = trim($email, '<>');
+        $email = mb_strtolower($email);
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
     }
 
     protected function normalizeMessageIdentifier($messageId)
@@ -1389,6 +1536,107 @@ class Webhooks extends CI_Controller
         $post = $this->input->post(null, false);
 
         return is_array($post) && !empty($post) ? $post : null;
+    }
+
+    protected function validateInboundEmailAuthentication(array $payload, array $headers)
+    {
+        $configuredSecret = trim((string) get_option('marketing_inbound_email_secret'));
+        if ($configuredSecret === '') {
+            return [
+                'accepted' => true,
+                'authenticated' => false,
+                'lead_conversion_allowed' => true,
+                'mode' => 'compatibility',
+                'warning' => 'inbound_email_auth_not_configured',
+            ];
+        }
+
+        $presentedSecret = trim((string) ($headers['x-marketing-inbound-secret'] ?? ($payload['inbound_secret'] ?? ($payload['secret'] ?? ($payload['token'] ?? '')))));
+        if ($presentedSecret !== '' && hash_equals($configuredSecret, $presentedSecret)) {
+            return [
+                'accepted' => true,
+                'authenticated' => true,
+                'lead_conversion_allowed' => true,
+                'mode' => 'shared_secret',
+                'warning' => null,
+            ];
+        }
+
+        return [
+            'accepted' => false,
+            'authenticated' => false,
+            'lead_conversion_allowed' => false,
+            'mode' => 'shared_secret',
+            'warning' => 'inbound_email_auth_failed',
+        ];
+    }
+
+    protected function extractInboundProviderMessageId(array $payload, array $requestHeaders = [], array $payloadHeaders = [])
+    {
+        $candidates = [
+            $payload['message_id'] ?? null,
+            $payload['provider_message_id'] ?? null,
+            $requestHeaders['message-id'] ?? null,
+            $requestHeaders['x-message-id'] ?? null,
+            $payloadHeaders['Message-Id'] ?? ($payloadHeaders['Message-ID'] ?? ($payloadHeaders['message-id'] ?? null)),
+        ];
+
+        foreach ($candidates as $candidate) {
+            $normalized = $this->normalizeMessageIdentifier($candidate);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+
+        return '';
+    }
+
+    protected function resolveInboundReceivedAt(array $payload, array $requestHeaders = [], array $payloadHeaders = [])
+    {
+        $candidates = [
+            $payload['received_at'] ?? null,
+            $payload['timestamp'] ?? null,
+            $payload['date'] ?? null,
+            $requestHeaders['date'] ?? null,
+            $payloadHeaders['Date'] ?? ($payloadHeaders['date'] ?? null),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            $timestamp = is_numeric($candidate) ? (int) $candidate : strtotime((string) $candidate);
+            if ($timestamp !== false && $timestamp > 0) {
+                return date('Y-m-d H:i:s', $timestamp);
+            }
+        }
+
+        return date('Y-m-d H:i:s');
+    }
+
+    protected function buildInboundMessageDedupeKey($senderEmail, $subject, $messagePreview, array $payload = [], array $requestHeaders = [], array $payloadHeaders = [], $receivedAt = null)
+    {
+        $senderEmail = $this->normalizeEmail($senderEmail);
+        $subject = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $subject)));
+        $messagePreview = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $messagePreview)));
+        $messagePreview = mb_substr($messagePreview, 0, 500);
+        $bodyHash = sha1($messagePreview);
+        $receivedAt = $receivedAt ?: $this->resolveInboundReceivedAt($payload, $requestHeaders, $payloadHeaders);
+        $bucket = date('Y-m-d H:i', strtotime((string) $receivedAt));
+
+        return 'inbound_email:' . sha1(implode('|', [$senderEmail, $subject, $bodyHash, $bucket]));
+    }
+
+    protected function senderMatchesRecipient($senderEmail, array $recipient)
+    {
+        $senderEmail = $this->normalizeEmail($senderEmail);
+        $recipientEmail = $this->normalizeEmail($recipient['email'] ?? ($recipient['destination'] ?? ''));
+        if ($senderEmail === '' || $recipientEmail === '') {
+            return true;
+        }
+
+        return $senderEmail === $recipientEmail;
     }
 
     protected function extractReplyTrackingIdentifier($subject, $bodyHtml, $bodyText, array $headers = [], $rawBody = '')

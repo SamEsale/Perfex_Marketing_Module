@@ -64,6 +64,7 @@ class Settings extends AdminController
             'marketing_reply_to_lead_source'    => get_option('marketing_reply_to_lead_source'),
             'marketing_reply_to_lead_assigned_staff' => get_option('marketing_reply_to_lead_assigned_staff'),
             'marketing_reply_to_lead_name_prefix' => get_option('marketing_reply_to_lead_name_prefix'),
+            'marketing_inbound_email_secret'   => get_option('marketing_inbound_email_secret'),
             'marketing_whatsapp_enabled'        => get_option('marketing_whatsapp_enabled'),
             'marketing_whatsapp_graph_version'  => get_option('marketing_whatsapp_graph_version'),
             'marketing_whatsapp_phone_number_id' => get_option('marketing_whatsapp_phone_number_id'),
@@ -95,6 +96,7 @@ class Settings extends AdminController
         $data['reply_lead_dependencies_available'] = !empty($data['lead_status_options'])
             && !empty($data['lead_source_options'])
             && !empty($data['lead_staff_options']);
+        $data['inbound_email_secret_configured'] = trim((string) get_option('marketing_inbound_email_secret')) !== '';
         $data['whatsapp_settings'] = $this->marketing_whatsapp->get_settings();
         if (is_array($submittedWhatsappSettings) && !empty($submittedWhatsappSettings)) {
             $whatsappFieldMap = [
@@ -247,6 +249,7 @@ class Settings extends AdminController
             'marketing_reply_to_lead_source' => (string) $getValue('marketing_reply_to_lead_source'),
             'marketing_reply_to_lead_assigned_staff' => (string) $getValue('marketing_reply_to_lead_assigned_staff'),
             'marketing_reply_to_lead_name_prefix' => (string) $getValue('marketing_reply_to_lead_name_prefix'),
+            'marketing_inbound_email_secret' => '',
             'marketing_smtp_password_raw' => trim((string) $this->input->post('marketing_smtp_password', false)),
         ];
     }
@@ -420,6 +423,7 @@ class Settings extends AdminController
         $this->form_validation->set_rules('marketing_reply_to_lead_source', _l('marketing_reply_to_lead_source'), 'trim|integer|greater_than_equal_to[0]');
         $this->form_validation->set_rules('marketing_reply_to_lead_assigned_staff', _l('marketing_reply_to_lead_assigned_staff'), 'trim|integer|greater_than_equal_to[0]');
         $this->form_validation->set_rules('marketing_reply_to_lead_name_prefix', _l('marketing_reply_to_lead_name_prefix'), 'trim|max_length[100]');
+        $this->form_validation->set_rules('marketing_inbound_email_secret', _l('marketing_inbound_email_secret'), 'trim|max_length[255]');
 
         if ($this->form_validation->run() === false) {
             $this->session->set_tempdata('marketing_settings_reply_lead_form_data', $posted, 60);
@@ -427,6 +431,8 @@ class Settings extends AdminController
             redirect(admin_url('marketing/settings'));
         }
 
+        $postedSecret = trim((string) $this->input->post('marketing_inbound_email_secret', false));
+        $existingSecret = trim((string) get_option('marketing_inbound_email_secret'));
         $settings = [
             'marketing_reply_to_lead_enabled' => $posted['marketing_reply_to_lead_enabled'],
             'marketing_reply_to_lead_unknown_only' => $posted['marketing_reply_to_lead_unknown_only'],
@@ -434,6 +440,7 @@ class Settings extends AdminController
             'marketing_reply_to_lead_source' => (int) $posted['marketing_reply_to_lead_source'],
             'marketing_reply_to_lead_assigned_staff' => (int) $posted['marketing_reply_to_lead_assigned_staff'],
             'marketing_reply_to_lead_name_prefix' => $posted['marketing_reply_to_lead_name_prefix'] !== '' ? $posted['marketing_reply_to_lead_name_prefix'] : 'Marketing Reply',
+            'marketing_inbound_email_secret' => $postedSecret !== '' ? $postedSecret : $existingSecret,
         ];
 
         $this->persist_settings($settings);

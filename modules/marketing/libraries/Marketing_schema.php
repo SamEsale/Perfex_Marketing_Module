@@ -491,6 +491,7 @@ class Marketing_schema
                     'media_meta_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
                     'context_provider_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
                     'provider_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'dedupe_key' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
                     'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
@@ -498,6 +499,7 @@ class Marketing_schema
                     'KEY `conversation_id` (`conversation_id`)',
                     'KEY `campaign_id` (`campaign_id`)',
                     'KEY `provider_message_id` (`provider_message_id`)',
+                    'KEY `dedupe_key` (`dedupe_key`)',
                     'KEY `provider_thread_id` (`provider_thread_id`)',
                 ],
             ],
@@ -717,6 +719,11 @@ class Marketing_schema
                 'table' => db_prefix() . 'marketing_messages',
                 'name' => 'conversation_id',
                 'columns' => ['conversation_id'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_messages',
+                'name' => 'dedupe_key',
+                'columns' => ['dedupe_key'],
             ],
             [
                 'table' => db_prefix() . 'marketing_suppressions',
