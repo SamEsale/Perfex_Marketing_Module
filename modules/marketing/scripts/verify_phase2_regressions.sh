@@ -25,6 +25,8 @@ MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
 CAMPAIGNS_CONTROLLER_FILE="modules/marketing/controllers/Campaigns.php"
 ANALYTICS_CONTROLLER_FILE="modules/marketing/controllers/Analytics.php"
 SETTINGS_CONTROLLER_FILE="modules/marketing/controllers/Settings.php"
+INTEGRITY_MODEL_FILE="modules/marketing/models/Marketing_integrity_model.php"
+INTEGRITY_RUNTIME_FILE="modules/marketing/scripts/verify_phase4_integrity_runtime.php"
 README_FILE="modules/marketing/README.md"
 INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
@@ -2095,6 +2097,31 @@ check_inbound_reply_hardening() {
     "auth=$auth_helper | hash=$hash_line | fallback=$unambiguous_helper | dedupe=$dedupe_helper | event=$event_store"
 }
 
+check_phase4_integrity_diagnostics() {
+  local model_helper runtime_script runtime_method dashboard_controller_load dashboard_view_title dashboard_view_note inbound_message_channel inbound_message_provider whatsapp_message_channel destructive_sql
+  model_helper="$(first_match 'class[[:space:]]+Marketing_integrity_model' "$INTEGRITY_MODEL_FILE")"
+  runtime_script="$(first_fixed_match 'Marketing Integrity Diagnostics' "$INTEGRITY_RUNTIME_FILE")"
+  runtime_method="$(first_match 'function[[:space:]]+get_integrity_diagnostics' "$INTEGRITY_MODEL_FILE")"
+  dashboard_controller_load="$(first_fixed_match "Marketing_integrity_model" "$MARKETING_CONTROLLER_FILE")"
+  dashboard_view_title="$(first_fixed_match 'Integrity Health' "$DASHBOARD_VIEW_FILE")"
+  dashboard_view_note="$(first_fixed_match 'verify_phase4_integrity_runtime.php' "$DASHBOARD_VIEW_FILE")"
+  inbound_message_channel="$(first_fixed_match "'channel' => 'email'" "$WEBHOOKS_FILE")"
+  inbound_message_provider="$(first_fixed_match "'provider' => 'inbound_email'" "$WEBHOOKS_FILE")"
+  whatsapp_message_channel="$(first_fixed_match "'channel' => 'whatsapp'" "$WEBHOOKS_FILE")"
+  destructive_sql="$(grep -nE '\b(DELETE|UPDATE|INSERT|TRUNCATE|DROP|ALTER)\b' "$INTEGRITY_RUNTIME_FILE" || true)"
+
+  if [[ -z "$model_helper" || -z "$runtime_script" || -z "$runtime_method" || -z "$dashboard_controller_load" || -z "$dashboard_view_title" || -z "$dashboard_view_note" || -z "$inbound_message_channel" || -z "$inbound_message_provider" || -z "$whatsapp_message_channel" || -n "$destructive_sql" ]]; then
+    fail \
+      "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
+      "expected integrity model/runtime script/dashboard wiring plus inbound email message channel metadata and preserved WhatsApp markers; model=${model_helper:-missing}; runtime=${runtime_script:-missing}; method=${runtime_method:-missing}; controller=${dashboard_controller_load:-missing}; title=${dashboard_view_title:-missing}; note=${dashboard_view_note:-missing}; inbound_channel=${inbound_message_channel:-missing}; inbound_provider=${inbound_message_provider:-missing}; whatsapp_channel=${whatsapp_message_channel:-missing}; destructive=${destructive_sql:-none}"
+    return
+  fi
+
+  pass \
+    "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
+    "model=$model_helper | runtime=$runtime_script | dashboard=$dashboard_view_title"
+}
+
 check_option_repair_idempotence() {
   local defaults_helper_line option_names_line ensure_helper_line install_usage_line uninstall_usage_line add_only_line
   defaults_helper_line="$(first_match 'function[[:space:]]+marketing_get_default_options' "$BOOTSTRAP_FILE")"
@@ -2376,6 +2403,7 @@ check_ses_sns_signature_enforcement
 check_ses_sns_verifier_strictness
 check_sns_message_id_idempotency
 check_inbound_reply_hardening
+check_phase4_integrity_diagnostics
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   printf 'FAILED phase2-regressions %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"

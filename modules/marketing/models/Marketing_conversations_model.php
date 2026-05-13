@@ -153,16 +153,23 @@ class Marketing_conversations_model extends App_Model
             return 0;
         }
 
+        $provider = isset($data['provider']) ? trim((string) $data['provider']) : '';
+        $channel = isset($data['channel']) ? trim((string) $data['channel']) : '';
+        if ($channel === '' && $provider === 'inbound_email') {
+            $channel = 'email';
+        }
+
         $insert = [
             'conversation_id' => isset($data['conversation_id']) ? (int) $data['conversation_id'] : 0,
             'campaign_id' => isset($data['campaign_id']) ? (int) $data['campaign_id'] : null,
             'marketing_contact_id' => isset($data['marketing_contact_id']) ? (int) $data['marketing_contact_id'] : null,
             'direction' => isset($data['direction']) ? trim((string) $data['direction']) : 'inbound',
+            'channel' => $channel !== '' ? $channel : null,
             'email' => isset($data['email']) ? mb_strtolower(trim((string) $data['email'])) : null,
             'from_email' => isset($data['from_email'])
                 ? mb_strtolower(trim((string) $data['from_email']))
                 : (isset($data['email']) ? mb_strtolower(trim((string) $data['email'])) : null),
-            'provider' => isset($data['provider']) ? trim((string) $data['provider']) : null,
+            'provider' => $provider !== '' ? $provider : null,
             'message_type' => isset($data['message_type']) ? trim((string) $data['message_type']) : null,
             'provider_thread_id' => isset($data['provider_thread_id']) ? trim((string) $data['provider_thread_id']) : null,
             'provider_status' => isset($data['provider_status']) ? trim((string) $data['provider_status']) : null,
@@ -191,7 +198,7 @@ class Marketing_conversations_model extends App_Model
                 'direction' => $insert['direction'] ?? 'inbound',
                 'last_message_at' => $insert['datecreated'] ?? date('Y-m-d H:i:s'),
                 'subject' => $insert['subject'] ?? null,
-                'channel' => isset($data['channel']) ? trim((string) $data['channel']) : null,
+                'channel' => $insert['channel'] ?? null,
                 'provider' => $insert['provider'] ?? null,
                 'contact_phone' => $data['contact_phone'] ?? null,
                 'normalized_phone' => $data['normalized_phone'] ?? null,

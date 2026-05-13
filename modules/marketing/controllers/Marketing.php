@@ -14,6 +14,7 @@ class Marketing extends AdminController
 
         $this->load->model('marketing/Marketing_dashboard_model', 'marketing_dashboard_model');
         $this->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
+        $this->load->model('marketing/Marketing_integrity_model', 'marketing_integrity_model');
     }
 
     public function index()
@@ -26,6 +27,15 @@ class Marketing extends AdminController
             }
         } catch (Throwable $exception) {
             log_message('error', 'Marketing dashboard data unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        try {
+            $integrityDiagnostics = $this->marketing_integrity_model->get_integrity_diagnostics(3);
+            if (is_array($integrityDiagnostics)) {
+                $data['integrity_diagnostics'] = array_replace_recursive($data['integrity_diagnostics'] ?? [], $integrityDiagnostics);
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing integrity diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
         }
 
         $data['title'] = _l('marketing_dashboard');
@@ -128,6 +138,14 @@ class Marketing extends AdminController
                 'webhook_logs_cleanup_candidate_more' => false,
                 'click_aggregate_candidate_preview' => 0,
                 'click_aggregate_candidate_more' => false,
+            ],
+            'integrity_diagnostics' => [
+                'generated_at' => null,
+                'available' => false,
+                'critical_count' => 0,
+                'warning_count' => 0,
+                'categories' => [],
+                'top_categories' => [],
             ],
             'recent_campaigns' => [],
             'recent_activity' => [],

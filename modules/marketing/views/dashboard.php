@@ -156,11 +156,26 @@
         flex-wrap: wrap;
         margin-top: 14px;
     }
+    .marketing-ops-integrity-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 14px;
+    }
+    .marketing-ops-integrity-badge.critical {
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+    .marketing-ops-integrity-badge.warning {
+        background: #fff7ed;
+        color: #c2410c;
+    }
     @media (max-width: 991px) {
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid,
-        .marketing-ops-compact-grid {
+        .marketing-ops-compact-grid,
+        .marketing-ops-integrity-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
@@ -168,7 +183,8 @@
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid,
-        .marketing-ops-compact-grid {
+        .marketing-ops-compact-grid,
+        .marketing-ops-integrity-grid {
             grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         .marketing-ops-compact-card .marketing-ops-section-copy {
@@ -431,6 +447,26 @@
                                 'click_aggregate_candidate_more' => false,
                             ];
                         $retentionModeLabel = str_replace('_', ' ', (string) ($retentionDiagnostics['cleanup_mode'] ?? 'explicit_only'));
+                        $integrityDiagnostics = isset($integrity_diagnostics) && is_array($integrity_diagnostics)
+                            ? array_merge([
+                                'generated_at' => null,
+                                'available' => false,
+                                'critical_count' => 0,
+                                'warning_count' => 0,
+                                'categories' => [],
+                                'top_categories' => [],
+                            ], $integrity_diagnostics)
+                            : [
+                                'generated_at' => null,
+                                'available' => false,
+                                'critical_count' => 0,
+                                'warning_count' => 0,
+                                'categories' => [],
+                                'top_categories' => [],
+                            ];
+                        $integrityTopCategories = isset($integrityDiagnostics['top_categories']) && is_array($integrityDiagnostics['top_categories'])
+                            ? $integrityDiagnostics['top_categories']
+                            : [];
                         $canManageQueue = !empty($can_manage_queue);
                         ?>
                         <div class="row tw-mt-15">
@@ -447,6 +483,42 @@
                                                 <span class="marketing-ops-status-pill"><?= !empty($queueDiagnostics['schema_ready']) ? 'Schema Ready' : 'Schema Partial'; ?></span>
                                                 <span class="marketing-ops-status-pill">Mode: <?= html_escape(ucwords($retentionModeLabel)); ?></span>
                                             </div>
+                                        </div>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title">Integrity Health</h5>
+                                            <p class="marketing-ops-section-copy">Read-only runtime integrity checks for queue state, provider events, inbound replies, and schema drift. Run <code>php modules/marketing/scripts/verify_phase4_integrity_runtime.php</code> from the CRM root for detailed samples.</p>
+                                            <?php if (empty($integrityDiagnostics['available'])) { ?>
+                                                <div class="marketing-ops-empty">Integrity diagnostics are currently unavailable. The dashboard fell back safely without breaking queue operations.</div>
+                                            <?php } else { ?>
+                                                <div class="marketing-ops-integrity-grid">
+                                                    <div class="marketing-ops-metric">
+                                                        <span class="marketing-ops-metric-label">Critical Anomalies</span>
+                                                        <span class="marketing-ops-metric-value"><?= (int) ($integrityDiagnostics['critical_count'] ?? 0); ?></span>
+                                                        <span class="marketing-ops-metric-helper">Immediate integrity issues needing operator review.</span>
+                                                    </div>
+                                                    <div class="marketing-ops-metric">
+                                                        <span class="marketing-ops-metric-label">Warnings</span>
+                                                        <span class="marketing-ops-metric-value"><?= (int) ($integrityDiagnostics['warning_count'] ?? 0); ?></span>
+                                                        <span class="marketing-ops-metric-helper">Non-blocking drift or stale-state signals.</span>
+                                                    </div>
+                                                    <div class="marketing-ops-metric">
+                                                        <span class="marketing-ops-metric-label">Generated At</span>
+                                                        <span class="marketing-ops-metric-value" style="font-size:18px;"><?= !empty($integrityDiagnostics['generated_at']) ? html_escape((string) $integrityDiagnostics['generated_at']) : 'n/a'; ?></span>
+                                                        <span class="marketing-ops-metric-helper">Last dashboard integrity snapshot time.</span>
+                                                    </div>
+                                                </div>
+                                                <?php if (empty($integrityTopCategories)) { ?>
+                                                    <div class="marketing-ops-empty">No integrity anomalies are currently flagged by the bounded dashboard summary.</div>
+                                                <?php } else { ?>
+                                                    <div class="marketing-ops-badge-grid">
+                                                        <?php foreach (array_slice($integrityTopCategories, 0, 5) as $integrityCategory) { ?>
+                                                            <span class="marketing-ops-badge marketing-ops-integrity-badge <?= html_escape((string) ($integrityCategory['severity'] ?? 'warning')); ?>">
+                                                                <?= html_escape((string) ($integrityCategory['title'] ?? 'Integrity')); ?>: <?= (int) ($integrityCategory['count'] ?? 0); ?>
+                                                            </span>
+                                                        <?php } ?>
+                                                    </div>
+                                                <?php } ?>
+                                            <?php } ?>
                                         </div>
                                         <div class="marketing-ops-section">
                                             <h5 class="marketing-ops-section-title">Queue Controls</h5>
