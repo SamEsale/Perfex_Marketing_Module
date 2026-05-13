@@ -69,6 +69,7 @@ class Settings extends AdminController
             'marketing_whatsapp_graph_version'  => get_option('marketing_whatsapp_graph_version'),
             'marketing_whatsapp_phone_number_id' => get_option('marketing_whatsapp_phone_number_id'),
             'marketing_whatsapp_business_account_id' => get_option('marketing_whatsapp_business_account_id'),
+            'marketing_whatsapp_app_secret'    => get_option('marketing_whatsapp_app_secret'),
             'marketing_whatsapp_webhook_verify_token' => get_option('marketing_whatsapp_webhook_verify_token'),
             'marketing_whatsapp_default_template_name' => get_option('marketing_whatsapp_default_template_name'),
             'marketing_whatsapp_default_template_language' => get_option('marketing_whatsapp_default_template_language'),
@@ -119,6 +120,7 @@ class Settings extends AdminController
             $data['whatsapp_settings']['enabled'] = (string) ($data['whatsapp_settings']['raw_enabled'] ?? '0') === '1';
         }
         $data['whatsapp_access_token_configured'] = $data['whatsapp_settings']['access_token'] !== '';
+        $data['whatsapp_app_secret_configured'] = trim((string) ($data['whatsapp_settings']['app_secret'] ?? '')) !== '';
         $data['schema_report'] = $this->marketing_schema->get_readiness_report();
         $data['license_available'] = $this->marketingLicenseAvailable;
         $data['license_state'] = $this->marketingLicenseAvailable
@@ -184,6 +186,7 @@ class Settings extends AdminController
             'marketing_whatsapp_phone_number_id',
             'marketing_whatsapp_business_account_id',
             'marketing_whatsapp_access_token',
+            'marketing_whatsapp_app_secret',
             'marketing_whatsapp_webhook_verify_token',
             'marketing_whatsapp_default_template_name',
             'marketing_whatsapp_default_template_language',
@@ -465,6 +468,7 @@ class Settings extends AdminController
             'marketing_whatsapp_graph_version' => $graphVersion,
             'marketing_whatsapp_phone_number_id' => trim((string) $this->input->post('marketing_whatsapp_phone_number_id', false)),
             'marketing_whatsapp_business_account_id' => trim((string) $this->input->post('marketing_whatsapp_business_account_id', false)),
+            'marketing_whatsapp_app_secret_raw' => trim((string) $this->input->post('marketing_whatsapp_app_secret', false)),
             'marketing_whatsapp_webhook_verify_token' => trim((string) $this->input->post('marketing_whatsapp_webhook_verify_token', false)),
             'marketing_whatsapp_default_template_name' => trim((string) $this->input->post('marketing_whatsapp_default_template_name', false)),
             'marketing_whatsapp_default_template_language' => $templateLanguage,
@@ -504,6 +508,7 @@ class Settings extends AdminController
         $graphVersion = $graphVersion !== '' ? $graphVersion : 'v23.0';
         $phoneNumberId = trim((string) $this->input->post('marketing_whatsapp_phone_number_id', false));
         $businessAccountId = trim((string) $this->input->post('marketing_whatsapp_business_account_id', false));
+        $appSecret = trim((string) $this->input->post('marketing_whatsapp_app_secret', false));
         $verifyToken = trim((string) $this->input->post('marketing_whatsapp_webhook_verify_token', false));
         $templateName = trim((string) $this->input->post('marketing_whatsapp_default_template_name', false));
         $language = trim((string) $this->input->post('marketing_whatsapp_default_template_language', false));
@@ -517,6 +522,7 @@ class Settings extends AdminController
             'marketing_whatsapp_graph_version' => $graphVersion,
             'marketing_whatsapp_phone_number_id' => $phoneNumberId,
             'marketing_whatsapp_business_account_id' => $businessAccountId,
+            'marketing_whatsapp_app_secret' => '',
             'marketing_whatsapp_webhook_verify_token' => $verifyToken,
             'marketing_whatsapp_default_template_name' => $templateName,
             'marketing_whatsapp_default_template_language' => $language,
@@ -538,6 +544,12 @@ class Settings extends AdminController
         if ($businessAccountId !== '' && preg_match('/^[A-Za-z0-9._-]+$/', $businessAccountId) !== 1) {
             $this->session->set_tempdata('marketing_settings_whatsapp_form_data', $posted, 60);
             set_alert('danger', 'Invalid WhatsApp field: marketing_whatsapp_business_account_id');
+            redirect(admin_url('marketing/settings'));
+        }
+
+        if ($appSecret !== '' && mb_strlen($appSecret) > 255) {
+            $this->session->set_tempdata('marketing_settings_whatsapp_form_data', $posted, 60);
+            set_alert('danger', 'Invalid WhatsApp field: marketing_whatsapp_app_secret');
             redirect(admin_url('marketing/settings'));
         }
 
@@ -572,6 +584,11 @@ class Settings extends AdminController
 
         if ($accessToken !== '') {
             $settings['marketing_whatsapp_access_token'] = $accessToken;
+        }
+        if ($appSecret !== '') {
+            $settings['marketing_whatsapp_app_secret'] = $appSecret;
+        } elseif (total_rows(db_prefix() . 'options', ['name' => 'marketing_whatsapp_app_secret']) === 0) {
+            $settings['marketing_whatsapp_app_secret'] = '';
         }
 
         foreach ($settings as $option => $value) {

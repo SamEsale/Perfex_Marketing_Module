@@ -255,6 +255,7 @@ function marketing_get_default_options()
         'marketing_whatsapp_phone_number_id' => '',
         'marketing_whatsapp_business_account_id' => '',
         'marketing_whatsapp_access_token' => '',
+        'marketing_whatsapp_app_secret' => '',
         'marketing_whatsapp_webhook_verify_token' => '',
         'marketing_whatsapp_default_template_name' => '',
         'marketing_whatsapp_default_template_language' => 'en_US',

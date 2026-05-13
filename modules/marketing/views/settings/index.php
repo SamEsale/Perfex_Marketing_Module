@@ -605,8 +605,20 @@ if (($license_state['status'] ?? '') === 'active') {
                                         </div>
 
                                         <div class="form-group">
+                                            <label for="marketing_whatsapp_app_secret" class="control-label"><?= _l('marketing_whatsapp_app_secret'); ?></label>
+                                            <input type="password" id="marketing_whatsapp_app_secret" name="marketing_whatsapp_app_secret" class="form-control" value="" autocomplete="new-password" placeholder="<?= html_escape(_l('marketing_whatsapp_app_secret_help')); ?>">
+                                            <p class="text-muted mtop5"><?= _l('marketing_whatsapp_app_secret_visibility_note'); ?></p>
+                                            <div class="alert <?= $whatsapp_app_secret_configured ? 'alert-success' : 'alert-warning'; ?> mtop10 mbot0">
+                                                <?= $whatsapp_app_secret_configured ? _l('marketing_whatsapp_app_secret_status_configured') : _l('marketing_whatsapp_app_secret_status_missing'); ?>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group">
                                             <label for="marketing_whatsapp_webhook_verify_token" class="control-label"><?= _l('marketing_whatsapp_webhook_verify_token'); ?></label>
                                             <input type="text" id="marketing_whatsapp_webhook_verify_token" name="marketing_whatsapp_webhook_verify_token" class="form-control" value="<?= html_escape($whatsappSettingValue('webhook_verify_token')); ?>">
+                                            <p class="text-muted mtop5">
+                                                <?= $whatsapp_app_secret_configured ? _l('marketing_whatsapp_app_secret_runtime_configured') : _l('marketing_whatsapp_app_secret_runtime_missing'); ?>
+                                            </p>
                                         </div>
 
                                         <div class="form-group">

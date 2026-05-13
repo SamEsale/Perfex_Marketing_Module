@@ -469,21 +469,38 @@ class Webhooks extends CI_Controller
             ], 405);
         }
 
-        $rawBody = trim(file_get_contents('php://input'));
+        $rawBody = (string) file_get_contents('php://input');
         $headers = $this->getRequestHeaders();
-        $payload = $rawBody !== '' ? json_decode($rawBody, true) : null;
+        $trimmedRawBody = trim($rawBody);
+        $payload = $trimmedRawBody !== '' ? json_decode($rawBody, true) : null;
         $webhookLogId = $this->logWebhook([
             'provider' => 'whatsapp_business',
             'event_type' => 'whatsapp_webhook',
             'message_type' => 'notification',
             'signature_valid' => 0,
-            'payload_json' => $rawBody !== '' ? $rawBody : json_encode([]),
+            'payload_json' => $trimmedRawBody !== '' ? $rawBody : json_encode([]),
             'headers_json' => json_encode($headers),
         ]);
+
+        $signatureVerification = $this->marketing_whatsapp->verify_post_signature($rawBody, $headers);
+        if (empty($signatureVerification['accepted'])) {
+            $this->updateWebhookLog($webhookLogId, [
+                'processed' => 1,
+                'signature_valid' => 0,
+                'error_message' => 'WhatsApp POST signature verification failed.',
+            ]);
+
+            return $this->respondJson([
+                'success' => false,
+                'status' => 'error',
+                'message' => $signatureVerification['message'] ?? 'WhatsApp webhook signature verification failed.',
+            ], 401);
+        }
 
         if (!is_array($payload)) {
             $this->updateWebhookLog($webhookLogId, [
                 'processed' => 1,
+                'signature_valid' => !empty($signatureVerification['authenticated']) ? 1 : 0,
                 'error_message' => 'Invalid WhatsApp webhook payload.',
             ]);
 
@@ -499,6 +516,7 @@ class Webhooks extends CI_Controller
         if (empty($parsed['valid'])) {
             $this->updateWebhookLog($webhookLogId, [
                 'processed' => 1,
+                'signature_valid' => !empty($signatureVerification['authenticated']) ? 1 : 0,
                 'error_message' => 'WhatsApp webhook payload was not recognized.',
             ]);
 
@@ -527,6 +545,7 @@ class Webhooks extends CI_Controller
         $this->updateWebhookLog($webhookLogId, [
             'processed' => 1,
             'event_type' => 'whatsapp_webhook',
+            'signature_valid' => !empty($signatureVerification['authenticated']) ? 1 : 0,
         ]);
 
         return $this->respondJson([
@@ -535,6 +554,8 @@ class Webhooks extends CI_Controller
             'message' => 'WhatsApp webhook processed.',
             'messages_processed' => $processedMessages,
             'statuses_processed' => $processedStatuses,
+            'authenticated' => !empty($signatureVerification['authenticated']),
+            'warning' => $signatureVerification['warning'] ?? null,
         ], 200);
     }
 
@@ -1184,11 +1205,14 @@ class Webhooks extends CI_Controller
         $contextProviderMessageId = trim((string) ($message['context_message_id'] ?? ''));
         $providerThreadId = trim((string) ($message['provider_thread_id'] ?? ''));
         $mediaMeta = $this->buildWhatsappMessageMediaMeta($message);
+        $dedupeKey = $this->buildWhatsappInboundMessageDedupeKey($message, $phone, $providerMessageId, $eventAt, $messageType, $contextProviderMessageId);
+        $providerEventId = $this->buildWhatsappInboundProviderEventId($providerMessageId, $dedupeKey);
 
         $dedupeCriteria = [
             'provider' => 'whatsapp_business',
             'event_type' => $eventType,
             'provider_message_id' => $providerMessageId,
+            'provider_event_id' => $providerEventId,
             'email' => $phone,
             'event_at' => $eventAt,
         ];
@@ -1202,13 +1226,10 @@ class Webhooks extends CI_Controller
         }
 
         try {
-            if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
-                log_message('info', 'Marketing WhatsApp duplicate inbound message skipped: phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
-                return false;
-            }
-
             $conversation = null;
             $messageId = 0;
+            $messageStored = false;
+            $duplicateMessage = false;
             if ($this->marketing_conversations_model->tables_available()) {
                 $conversation = $this->marketing_conversations_model->find_or_create_conversation([
                     'campaign_id' => null,
@@ -1227,7 +1248,7 @@ class Webhooks extends CI_Controller
                 ]);
 
                 if ($conversation) {
-                    $messageId = (int) $this->marketing_conversations_model->add_message([
+                    $messageStoreResult = $this->marketing_conversations_model->add_message_idempotent([
                         'conversation_id' => (int) $conversation['id'],
                         'campaign_id' => null,
                         'marketing_contact_id' => null,
@@ -1244,19 +1265,24 @@ class Webhooks extends CI_Controller
                         'message' => trim((string) ($message['text'] ?? '')),
                         'body_text' => trim((string) ($message['text'] ?? '')),
                         'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                        'dedupe_key' => $dedupeKey,
                         'context_provider_message_id' => $contextProviderMessageId !== '' ? $contextProviderMessageId : null,
                         'media_meta_json' => $mediaMeta,
                         'datecreated' => $eventAt,
                     ]);
+                    $messageId = (int) ($messageStoreResult['id'] ?? 0);
+                    $messageStored = !empty($messageStoreResult['success']);
+                    $duplicateMessage = !empty($messageStoreResult['duplicate']);
                 }
             }
 
-            $this->marketing_events_model->add_event([
+            $eventStoreResult = $this->marketing_events_model->add_event_idempotent([
                 'campaign_id' => null,
                 'campaign_recipient_id' => null,
                 'marketing_contact_id' => null,
                 'event_type' => $eventType,
                 'provider' => 'whatsapp_business',
+                'provider_event_id' => $providerEventId,
                 'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
                 'email' => $phone !== '' ? $phone : null,
                 'event_at' => $eventAt,
@@ -1273,12 +1299,18 @@ class Webhooks extends CI_Controller
                     'media_meta' => $mediaMeta,
                     'conversation_id' => $conversation['id'] ?? null,
                     'stored_message_id' => $messageId ?: null,
+                    'duplicate_message' => $duplicateMessage,
                 ]),
             ]);
 
+            if ($duplicateMessage && !empty($eventStoreResult['duplicate'])) {
+                log_message('info', 'Marketing WhatsApp duplicate inbound message skipped: phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
+                return false;
+            }
+
             log_message('info', 'Marketing WhatsApp inbound message stored: phone=' . $phone . ' conversation_id=' . (int) ($conversation['id'] ?? 0));
 
-            return true;
+            return $messageStored || !empty($eventStoreResult['inserted']);
         } finally {
             if ($eventLockKey !== '') {
                 $this->marketing_events_model->release_event_lock($eventLockKey);
@@ -1292,38 +1324,55 @@ class Webhooks extends CI_Controller
         $providerMessageId = trim((string) ($statusEvent['message_id'] ?? ''));
         $eventAt = $statusEvent['timestamp'] ?? date('Y-m-d H:i:s');
         $eventType = trim((string) ($statusEvent['event_type'] ?? 'whatsapp_status'));
+        $providerEventId = $this->buildWhatsappStatusProviderEventId($statusEvent, $phone, $providerMessageId, $eventAt, $eventType);
 
         $dedupeCriteria = [
             'provider' => 'whatsapp_business',
             'event_type' => $eventType,
             'provider_message_id' => $providerMessageId,
+            'provider_event_id' => $providerEventId,
             'email' => $phone,
             'event_at' => $eventAt,
         ];
 
-        if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
-            log_message('info', 'Marketing WhatsApp duplicate status skipped: event=' . $eventType . ' phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
-            return false;
+        $eventLockKey = '';
+        if ($this->hasStableDedupeCriteria($dedupeCriteria)) {
+            $eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);
+            if (!empty($eventLock['acquired'])) {
+                $eventLockKey = (string) ($eventLock['lock_key'] ?? '');
+            }
         }
 
-        $this->marketing_events_model->add_event([
-            'campaign_id' => null,
-            'campaign_recipient_id' => null,
-            'marketing_contact_id' => null,
-            'event_type' => $eventType,
-            'provider' => 'whatsapp_business',
-            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-            'email' => $phone !== '' ? $phone : null,
-            'event_at' => $eventAt,
-            'payload_json' => json_encode([
-                'status' => $statusEvent['status'] ?? '',
-                'conversation_id' => $statusEvent['conversation_id'] ?? '',
-            ]),
-        ]);
+        try {
+            $storeResult = $this->marketing_events_model->add_event_idempotent([
+                'campaign_id' => null,
+                'campaign_recipient_id' => null,
+                'marketing_contact_id' => null,
+                'event_type' => $eventType,
+                'provider' => 'whatsapp_business',
+                'provider_event_id' => $providerEventId,
+                'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                'email' => $phone !== '' ? $phone : null,
+                'event_at' => $eventAt,
+                'payload_json' => json_encode([
+                    'status' => $statusEvent['status'] ?? '',
+                    'conversation_id' => $statusEvent['conversation_id'] ?? '',
+                ]),
+            ]);
 
-        log_message('info', 'Marketing WhatsApp status stored: event=' . $eventType . ' phone=' . $phone);
+            if (!empty($storeResult['duplicate'])) {
+                log_message('info', 'Marketing WhatsApp duplicate status skipped: event=' . $eventType . ' phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
+                return false;
+            }
 
-        return true;
+            log_message('info', 'Marketing WhatsApp status stored: event=' . $eventType . ' phone=' . $phone);
+
+            return !empty($storeResult['success']);
+        } finally {
+            if ($eventLockKey !== '') {
+                $this->marketing_events_model->release_event_lock($eventLockKey);
+            }
+        }
     }
 
     protected function hasStableDedupeCriteria(array $criteria)
@@ -1515,6 +1564,56 @@ class Webhooks extends CI_Controller
         }
 
         return $meta;
+    }
+
+    protected function buildWhatsappInboundMessageDedupeKey(array $message, $phone, $providerMessageId, $eventAt, $messageType, $contextProviderMessageId)
+    {
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId !== '') {
+            return 'whatsapp_inbound:provider_message_id:' . $providerMessageId;
+        }
+
+        $bodyText = trim((string) ($message['text'] ?? ''));
+        $hashSource = implode('|', [
+            'whatsapp_cloud',
+            trim((string) $phone),
+            trim((string) $eventAt),
+            trim((string) $messageType),
+            trim((string) $contextProviderMessageId),
+            $bodyText,
+            json_encode($message['raw'] ?? []),
+        ]);
+
+        return 'whatsapp_inbound:fallback:' . sha1($hashSource);
+    }
+
+    protected function buildWhatsappInboundProviderEventId($providerMessageId, $dedupeKey)
+    {
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId !== '') {
+            return 'whatsapp_inbound:' . $providerMessageId;
+        }
+
+        return 'whatsapp_inbound:' . sha1((string) $dedupeKey);
+    }
+
+    protected function buildWhatsappStatusProviderEventId(array $statusEvent, $phone, $providerMessageId, $eventAt, $eventType)
+    {
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId !== '') {
+            return 'whatsapp_status:' . $eventType . ':' . $providerMessageId;
+        }
+
+        $hashSource = implode('|', [
+            'whatsapp_status',
+            trim((string) $eventType),
+            trim((string) $phone),
+            trim((string) $eventAt),
+            trim((string) ($statusEvent['status'] ?? '')),
+            trim((string) ($statusEvent['conversation_id'] ?? '')),
+        ]);
+
+        return 'whatsapp_status:' . sha1($hashSource);
     }
 
     protected function respondJson(array $data, $statusCode = 200)

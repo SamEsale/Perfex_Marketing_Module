@@ -1805,21 +1805,25 @@ check_whatsapp_test_alert_safety() {
 }
 
 check_whatsapp_token_preserve_and_redaction() {
-  local preserve_line save_line redact_line
+  local preserve_line save_line secret_preserve_line secret_save_line redact_line secret_field_line secret_status_line
   preserve_line="$(first_fixed_match "if (\$accessToken !== '') {" "$SETTINGS_CONTROLLER_FILE")"
   save_line="$(first_fixed_match "\$settings['marketing_whatsapp_access_token'] = \$accessToken;" "$SETTINGS_CONTROLLER_FILE")"
+  secret_preserve_line="$(first_fixed_match "if (\$appSecret !== '') {" "$SETTINGS_CONTROLLER_FILE")"
+  secret_save_line="$(first_fixed_match "\$settings['marketing_whatsapp_app_secret'] = \$appSecret;" "$SETTINGS_CONTROLLER_FILE")"
   redact_line="$(first_fixed_match "trim((string) get_option('marketing_whatsapp_access_token'))" "$CAMPAIGNS_FILE")"
+  secret_field_line="$(first_fixed_match 'marketing_whatsapp_app_secret' "$SETTINGS_VIEW_FILE")"
+  secret_status_line="$(first_fixed_match 'marketing_whatsapp_app_secret_status_configured' "$SETTINGS_VIEW_FILE")"
 
-  if [[ -z "$preserve_line" || -z "$save_line" || -z "$redact_line" ]]; then
+  if [[ -z "$preserve_line" || -z "$save_line" || -z "$secret_preserve_line" || -z "$secret_save_line" || -z "$redact_line" || -z "$secret_field_line" || -z "$secret_status_line" ]]; then
     fail \
-      "WhatsApp blank-token preservation remains intact and token redaction stays in failure sanitization" \
-      "expected blank-token preserve guard in modules/marketing/controllers/Settings.php and token redaction in $CAMPAIGNS_FILE; preserve=${preserve_line:-missing}; save=${save_line:-missing}; redact=${redact_line:-missing}"
+      "WhatsApp blank-token/app-secret preservation remains intact and token redaction stays in failure sanitization" \
+      "expected blank-token and blank-app-secret preserve guards in modules/marketing/controllers/Settings.php, token redaction in $CAMPAIGNS_FILE, and WhatsApp app-secret status UI in $SETTINGS_VIEW_FILE; preserve=${preserve_line:-missing}; save=${save_line:-missing}; secret_preserve=${secret_preserve_line:-missing}; secret_save=${secret_save_line:-missing}; redact=${redact_line:-missing}; secret_field=${secret_field_line:-missing}; secret_status=${secret_status_line:-missing}"
     return
   fi
 
   pass \
-    "WhatsApp blank-token preservation remains intact and token redaction stays in failure sanitization" \
-    "preserve=$preserve_line | save=$save_line | redact=$redact_line"
+    "WhatsApp blank-token/app-secret preservation remains intact and token redaction stays in failure sanitization" \
+    "preserve=$preserve_line | secret_preserve=$secret_preserve_line | secret_status=$secret_status_line"
 }
 
 check_whatsapp_active_social_scope() {
@@ -1899,7 +1903,7 @@ check_conversation_model_optional_column_guards() {
 }
 
 check_whatsapp_inbound_conversation_metadata() {
-  local lock_line channel_line provider_line phone_line type_line context_line media_line event_payload_line
+  local lock_line channel_line provider_line phone_line type_line context_line media_line event_payload_line signature_helper signature_header hmac_line equals_line compat_line message_idempotent_line message_dedupe_line status_idempotent_line status_lock_line
   lock_line="$(first_fixed_match '$eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);' "$WEBHOOKS_FILE")"
   channel_line="$(first_fixed_match "'channel' => 'whatsapp'" "$WEBHOOKS_FILE")"
   provider_line="$(first_fixed_match "'provider' => 'whatsapp_cloud'" "$WEBHOOKS_FILE")"
@@ -1908,24 +1912,35 @@ check_whatsapp_inbound_conversation_metadata() {
   context_line="$(first_fixed_match "'context_provider_message_id' => \$contextProviderMessageId !== '' ? \$contextProviderMessageId : null" "$WEBHOOKS_FILE")"
   media_line="$(first_fixed_match "'media_meta_json' => \$mediaMeta" "$WEBHOOKS_FILE")"
   event_payload_line="$(first_fixed_match "'provider_thread_id' => \$providerThreadId !== '' ? \$providerThreadId : null" "$WEBHOOKS_FILE")"
+  signature_helper="$(first_match 'function[[:space:]]+verify_post_signature' "$WHATSAPP_FILE")"
+  signature_header="$(first_fixed_match "x-hub-signature-256" "$WHATSAPP_FILE")"
+  hmac_line="$(first_fixed_match "hash_hmac('sha256', (string) \$rawBody, \$appSecret)" "$WHATSAPP_FILE")"
+  equals_line="$(first_fixed_match "hash_equals(\$expectedSignature, strtolower(\$presentedSignature))" "$WHATSAPP_FILE")"
+  compat_line="$(first_fixed_match "'warning' => 'whatsapp_post_signature_not_configured'" "$WHATSAPP_FILE")"
+  message_idempotent_line="$(first_fixed_match 'add_message_idempotent([' "$WEBHOOKS_FILE")"
+  message_dedupe_line="$(first_fixed_match "'dedupe_key' => \$dedupeKey" "$WEBHOOKS_FILE")"
+  status_idempotent_line="$(first_fixed_match 'add_event_idempotent([' "$WEBHOOKS_FILE")"
+  status_lock_line="$(first_fixed_match "return 'whatsapp_status:' . \$eventType . ':' . \$providerMessageId;" "$WEBHOOKS_FILE")"
 
-  if [[ -z "$lock_line" || -z "$channel_line" || -z "$provider_line" || -z "$phone_line" || -z "$type_line" || -z "$context_line" || -z "$media_line" || -z "$event_payload_line" ]]; then
+  if [[ -z "$lock_line" || -z "$channel_line" || -z "$provider_line" || -z "$phone_line" || -z "$type_line" || -z "$context_line" || -z "$media_line" || -z "$event_payload_line" || -z "$signature_helper" || -z "$signature_header" || -z "$hmac_line" || -z "$equals_line" || -z "$compat_line" || -z "$message_idempotent_line" || -z "$message_dedupe_line" || -z "$status_idempotent_line" || -z "$status_lock_line" ]]; then
     fail \
-      "WhatsApp inbound persistence passes channel, provider, phone, and message metadata into the conversation layer" \
-      "expected event lock plus WhatsApp channel/provider/phone/message metadata in $WEBHOOKS_FILE; lock=${lock_line:-missing}; channel=${channel_line:-missing}; provider=${provider_line:-missing}; phone=${phone_line:-missing}; type=${type_line:-missing}; context=${context_line:-missing}; media=${media_line:-missing}; thread=${event_payload_line:-missing}"
+      "WhatsApp inbound path verifies POST signatures and uses idempotent message/event persistence" \
+      "expected POST signature helper/header/hmac/hash_equals compatibility marker in $WHATSAPP_FILE plus lock-backed WhatsApp channel/provider/phone metadata and idempotent message/event storage in $WEBHOOKS_FILE; helper=${signature_helper:-missing}; header=${signature_header:-missing}; hmac=${hmac_line:-missing}; equals=${equals_line:-missing}; compat=${compat_line:-missing}; lock=${lock_line:-missing}; channel=${channel_line:-missing}; provider=${provider_line:-missing}; phone=${phone_line:-missing}; type=${type_line:-missing}; context=${context_line:-missing}; media=${media_line:-missing}; thread=${event_payload_line:-missing}; message_idempotent=${message_idempotent_line:-missing}; message_dedupe=${message_dedupe_line:-missing}; status_idempotent=${status_idempotent_line:-missing}; status_lock=${status_lock_line:-missing}"
     return
   fi
 
   pass \
-    "WhatsApp inbound persistence passes channel, provider, phone, and message metadata into the conversation layer" \
-    "lock=$lock_line | channel=$channel_line | type=$type_line | media=$media_line"
+    "WhatsApp inbound path verifies POST signatures and uses idempotent message/event persistence" \
+    "helper=$signature_helper | message=$message_idempotent_line | status=$status_idempotent_line"
 }
 
 check_whatsapp_lead_conversion_deferred() {
-  local whatsapp_block route_line csrf_line
+  local whatsapp_block route_line csrf_line readiness_helper phone_helper
   whatsapp_block="$(sed -n '/protected function storeWhatsappInboundMessage/,/protected function storeWhatsappStatusEvent/p' "$WEBHOOKS_FILE")"
   route_line="$(first_fixed_match "\$route['marketing/webhooks/whatsapp'] = 'webhooks/whatsapp';" "$ROUTES_FILE")"
   csrf_line="$(first_fixed_match "'marketing/webhooks/whatsapp'" "$CSRF_FILE")"
+  readiness_helper="$(first_match 'function[[:space:]]+get_whatsapp_lead_conversion_readiness' "modules/marketing/models/Marketing_reply_leads_model.php")"
+  phone_helper="$(first_match 'function[[:space:]]+find_lead_by_phone' "modules/marketing/models/Marketing_reply_leads_model.php")"
 
   if printf '%s\n' "$whatsapp_block" | grep -q 'convert_reply_to_lead'; then
     fail \
@@ -1934,16 +1949,16 @@ check_whatsapp_lead_conversion_deferred() {
     return
   fi
 
-  if [[ -z "$route_line" || -z "$csrf_line" ]]; then
+  if [[ -z "$route_line" || -z "$csrf_line" || -z "$readiness_helper" || -z "$phone_helper" ]]; then
     fail \
-      "WhatsApp webhook route and csrf posture remain unchanged while lead conversion is deferred" \
-      "expected whatsapp route and csrf exclusion in module config; route=${route_line:-missing}; csrf=${csrf_line:-missing}"
+      "WhatsApp webhook route stays unchanged while lead conversion remains deferred behind a readiness helper" \
+      "expected whatsapp route/csrf plus readiness helper in modules/marketing/models/Marketing_reply_leads_model.php; route=${route_line:-missing}; csrf=${csrf_line:-missing}; readiness=${readiness_helper:-missing}; phone=${phone_helper:-missing}"
     return
   fi
 
   pass \
     "automatic WhatsApp lead conversion remains deferred in Phase 4A patch 1" \
-    "route=$route_line | csrf=$csrf_line"
+    "route=$route_line | csrf=$csrf_line | readiness=$readiness_helper"
 }
 
 check_no_facebook_linkedin_active_ui_or_release_docs() {

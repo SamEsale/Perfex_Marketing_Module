@@ -172,6 +172,64 @@ class Marketing_reply_leads_model extends App_Model
         ];
     }
 
+    public function get_whatsapp_lead_conversion_readiness(array $context)
+    {
+        $result = [
+            'status' => 'manual_required',
+            'ready' => false,
+            'lead_id' => null,
+            'matched_by' => null,
+            'reason' => 'whatsapp_manual_conversion_deferred',
+        ];
+
+        $db = $this->getDb();
+        if ($db === null || !$this->leads_available()) {
+            $result['status'] = 'not_ready';
+            $result['reason'] = 'leads_unavailable';
+
+            return $result;
+        }
+
+        $conversationLeadId = (int) ($context['conversation_lead_id'] ?? ($context['lead_id'] ?? 0));
+        if ($conversationLeadId > 0) {
+            $result['status'] = 'already_linked';
+            $result['lead_id'] = $conversationLeadId;
+            $result['matched_by'] = 'conversation_lead_id';
+            $result['reason'] = 'conversation_already_linked';
+
+            return $result;
+        }
+
+        $email = $this->normalize_email($context['email'] ?? '');
+        if ($email !== '') {
+            $existingLead = $this->find_lead_by_email($email);
+            if ($existingLead) {
+                $result['status'] = 'existing_lead';
+                $result['lead_id'] = (int) $existingLead['id'];
+                $result['matched_by'] = 'email';
+                $result['reason'] = 'existing_lead_by_email';
+
+                return $result;
+            }
+        }
+
+        $phoneMatch = $this->find_lead_by_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
+        if (!empty($phoneMatch['lead'])) {
+            $result['status'] = 'existing_lead';
+            $result['lead_id'] = (int) ($phoneMatch['lead']['id'] ?? 0);
+            $result['matched_by'] = 'phone';
+            $result['reason'] = 'existing_lead_by_phone';
+
+            return $result;
+        }
+
+        if (!empty($phoneMatch['reason'])) {
+            $result['reason'] = (string) $phoneMatch['reason'];
+        }
+
+        return $result;
+    }
+
     public function decorate_replies_with_lead_metadata(array $replies, $campaignId = null)
     {
         if (empty($replies)) {
@@ -420,6 +478,48 @@ class Marketing_reply_leads_model extends App_Model
         return $map;
     }
 
+    private function find_lead_by_phone($phone)
+    {
+        $db = $this->getDb();
+        $normalizedPhone = $this->normalize_phone($phone);
+        if ($db === null || !$this->leads_available() || $normalizedPhone === '') {
+            return [
+                'lead' => null,
+                'reason' => $normalizedPhone === '' ? 'phone_missing' : 'leads_unavailable',
+            ];
+        }
+
+        $phoneField = $this->resolve_leads_phone_field();
+        if ($phoneField === null) {
+            return [
+                'lead' => null,
+                'reason' => 'lead_phone_lookup_not_available',
+            ];
+        }
+
+        $query = $db->select('id, ' . $phoneField)
+            ->from($this->leadsTable)
+            ->where($phoneField . ' IS NOT NULL', null, false)
+            ->where($phoneField . ' !=', '')
+            ->order_by('id', 'DESC')
+            ->get();
+
+        $rows = $query ? $query->result_array() : [];
+        foreach ($rows as $row) {
+            if ($this->normalize_phone($row[$phoneField] ?? '') === $normalizedPhone) {
+                return [
+                    'lead' => $row,
+                    'reason' => null,
+                ];
+            }
+        }
+
+        return [
+            'lead' => null,
+            'reason' => 'no_existing_lead_match',
+        ];
+    }
+
     private function get_reply_lead_event_map(array $emails, $campaignId = null)
     {
         $db = $this->getDb();
@@ -526,6 +626,35 @@ class Marketing_reply_leads_model extends App_Model
         $email = mb_strtolower(trim((string) $email));
 
         return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+    }
+
+    private function normalize_phone($phone)
+    {
+        $phone = trim((string) $phone);
+        if ($phone === '') {
+            return '';
+        }
+
+        $prefix = strpos($phone, '+') === 0 ? '+' : '';
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+
+        return $digits === '' ? '' : $prefix . $digits;
+    }
+
+    private function resolve_leads_phone_field()
+    {
+        $db = $this->getDb();
+        if ($db === null || !$this->leads_available()) {
+            return null;
+        }
+
+        foreach (['phonenumber', 'phone'] as $candidate) {
+            if ($db->field_exists($candidate, $this->leadsTable)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private function sanitize_model_error($message)

@@ -28,6 +28,7 @@ class Marketing_whatsapp
             'phone_number_id' => trim((string) $this->getOptionValue('marketing_whatsapp_phone_number_id')),
             'business_account_id' => trim((string) $this->getOptionValue('marketing_whatsapp_business_account_id')),
             'access_token' => trim((string) $this->getOptionValue('marketing_whatsapp_access_token')),
+            'app_secret' => trim((string) $this->getOptionValue('marketing_whatsapp_app_secret')),
             'webhook_verify_token' => trim((string) $this->getOptionValue('marketing_whatsapp_webhook_verify_token')),
             'default_template_name' => trim((string) $this->getOptionValue('marketing_whatsapp_default_template_name')),
             'default_template_language' => trim((string) $this->getOptionValue('marketing_whatsapp_default_template_language')),
@@ -64,6 +65,67 @@ class Marketing_whatsapp
             'status_code' => 200,
             'challenge' => (string) $challenge,
             'message' => 'Webhook verified.',
+        ];
+    }
+
+    public function verify_post_signature($rawBody, array $headers = [])
+    {
+        $settings = $this->get_settings();
+        $appSecret = trim((string) ($settings['app_secret'] ?? ''));
+
+        if ($appSecret === '') {
+            return [
+                'accepted' => true,
+                'authenticated' => false,
+                'mode' => 'compatibility',
+                'warning' => 'whatsapp_post_signature_not_configured',
+            ];
+        }
+
+        $signatureHeader = trim((string) ($headers['x-hub-signature-256'] ?? ''));
+        if ($signatureHeader === '' || strpos($signatureHeader, 'sha256=') !== 0) {
+            $this->logSafeError('Marketing WhatsApp POST signature missing or malformed.');
+
+            return [
+                'accepted' => false,
+                'authenticated' => false,
+                'mode' => 'app_secret',
+                'warning' => 'whatsapp_post_signature_invalid',
+                'message' => 'WhatsApp webhook signature verification failed.',
+            ];
+        }
+
+        $presentedSignature = substr($signatureHeader, 7);
+        if ($presentedSignature === '' || preg_match('/^[a-f0-9]{64}$/i', $presentedSignature) !== 1) {
+            $this->logSafeError('Marketing WhatsApp POST signature malformed.');
+
+            return [
+                'accepted' => false,
+                'authenticated' => false,
+                'mode' => 'app_secret',
+                'warning' => 'whatsapp_post_signature_invalid',
+                'message' => 'WhatsApp webhook signature verification failed.',
+            ];
+        }
+
+        $expectedSignature = hash_hmac('sha256', (string) $rawBody, $appSecret);
+        if (!hash_equals($expectedSignature, strtolower($presentedSignature))) {
+            $this->logSafeError('Marketing WhatsApp POST signature verification failed.');
+
+            return [
+                'accepted' => false,
+                'authenticated' => false,
+                'mode' => 'app_secret',
+                'warning' => 'whatsapp_post_signature_invalid',
+                'message' => 'WhatsApp webhook signature verification failed.',
+            ];
+        }
+
+        return [
+            'accepted' => true,
+            'authenticated' => true,
+            'mode' => 'app_secret',
+            'warning' => null,
         ];
     }
 
