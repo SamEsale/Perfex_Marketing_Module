@@ -349,7 +349,10 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <label for="marketing_inbound_email_secret" class="control-label"><?= _l('marketing_inbound_email_secret'); ?></label>
                                             <input type="password" id="marketing_inbound_email_secret" name="<?= html_escape($settingFieldName('marketing_inbound_email_secret')); ?>" class="form-control" value="" autocomplete="new-password">
                                             <p class="text-muted mtop5"><?= _l('marketing_inbound_email_secret_help'); ?></p>
-                                            <p class="text-muted no-margin"><?= $inbound_email_secret_configured ? _l('marketing_inbound_email_secret_status_configured') : _l('marketing_inbound_email_secret_status_missing'); ?></p>
+                                            <p class="text-muted mtop5"><?= _l('marketing_inbound_email_secret_visibility_note'); ?></p>
+                                            <div class="alert <?= $inbound_email_secret_configured ? 'alert-success' : 'alert-warning'; ?> mtop10 mbot0">
+                                                <?= $inbound_email_secret_configured ? _l('marketing_inbound_email_secret_status_configured') : _l('marketing_inbound_email_secret_status_missing'); ?>
+                                            </div>
                                         </div>
 
                                         <div class="marketing-settings-form-actions">
@@ -367,7 +370,9 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <label class="control-label"><?= _l('marketing_inbound_reply_webhook_url'); ?></label>
                                             <input type="text" class="form-control" readonly value="<?= e(site_url('marketing/webhooks/inbound_email')); ?>">
                                             <p class="text-muted mtop5"><?= _l('marketing_webhook_url_runtime_note'); ?></p>
-                                            <p class="text-muted no-margin"><?= $inbound_email_secret_configured ? _l('marketing_inbound_email_secret_runtime_configured') : _l('marketing_inbound_email_secret_runtime_missing'); ?></p>
+                                            <div class="alert <?= $inbound_email_secret_configured ? 'alert-success' : 'alert-warning'; ?> mtop10 mbot0">
+                                                <?= $inbound_email_secret_configured ? _l('marketing_inbound_email_secret_runtime_configured') : _l('marketing_inbound_email_secret_runtime_missing'); ?>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

@@ -249,7 +249,7 @@ class Settings extends AdminController
             'marketing_reply_to_lead_source' => (string) $getValue('marketing_reply_to_lead_source'),
             'marketing_reply_to_lead_assigned_staff' => (string) $getValue('marketing_reply_to_lead_assigned_staff'),
             'marketing_reply_to_lead_name_prefix' => (string) $getValue('marketing_reply_to_lead_name_prefix'),
-            'marketing_inbound_email_secret' => '',
+            'marketing_inbound_email_secret' => (string) $getValue('marketing_inbound_email_secret', false),
             'marketing_smtp_password_raw' => trim((string) $this->input->post('marketing_smtp_password', false)),
         ];
     }
@@ -431,7 +431,7 @@ class Settings extends AdminController
             redirect(admin_url('marketing/settings'));
         }
 
-        $postedSecret = trim((string) $this->input->post('marketing_inbound_email_secret', false));
+        $postedSecret = trim((string) ($posted['marketing_inbound_email_secret'] ?? ''));
         $existingSecret = trim((string) get_option('marketing_inbound_email_secret'));
         $settings = [
             'marketing_reply_to_lead_enabled' => $posted['marketing_reply_to_lead_enabled'],

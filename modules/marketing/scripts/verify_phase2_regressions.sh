@@ -2055,7 +2055,7 @@ check_required_config_and_public_endpoints() {
 }
 
 check_inbound_reply_hardening() {
-  local option_default auth_helper hash_line compat_line header_line normalize_regex unambiguous_helper latest_call dedupe_helper provider_lookup dedupe_lookup duplicate_branch lead_skip event_store settings_field settings_runtime
+  local option_default auth_helper hash_line compat_line header_line normalize_regex unambiguous_helper latest_call dedupe_helper provider_lookup dedupe_lookup duplicate_branch lead_skip event_store settings_field settings_runtime controller_nested preserve_blank update_secret hidden_value visibility_note
   option_default="$(first_fixed_match "'marketing_inbound_email_secret' => ''" "$BOOTSTRAP_FILE")"
   auth_helper="$(first_match 'function[[:space:]]+validateInboundEmailAuthentication' "$WEBHOOKS_FILE")"
   hash_line="$(first_fixed_match "hash_equals(\$configuredSecret, \$presentedSecret)" "$WEBHOOKS_FILE")"
@@ -2072,11 +2072,16 @@ check_inbound_reply_hardening() {
   event_store="$(first_fixed_match "\$this->marketing_events_model->add_event_idempotent([" "$WEBHOOKS_FILE")"
   settings_field="$(first_fixed_match "marketing_inbound_email_secret" "$SETTINGS_VIEW_FILE")"
   settings_runtime="$(first_fixed_match "marketing_inbound_email_secret_runtime_" "$SETTINGS_VIEW_FILE")"
+  controller_nested="$(first_fixed_match "'marketing_inbound_email_secret' => (string) \$getValue('marketing_inbound_email_secret', false)," "$SETTINGS_CONTROLLER_FILE")"
+  preserve_blank="$(first_fixed_match "'marketing_inbound_email_secret' => \$postedSecret !== '' ? \$postedSecret : \$existingSecret," "$SETTINGS_CONTROLLER_FILE")"
+  update_secret="$(first_fixed_match "\$postedSecret = trim((string) (\$posted['marketing_inbound_email_secret'] ?? ''));" "$SETTINGS_CONTROLLER_FILE")"
+  hidden_value="$(first_fixed_match 'id="marketing_inbound_email_secret" name="<?= html_escape($settingFieldName('\''marketing_inbound_email_secret'\'')); ?>" class="form-control" value="" autocomplete="new-password"' "$SETTINGS_VIEW_FILE")"
+  visibility_note="$(first_fixed_match "marketing_inbound_email_secret_visibility_note" "$SETTINGS_VIEW_FILE")"
 
-  if [[ -z "$option_default" || -z "$auth_helper" || -z "$hash_line" || -z "$compat_line" || -z "$header_line" || -z "$normalize_regex" || -z "$unambiguous_helper" || -n "$latest_call" || -z "$dedupe_helper" || -z "$provider_lookup" || -z "$dedupe_lookup" || -z "$duplicate_branch" || -z "$lead_skip" || -z "$event_store" || -z "$settings_field" || -z "$settings_runtime" ]]; then
+  if [[ -z "$option_default" || -z "$auth_helper" || -z "$hash_line" || -z "$compat_line" || -z "$header_line" || -z "$normalize_regex" || -z "$unambiguous_helper" || -n "$latest_call" || -z "$dedupe_helper" || -z "$provider_lookup" || -z "$dedupe_lookup" || -z "$duplicate_branch" || -z "$lead_skip" || -z "$event_store" || -z "$settings_field" || -z "$settings_runtime" || -z "$controller_nested" || -z "$preserve_blank" || -z "$update_secret" || -z "$hidden_value" || -z "$visibility_note" ]]; then
     fail \
       "inbound email reply handling remains authenticated, ambiguity-aware, and idempotent" \
-      "expected inbound secret default and auth guard in $BOOTSTRAP_FILE/$WEBHOOKS_FILE, unambiguous sender fallback without legacy latest-recipient call, idempotent message helpers in $CONVERSATIONS_FILE, duplicate lead-skip branch, idempotent reply events, and settings field/runtime note in $SETTINGS_VIEW_FILE; option=${option_default:-missing}; auth=${auth_helper:-missing}; hash=${hash_line:-missing}; compat=${compat_line:-missing}; header=${header_line:-missing}; normalize=${normalize_regex:-missing}; unambiguous=${unambiguous_helper:-missing}; legacy_latest=${latest_call:-absent}; dedupe=${dedupe_helper:-missing}; provider_lookup=${provider_lookup:-missing}; dedupe_lookup=${dedupe_lookup:-missing}; duplicate=${duplicate_branch:-missing}; lead_skip=${lead_skip:-missing}; event=${event_store:-missing}; settings=${settings_field:-missing}; runtime=${settings_runtime:-missing}"
+      "expected inbound secret default and auth guard in $BOOTSTRAP_FILE/$WEBHOOKS_FILE, unambiguous sender fallback without legacy latest-recipient call, idempotent message helpers in $CONVERSATIONS_FILE, duplicate lead-skip branch, idempotent reply events, and settings field/runtime note in $SETTINGS_VIEW_FILE plus nested settings persistence in $SETTINGS_CONTROLLER_FILE; option=${option_default:-missing}; auth=${auth_helper:-missing}; hash=${hash_line:-missing}; compat=${compat_line:-missing}; header=${header_line:-missing}; normalize=${normalize_regex:-missing}; unambiguous=${unambiguous_helper:-missing}; legacy_latest=${latest_call:-absent}; dedupe=${dedupe_helper:-missing}; provider_lookup=${provider_lookup:-missing}; dedupe_lookup=${dedupe_lookup:-missing}; duplicate=${duplicate_branch:-missing}; lead_skip=${lead_skip:-missing}; event=${event_store:-missing}; settings=${settings_field:-missing}; runtime=${settings_runtime:-missing}; nested=${controller_nested:-missing}; preserve=${preserve_blank:-missing}; update=${update_secret:-missing}; hidden=${hidden_value:-missing}; note=${visibility_note:-missing}"
     return
   fi
 
