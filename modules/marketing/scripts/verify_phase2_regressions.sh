@@ -1961,6 +1961,32 @@ check_whatsapp_lead_conversion_deferred() {
     "route=$route_line | csrf=$csrf_line | readiness=$readiness_helper"
 }
 
+check_whatsapp_dashboard_visibility() {
+  local helper_line summary_line preview_helper controller_load controller_call default_data view_title view_note view_escape view_lead_state destructive_sql
+  helper_line="$(first_match 'function[[:space:]]+get_recent_whatsapp_conversations' "$CONVERSATIONS_FILE")"
+  summary_line="$(first_fixed_match "'unread_message_count' => 0" "$CONVERSATIONS_FILE")"
+  preview_helper="$(first_match 'function[[:space:]]+get_latest_inbound_message_preview' "$CONVERSATIONS_FILE")"
+  controller_load="$(first_fixed_match "Marketing_conversations_model" "$MARKETING_CONTROLLER_FILE")"
+  controller_call="$(first_fixed_match "get_recent_whatsapp_conversations(5)" "$MARKETING_CONTROLLER_FILE")"
+  default_data="$(first_fixed_match "'whatsapp_conversations' => [" "$MARKETING_CONTROLLER_FILE")"
+  view_title="$(first_fixed_match "_l('marketing_dashboard_whatsapp_conversations')" "$DASHBOARD_VIEW_FILE")"
+  view_note="$(first_fixed_match "_l('marketing_dashboard_whatsapp_conversations_note')" "$DASHBOARD_VIEW_FILE")"
+  view_escape="$(first_fixed_match "html_escape(\$preview)" "$DASHBOARD_VIEW_FILE")"
+  view_lead_state="$(first_fixed_match "_l('marketing_dashboard_whatsapp_lead_unlinked')" "$DASHBOARD_VIEW_FILE")"
+  destructive_sql="$(grep -nE -- '\\b(DELETE|TRUNCATE|DROP|ALTER|CREATE)\\b' "$CONVERSATIONS_FILE" "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_VIEW_FILE" || true)"
+
+  if [[ -z "$helper_line" || -z "$summary_line" || -z "$preview_helper" || -z "$controller_load" || -z "$controller_call" || -z "$default_data" || -z "$view_title" || -z "$view_note" || -z "$view_escape" || -z "$view_lead_state" || -n "$destructive_sql" ]]; then
+    fail \
+      "WhatsApp dashboard visibility remains bounded, read-only, and escaped" \
+      "expected recent WhatsApp helper/preview lookup in $CONVERSATIONS_FILE, dashboard wiring in $MARKETING_CONTROLLER_FILE, escaped WhatsApp panel output in $DASHBOARD_VIEW_FILE, and no destructive SQL; helper=${helper_line:-missing}; summary=${summary_line:-missing}; preview=${preview_helper:-missing}; load=${controller_load:-missing}; call=${controller_call:-missing}; default=${default_data:-missing}; title=${view_title:-missing}; note=${view_note:-missing}; escape=${view_escape:-missing}; lead=${view_lead_state:-missing}; destructive=${destructive_sql:-none}"
+    return
+  fi
+
+  pass \
+    "WhatsApp dashboard visibility remains bounded, read-only, and escaped" \
+    "helper=$helper_line | controller=$controller_call | title=$view_title"
+}
+
 check_no_facebook_linkedin_active_ui_or_release_docs() {
   local settings_fb settings_li dashboard_fb dashboard_li readme_fb readme_li install_fb install_li ops_fb ops_li
   settings_fb="$(first_match 'Facebook|facebook' "$SETTINGS_VIEW_FILE")"
@@ -2444,6 +2470,7 @@ check_whatsapp_conversation_schema_readiness
 check_conversation_model_optional_column_guards
 check_whatsapp_inbound_conversation_metadata
 check_whatsapp_lead_conversion_deferred
+check_whatsapp_dashboard_visibility
 check_no_facebook_linkedin_active_ui_or_release_docs
 check_release_validator_exists
 check_module_metadata_header

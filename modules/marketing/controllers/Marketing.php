@@ -14,6 +14,7 @@ class Marketing extends AdminController
 
         $this->load->model('marketing/Marketing_dashboard_model', 'marketing_dashboard_model');
         $this->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
+        $this->load->model('marketing/Marketing_conversations_model', 'marketing_conversations_model');
         $this->load->model('marketing/Marketing_integrity_model', 'marketing_integrity_model');
     }
 
@@ -36,6 +37,15 @@ class Marketing extends AdminController
             }
         } catch (Throwable $exception) {
             log_message('error', 'Marketing integrity diagnostics unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        try {
+            $whatsappConversations = $this->marketing_conversations_model->get_recent_whatsapp_conversations(5);
+            if (is_array($whatsappConversations)) {
+                $data['whatsapp_conversations'] = array_replace_recursive($data['whatsapp_conversations'] ?? [], $whatsappConversations);
+            }
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing WhatsApp dashboard conversations unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
         }
 
         $data['title'] = _l('marketing_dashboard');
@@ -146,6 +156,13 @@ class Marketing extends AdminController
                 'warning_count' => 0,
                 'categories' => [],
                 'top_categories' => [],
+            ],
+            'whatsapp_conversations' => [
+                'available' => false,
+                'shown_count' => 0,
+                'unread_conversation_count' => 0,
+                'unread_message_count' => 0,
+                'items' => [],
             ],
             'recent_campaigns' => [],
             'recent_activity' => [],

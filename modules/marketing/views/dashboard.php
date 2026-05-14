@@ -467,6 +467,24 @@
                         $integrityTopCategories = isset($integrityDiagnostics['top_categories']) && is_array($integrityDiagnostics['top_categories'])
                             ? $integrityDiagnostics['top_categories']
                             : [];
+                        $whatsappConversations = isset($whatsapp_conversations) && is_array($whatsapp_conversations)
+                            ? array_merge([
+                                'available' => false,
+                                'shown_count' => 0,
+                                'unread_conversation_count' => 0,
+                                'unread_message_count' => 0,
+                                'items' => [],
+                            ], $whatsapp_conversations)
+                            : [
+                                'available' => false,
+                                'shown_count' => 0,
+                                'unread_conversation_count' => 0,
+                                'unread_message_count' => 0,
+                                'items' => [],
+                            ];
+                        $whatsappConversationItems = isset($whatsappConversations['items']) && is_array($whatsappConversations['items'])
+                            ? $whatsappConversations['items']
+                            : [];
                         $canManageQueue = !empty($can_manage_queue);
                         ?>
                         <div class="row tw-mt-15">
@@ -516,6 +534,75 @@
                                                                 <?= html_escape((string) ($integrityCategory['title'] ?? 'Integrity')); ?>: <?= (int) ($integrityCategory['count'] ?? 0); ?>
                                                             </span>
                                                         <?php } ?>
+                                                    </div>
+                                                <?php } ?>
+                                            <?php } ?>
+                                        </div>
+                                        <div class="marketing-ops-section">
+                                            <h5 class="marketing-ops-section-title"><?= _l('marketing_dashboard_whatsapp_conversations'); ?></h5>
+                                            <p class="marketing-ops-section-copy"><?= _l('marketing_dashboard_whatsapp_conversations_note'); ?></p>
+                                            <?php if (empty($whatsappConversations['available'])) { ?>
+                                                <div class="marketing-ops-empty"><?= _l('marketing_dashboard_whatsapp_conversations_unavailable'); ?></div>
+                                            <?php } else { ?>
+                                                <div class="marketing-ops-badge-grid">
+                                                    <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_conversations_shown'); ?>: <?= (int) ($whatsappConversations['shown_count'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_conversations_unread'); ?>: <?= (int) ($whatsappConversations['unread_conversation_count'] ?? 0); ?></span>
+                                                    <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_messages_unread'); ?>: <?= (int) ($whatsappConversations['unread_message_count'] ?? 0); ?></span>
+                                                </div>
+                                                <?php if (empty($whatsappConversationItems)) { ?>
+                                                    <div class="marketing-ops-empty"><?= _l('marketing_dashboard_whatsapp_conversations_empty'); ?></div>
+                                                <?php } else { ?>
+                                                    <div class="marketing-ops-table-shell mtop15">
+                                                        <div class="table-responsive">
+                                                            <table class="table table-striped">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th><?= _l('marketing_dashboard_whatsapp_conversation_id'); ?></th>
+                                                                        <th><?= _l('marketing_dashboard_whatsapp_contact'); ?></th>
+                                                                        <th><?= _l('marketing_dashboard_whatsapp_unread'); ?></th>
+                                                                        <th><?= _l('marketing_dashboard_whatsapp_lead'); ?></th>
+                                                                        <th><?= _l('marketing_dashboard_whatsapp_preview'); ?></th>
+                                                                        <th><?= _l('marketing_dashboard_whatsapp_last_activity'); ?></th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <?php foreach (array_slice($whatsappConversationItems, 0, 5) as $conversation) { ?>
+                                                                        <?php
+                                                                        $contactName = trim((string) ($conversation['contact_name'] ?? ''));
+                                                                        $contactPhone = trim((string) ($conversation['contact_phone'] ?? ($conversation['normalized_phone'] ?? '')));
+                                                                        $contactLabel = $contactName !== '' ? $contactName : ($contactPhone !== '' ? $contactPhone : _l('marketing_dashboard_whatsapp_contact_unknown'));
+                                                                        $preview = trim((string) ($conversation['preview'] ?? ''));
+                                                                        $preview = $preview !== '' ? mb_substr($preview, 0, 120) : _l('marketing_dashboard_whatsapp_preview_empty');
+                                                                        ?>
+                                                                        <tr>
+                                                                            <td>#<?= (int) ($conversation['id'] ?? 0); ?></td>
+                                                                            <td>
+                                                                                <strong><?= html_escape($contactLabel); ?></strong>
+                                                                                <?php if ($contactName !== '' && $contactPhone !== '') { ?>
+                                                                                    <br><small><?= html_escape($contactPhone); ?></small>
+                                                                                <?php } ?>
+                                                                            </td>
+                                                                            <td>
+                                                                                <?php if ((int) ($conversation['unread_count'] ?? 0) > 0) { ?>
+                                                                                    <span class="marketing-ops-badge"><?= (int) ($conversation['unread_count'] ?? 0); ?></span>
+                                                                                <?php } else { ?>
+                                                                                    <span class="text-muted">0</span>
+                                                                                <?php } ?>
+                                                                            </td>
+                                                                            <td>
+                                                                                <?php if (!empty($conversation['lead_id'])) { ?>
+                                                                                    <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_lead_linked'); ?> #<?= (int) $conversation['lead_id']; ?></span>
+                                                                                <?php } else { ?>
+                                                                                    <span class="text-muted"><?= _l('marketing_dashboard_whatsapp_lead_unlinked'); ?></span>
+                                                                                <?php } ?>
+                                                                            </td>
+                                                                            <td><?= html_escape($preview); ?></td>
+                                                                            <td><?= !empty($conversation['last_activity_at']) ? html_escape((string) $conversation['last_activity_at']) : '-'; ?></td>
+                                                                        </tr>
+                                                                    <?php } ?>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
                                                     </div>
                                                 <?php } ?>
                                             <?php } ?>
