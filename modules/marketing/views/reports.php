@@ -91,7 +91,7 @@
                                         <p class="text-muted"><?= _l('marketing_no_campaigns_yet'); ?></p>
                                     <?php } else { ?>
                                         <div class="table-responsive">
-                                            <table class="table dt-table" id="marketing-reports-recent-campaigns-table" data-marketing-reports-table="campaigns">
+                                            <table class="table dt-table" id="marketing-reports-recent-campaigns-table" data-marketing-reports-table="campaigns" data-marketing-default-length="25" data-marketing-default-order="[[0,&quot;asc&quot;]]">
                                                 <thead>
                                                     <tr>
                                                         <th><?= _l('id'); ?></th>
@@ -137,7 +137,7 @@
                                         <p class="text-muted"><?= _l('marketing_no_activity_yet'); ?></p>
                                     <?php } else { ?>
                                         <div class="table-responsive">
-                                            <table class="table dt-table" id="marketing-reports-recent-activity-table" data-marketing-reports-table="activity">
+                                            <table class="table dt-table" id="marketing-reports-recent-activity-table" data-marketing-reports-table="activity" data-marketing-default-length="25" data-marketing-default-order="[[3,&quot;desc&quot;]]">
                                                 <thead>
                                                     <tr>
                                                         <th><?= _l('marketing_event_type'); ?></th>
@@ -171,28 +171,103 @@
 <?php init_tail(); ?>
 <script>
     (function (window, document) {
+        var tableDefaults = {};
+
         function getDataTableInstance(tableElement) {
             if (!tableElement || typeof window.jQuery === 'undefined') {
                 return null;
             }
 
             var $ = window.jQuery;
-            if (!$.fn || !$.fn.DataTable || !$.fn.dataTable || !$.fn.dataTable.isDataTable) {
+            if (!$.fn || !$.fn.DataTable || typeof $.fn.DataTable.isDataTable !== 'function') {
                 return null;
             }
 
-            if (!$.fn.dataTable.isDataTable(tableElement)) {
+            if (!$.fn.DataTable.isDataTable(tableElement)) {
                 return null;
             }
 
             return $(tableElement).DataTable();
         }
 
+        function parseDefaultOrder(tableElement) {
+            var rawOrder = tableElement.getAttribute('data-marketing-default-order') || '';
+            if (rawOrder === '') {
+                return [];
+            }
+
+            try {
+                var parsed = JSON.parse(rawOrder);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function getDefaultLength(tableElement) {
+            var parsed = parseInt(tableElement.getAttribute('data-marketing-default-length') || '25', 10);
+            return parsed > 0 ? parsed : 25;
+        }
+
+        function ensureReportsTableDefaults(tableKey, attempt) {
+            var table = document.querySelector('[data-marketing-reports-table="' + tableKey + '"]');
+            var dataTable = getDataTableInstance(table);
+            var defaultOrder;
+            var defaultLength;
+
+            if (!table) {
+                return;
+            }
+
+            if (!dataTable) {
+                if ((attempt || 0) >= 20) {
+                    return;
+                }
+
+                window.setTimeout(function () {
+                    ensureReportsTableDefaults(tableKey, (attempt || 0) + 1);
+                }, 250);
+                return;
+            }
+
+            if (!tableDefaults[tableKey]) {
+                defaultOrder = parseDefaultOrder(table);
+                defaultLength = getDefaultLength(table);
+                tableDefaults[tableKey] = {
+                    order: defaultOrder,
+                    length: defaultLength
+                };
+            }
+
+            defaultOrder = tableDefaults[tableKey].order;
+            defaultLength = tableDefaults[tableKey].length;
+
+            if (typeof dataTable.page.len === 'function' && dataTable.page.len() !== defaultLength) {
+                dataTable.page.len(defaultLength);
+            }
+
+            if (Array.isArray(defaultOrder) && defaultOrder.length > 0 && typeof dataTable.order === 'function') {
+                dataTable.order(defaultOrder);
+            } else if (typeof dataTable.order === 'function') {
+                dataTable.order([]);
+            }
+
+            if (typeof dataTable.page === 'function') {
+                dataTable.page('first');
+            }
+
+            if (typeof dataTable.draw === 'function') {
+                dataTable.draw(false);
+            }
+        }
+
         function resetReportsTable(tableKey) {
             var table = document.querySelector('[data-marketing-reports-table="' + tableKey + '"]');
             var dataTable = getDataTableInstance(table);
+            var defaults = tableDefaults[tableKey] || null;
 
             if (!dataTable) {
+                ensureReportsTableDefaults(tableKey, 0);
                 return;
             }
 
@@ -205,7 +280,15 @@
             }
 
             if (typeof dataTable.order === 'function') {
-                dataTable.order([]);
+                if (defaults && Array.isArray(defaults.order) && defaults.order.length > 0) {
+                    dataTable.order(defaults.order);
+                } else {
+                    dataTable.order([]);
+                }
+            }
+
+            if (defaults && typeof dataTable.page.len === 'function') {
+                dataTable.page.len(defaults.length);
             }
 
             if (typeof dataTable.page === 'function') {
@@ -222,6 +305,9 @@
         }
 
         window.jQuery(function () {
+            ensureReportsTableDefaults('campaigns', 0);
+            ensureReportsTableDefaults('activity', 0);
+
             document.addEventListener('click', function (event) {
                 var trigger = event.target.closest('[data-marketing-reset-table]');
                 if (!trigger) {

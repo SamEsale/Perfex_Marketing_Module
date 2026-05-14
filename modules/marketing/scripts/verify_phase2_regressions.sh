@@ -1767,7 +1767,7 @@ check_dashboard_operator_ui_structure() {
 }
 
 check_marketing_reports_surface() {
-  local controller_method controller_recent_campaigns controller_recent_activity controller_view menu_item dashboard_campaigns dashboard_activity dashboard_reset reports_title reports_note reports_campaigns reports_activity reports_campaigns_table reports_activity_table reset_campaigns reset_activity reset_handler reset_search reset_order reset_page reset_draw reset_label reset_note reset_form destructive_logic
+  local controller_method controller_recent_campaigns controller_recent_activity controller_view menu_item dashboard_campaigns dashboard_activity dashboard_reset reports_title reports_note reports_campaigns reports_activity reports_campaigns_table reports_activity_table campaigns_length activity_length reset_campaigns reset_activity reset_button_type reset_handler reset_guard reset_search reset_column_search reset_order reset_length reset_page reset_draw reset_label reset_note reset_form destructive_logic
   controller_method="$(first_match 'function[[:space:]]+reports' "$MARKETING_CONTROLLER_FILE")"
   controller_recent_campaigns="$(first_fixed_match "get_recent_campaigns(5)" "$MARKETING_CONTROLLER_FILE")"
   controller_recent_activity="$(first_fixed_match "get_recent_activity(10)" "$MARKETING_CONTROLLER_FILE")"
@@ -1782,11 +1782,17 @@ check_marketing_reports_surface() {
   reports_activity="$(first_fixed_match "_l('marketing_reports_recent_activity')" "$REPORTS_VIEW_FILE")"
   reports_campaigns_table="$(first_fixed_match 'marketing-reports-recent-campaigns-table' "$REPORTS_VIEW_FILE")"
   reports_activity_table="$(first_fixed_match 'marketing-reports-recent-activity-table' "$REPORTS_VIEW_FILE")"
+  campaigns_length="$(first_fixed_match 'data-marketing-default-length="25"' "$REPORTS_VIEW_FILE")"
+  activity_length="$(printf '%s\n' "$campaigns_length" | tail -n 1)"
   reset_campaigns="$(first_fixed_match 'data-marketing-reset-table="campaigns"' "$REPORTS_VIEW_FILE")"
   reset_activity="$(first_fixed_match 'data-marketing-reset-table="activity"' "$REPORTS_VIEW_FILE")"
+  reset_button_type="$(first_fixed_match 'type="button"' "$REPORTS_VIEW_FILE")"
   reset_handler="$(first_fixed_match "trigger.getAttribute('data-marketing-reset-table')" "$REPORTS_VIEW_FILE")"
+  reset_guard="$(first_fixed_match "$.fn.DataTable.isDataTable" "$REPORTS_VIEW_FILE")"
   reset_search="$(first_fixed_match "dataTable.search('');" "$REPORTS_VIEW_FILE")"
-  reset_order="$(first_fixed_match "dataTable.order([]);" "$REPORTS_VIEW_FILE")"
+  reset_column_search="$(first_fixed_match "dataTable.columns().search('');" "$REPORTS_VIEW_FILE")"
+  reset_order="$(first_fixed_match "dataTable.order(defaults.order);" "$REPORTS_VIEW_FILE")"
+  reset_length="$(first_fixed_match "dataTable.page.len(defaults.length);" "$REPORTS_VIEW_FILE")"
   reset_page="$(first_fixed_match "dataTable.page('first');" "$REPORTS_VIEW_FILE")"
   reset_draw="$(first_fixed_match "dataTable.draw(false);" "$REPORTS_VIEW_FILE")"
   reset_label="$(first_fixed_match "marketing_table_reset_view" "modules/marketing/language/english/marketing_lang.php")"
@@ -1794,16 +1800,16 @@ check_marketing_reports_surface() {
   reset_form="$(grep -nF "form_open(admin_url('marketing/reset" "$REPORTS_VIEW_FILE" || true)"
   destructive_logic="$(grep -nE 'delete\(|truncate\(|empty_table\(|->delete\(|\b(DELETE|TRUNCATE)\b' "$REPORTS_VIEW_FILE" "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_FILE" || true)"
 
-  if [[ -z "$controller_method" || -z "$controller_recent_campaigns" || -z "$controller_recent_activity" || -z "$controller_view" || -z "$menu_item" || -n "$dashboard_campaigns" || -n "$dashboard_activity" || -n "$dashboard_reset" || -z "$reports_title" || -z "$reports_note" || -z "$reports_campaigns" || -z "$reports_activity" || -z "$reports_campaigns_table" || -z "$reports_activity_table" || -z "$reset_campaigns" || -z "$reset_activity" || -z "$reset_handler" || -z "$reset_search" || -z "$reset_order" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -z "$reset_note" || -n "$reset_form" || -n "$destructive_logic" ]]; then
+  if [[ -z "$controller_method" || -z "$controller_recent_campaigns" || -z "$controller_recent_activity" || -z "$controller_view" || -z "$menu_item" || -n "$dashboard_campaigns" || -n "$dashboard_activity" || -n "$dashboard_reset" || -z "$reports_title" || -z "$reports_note" || -z "$reports_campaigns" || -z "$reports_activity" || -z "$reports_campaigns_table" || -z "$reports_activity_table" || -z "$campaigns_length" || -z "$activity_length" || -z "$reset_campaigns" || -z "$reset_activity" || -z "$reset_button_type" || -z "$reset_handler" || -z "$reset_guard" || -z "$reset_search" || -z "$reset_column_search" || -z "$reset_order" || -z "$reset_length" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -z "$reset_note" || -n "$reset_form" || -n "$destructive_logic" ]]; then
     fail \
       "marketing reports page contains recent tables and client-side reset controls while dashboard stays operational" \
-      "expected reports controller/view/menu wiring, dashboard removal of recent campaign/activity tables, reports-only DataTables reset controls, and no destructive reset endpoint; method=${controller_method:-missing}; campaigns=${controller_recent_campaigns:-missing}; activity=${controller_recent_activity:-missing}; view=${controller_view:-missing}; menu=${menu_item:-missing}; dashboard_campaigns=${dashboard_campaigns:-unexpected}; dashboard_activity=${dashboard_activity:-unexpected}; dashboard_reset=${dashboard_reset:-unexpected}; reports_title=${reports_title:-missing}; reports_note=${reports_note:-missing}; reports_campaigns=${reports_campaigns:-missing}; reports_activity=${reports_activity:-missing}; campaigns_table=${reports_campaigns_table:-missing}; activity_table=${reports_activity_table:-missing}; reset_campaigns=${reset_campaigns:-missing}; reset_activity=${reset_activity:-missing}; handler=${reset_handler:-missing}; search=${reset_search:-missing}; order=${reset_order:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; note=${reset_note:-missing}; reset_form=${reset_form:-none}; destructive=${destructive_logic:-none}"
+      "expected reports controller/view/menu wiring, dashboard removal of recent campaign/activity tables, report-page-only DataTables reset controls, 25-row defaults, and no destructive reset endpoint; method=${controller_method:-missing}; campaigns=${controller_recent_campaigns:-missing}; activity=${controller_recent_activity:-missing}; view=${controller_view:-missing}; menu=${menu_item:-missing}; dashboard_campaigns=${dashboard_campaigns:-unexpected}; dashboard_activity=${dashboard_activity:-unexpected}; dashboard_reset=${dashboard_reset:-unexpected}; reports_title=${reports_title:-missing}; reports_note=${reports_note:-missing}; reports_campaigns=${reports_campaigns:-missing}; reports_activity=${reports_activity:-missing}; campaigns_table=${reports_campaigns_table:-missing}; activity_table=${reports_activity_table:-missing}; campaigns_length=${campaigns_length:-missing}; activity_length=${activity_length:-missing}; reset_campaigns=${reset_campaigns:-missing}; reset_activity=${reset_activity:-missing}; button=${reset_button_type:-missing}; handler=${reset_handler:-missing}; guard=${reset_guard:-missing}; search=${reset_search:-missing}; column_search=${reset_column_search:-missing}; order=${reset_order:-missing}; length=${reset_length:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; note=${reset_note:-missing}; reset_form=${reset_form:-none}; destructive=${destructive_logic:-none}"
     return
   fi
 
   pass \
     "marketing reports page contains recent tables and client-side reset controls while dashboard stays operational" \
-    "method=$controller_method | menu=$menu_item | campaigns=$reports_campaigns_table | activity=$reports_activity_table"
+    "method=$controller_method | menu=$menu_item | campaigns=$reports_campaigns_table | activity=$reports_activity_table | length=$campaigns_length"
 }
 
 check_whatsapp_send_auth_diagnostics() {
