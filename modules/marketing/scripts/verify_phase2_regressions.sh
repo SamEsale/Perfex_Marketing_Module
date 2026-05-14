@@ -1767,7 +1767,7 @@ check_dashboard_operator_ui_structure() {
 }
 
 check_marketing_reports_surface() {
-  local controller_method controller_recent_campaigns controller_recent_activity controller_view menu_item dashboard_campaigns dashboard_activity dashboard_reset reports_title reports_note reports_campaigns reports_activity reports_campaigns_table reports_activity_table campaigns_length activity_length reset_campaigns reset_activity reset_button_type reset_handler reset_guard reset_search reset_column_search reset_order reset_length reset_page reset_draw reset_label reset_note reset_form destructive_logic
+  local controller_method controller_recent_campaigns controller_recent_activity controller_view menu_item dashboard_campaigns dashboard_activity dashboard_reset reports_title reports_note reports_campaigns reports_activity reports_campaigns_table reports_activity_table campaigns_length activity_length reset_campaigns reset_activity reset_button_type reset_handler reset_guard reset_search reset_column_search reset_order reset_length reset_page reset_draw reset_label reset_note reset_form
   controller_method="$(first_match 'function[[:space:]]+reports' "$MARKETING_CONTROLLER_FILE")"
   controller_recent_campaigns="$(first_fixed_match "get_recent_campaigns(5)" "$MARKETING_CONTROLLER_FILE")"
   controller_recent_activity="$(first_fixed_match "get_recent_activity(10)" "$MARKETING_CONTROLLER_FILE")"
@@ -1798,18 +1798,64 @@ check_marketing_reports_surface() {
   reset_label="$(first_fixed_match "marketing_table_reset_view" "modules/marketing/language/english/marketing_lang.php")"
   reset_note="$(first_fixed_match "marketing_table_reset_view_note" "$REPORTS_VIEW_FILE")"
   reset_form="$(grep -nF "form_open(admin_url('marketing/reset" "$REPORTS_VIEW_FILE" || true)"
-  destructive_logic="$(grep -nE 'delete\(|truncate\(|empty_table\(|->delete\(|\b(DELETE|TRUNCATE)\b' "$REPORTS_VIEW_FILE" "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_FILE" || true)"
 
-  if [[ -z "$controller_method" || -z "$controller_recent_campaigns" || -z "$controller_recent_activity" || -z "$controller_view" || -z "$menu_item" || -n "$dashboard_campaigns" || -n "$dashboard_activity" || -n "$dashboard_reset" || -z "$reports_title" || -z "$reports_note" || -z "$reports_campaigns" || -z "$reports_activity" || -z "$reports_campaigns_table" || -z "$reports_activity_table" || -z "$campaigns_length" || -z "$activity_length" || -z "$reset_campaigns" || -z "$reset_activity" || -z "$reset_button_type" || -z "$reset_handler" || -z "$reset_guard" || -z "$reset_search" || -z "$reset_column_search" || -z "$reset_order" || -z "$reset_length" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -z "$reset_note" || -n "$reset_form" || -n "$destructive_logic" ]]; then
+  if [[ -z "$controller_method" || -z "$controller_recent_campaigns" || -z "$controller_recent_activity" || -z "$controller_view" || -z "$menu_item" || -n "$dashboard_campaigns" || -n "$dashboard_activity" || -n "$dashboard_reset" || -z "$reports_title" || -z "$reports_note" || -z "$reports_campaigns" || -z "$reports_activity" || -z "$reports_campaigns_table" || -z "$reports_activity_table" || -z "$campaigns_length" || -z "$activity_length" || -z "$reset_campaigns" || -z "$reset_activity" || -z "$reset_button_type" || -z "$reset_handler" || -z "$reset_guard" || -z "$reset_search" || -z "$reset_column_search" || -z "$reset_order" || -z "$reset_length" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -z "$reset_note" || -n "$reset_form" ]]; then
     fail \
       "marketing reports page contains recent tables and client-side reset controls while dashboard stays operational" \
-      "expected reports controller/view/menu wiring, dashboard removal of recent campaign/activity tables, report-page-only DataTables reset controls, 25-row defaults, and no destructive reset endpoint; method=${controller_method:-missing}; campaigns=${controller_recent_campaigns:-missing}; activity=${controller_recent_activity:-missing}; view=${controller_view:-missing}; menu=${menu_item:-missing}; dashboard_campaigns=${dashboard_campaigns:-unexpected}; dashboard_activity=${dashboard_activity:-unexpected}; dashboard_reset=${dashboard_reset:-unexpected}; reports_title=${reports_title:-missing}; reports_note=${reports_note:-missing}; reports_campaigns=${reports_campaigns:-missing}; reports_activity=${reports_activity:-missing}; campaigns_table=${reports_campaigns_table:-missing}; activity_table=${reports_activity_table:-missing}; campaigns_length=${campaigns_length:-missing}; activity_length=${activity_length:-missing}; reset_campaigns=${reset_campaigns:-missing}; reset_activity=${reset_activity:-missing}; button=${reset_button_type:-missing}; handler=${reset_handler:-missing}; guard=${reset_guard:-missing}; search=${reset_search:-missing}; column_search=${reset_column_search:-missing}; order=${reset_order:-missing}; length=${reset_length:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; note=${reset_note:-missing}; reset_form=${reset_form:-none}; destructive=${destructive_logic:-none}"
+      "expected reports controller/view/menu wiring, dashboard removal of recent campaign/activity tables, and report-page-only DataTables reset controls with 25-row defaults; method=${controller_method:-missing}; campaigns=${controller_recent_campaigns:-missing}; activity=${controller_recent_activity:-missing}; view=${controller_view:-missing}; menu=${menu_item:-missing}; dashboard_campaigns=${dashboard_campaigns:-unexpected}; dashboard_activity=${dashboard_activity:-unexpected}; dashboard_reset=${dashboard_reset:-unexpected}; reports_title=${reports_title:-missing}; reports_note=${reports_note:-missing}; reports_campaigns=${reports_campaigns:-missing}; reports_activity=${reports_activity:-missing}; campaigns_table=${reports_campaigns_table:-missing}; activity_table=${reports_activity_table:-missing}; campaigns_length=${campaigns_length:-missing}; activity_length=${activity_length:-missing}; reset_campaigns=${reset_campaigns:-missing}; reset_activity=${reset_activity:-missing}; button=${reset_button_type:-missing}; handler=${reset_handler:-missing}; guard=${reset_guard:-missing}; search=${reset_search:-missing}; column_search=${reset_column_search:-missing}; order=${reset_order:-missing}; length=${reset_length:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; note=${reset_note:-missing}; reset_form=${reset_form:-none}"
     return
   fi
 
   pass \
     "marketing reports page contains recent tables and client-side reset controls while dashboard stays operational" \
     "method=$controller_method | menu=$menu_item | campaigns=$reports_campaigns_table | activity=$reports_activity_table | length=$campaigns_length"
+}
+
+check_marketing_reports_cleanup_controls() {
+  local controller_method controller_permission controller_post_guard controller_target controller_confirmation controller_redirect activity_helper campaigns_helper activity_delete activity_trans campaign_blocked reports_form reports_target_activity reports_target_campaigns reports_warning reports_export reports_typed reports_phrase_activity reports_phrase_campaigns reports_danger_zone reports_activity_card reports_campaign_card forbidden_truncate protected_contacts protected_lists protected_suppressions protected_conversations protected_messages protected_leads protected_integrations protected_options protected_perfex
+  controller_method="$(first_match 'function[[:space:]]+reports_cleanup' "$MARKETING_CONTROLLER_FILE")"
+  controller_permission="$(first_fixed_match "staff_cant('settings', 'marketing')" "$MARKETING_CONTROLLER_FILE")"
+  controller_post_guard="$(first_fixed_match "if (!\$this->input->post()) {" "$MARKETING_CONTROLLER_FILE")"
+  controller_target="$(first_fixed_match "\$target = trim((string) \$this->input->post('cleanup_target', true));" "$MARKETING_CONTROLLER_FILE")"
+  controller_confirmation="$(first_fixed_match "\$confirmation = trim((string) \$this->input->post('cleanup_confirmation', false));" "$MARKETING_CONTROLLER_FILE")"
+  controller_redirect="$(first_fixed_match "redirect(admin_url('marketing/reports'));" "$MARKETING_CONTROLLER_FILE")"
+  activity_helper="$(first_match 'function[[:space:]]+purge_report_activity' "$DASHBOARD_FILE")"
+  campaigns_helper="$(first_match 'function[[:space:]]+purge_report_campaigns' "$DASHBOARD_FILE")"
+  activity_delete="$(first_fixed_match "\$deleted = \$this->db->delete(\$this->eventsTable);" "$DASHBOARD_FILE")"
+  activity_trans="$(first_fixed_match "\$this->db->trans_begin();" "$DASHBOARD_FILE")"
+  campaign_blocked="$(first_fixed_match "marketing_reports_cleanup_campaigns_blocked" "$DASHBOARD_FILE")"
+  reports_form="$(first_fixed_match "form_open(admin_url('marketing/reports_cleanup'))" "$REPORTS_VIEW_FILE")"
+  reports_target_activity="$(first_fixed_match 'name="cleanup_target" value="activity"' "$REPORTS_VIEW_FILE")"
+  reports_target_campaigns="$(first_fixed_match 'name="cleanup_target" value="campaigns"' "$REPORTS_VIEW_FILE")"
+  reports_warning="$(first_fixed_match "_l('marketing_reports_cleanup_warning')" "$REPORTS_VIEW_FILE")"
+  reports_export="$(first_fixed_match "_l('marketing_reports_cleanup_export_warning')" "$REPORTS_VIEW_FILE")"
+  reports_typed="$(first_fixed_match 'name="cleanup_confirmation"' "$REPORTS_VIEW_FILE")"
+  reports_phrase_activity="$(first_fixed_match "DELETE ACTIVITY REPORTS" "$REPORTS_VIEW_FILE")"
+  reports_phrase_campaigns="$(first_fixed_match "DELETE CAMPAIGN REPORTS" "$REPORTS_VIEW_FILE")"
+  reports_danger_zone="$(first_fixed_match 'data-marketing-reports-danger-zone="1"' "$REPORTS_VIEW_FILE")"
+  reports_activity_card="$(first_fixed_match 'data-marketing-reports-cleanup-card="activity"' "$REPORTS_VIEW_FILE")"
+  reports_campaign_card="$(first_fixed_match 'data-marketing-reports-cleanup-card="campaigns"' "$REPORTS_VIEW_FILE")"
+  forbidden_truncate="$(grep -nE -- 'truncate\(|empty_table\(|TRUNCATE|EMPTY_TABLE' "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_FILE" "$REPORTS_VIEW_FILE" || true)"
+  protected_contacts="$(grep -nF -- 'delete($this->contactsTable' "$DASHBOARD_FILE" || true)"
+  protected_lists="$(grep -nF -- 'delete($this->listsTable' "$DASHBOARD_FILE" || true)"
+  protected_suppressions="$(grep -nF -- 'delete($this->suppressionsTable' "$DASHBOARD_FILE" || true)"
+  protected_conversations="$(grep -nF -- 'delete($this->conversationsTable' "$DASHBOARD_FILE" || true)"
+  protected_messages="$(grep -nF -- 'delete($this->messagesTable' "$DASHBOARD_FILE" || true)"
+  protected_leads="$(grep -nF -- 'tblleads' "$DASHBOARD_FILE" "$MARKETING_CONTROLLER_FILE" || true)"
+  protected_integrations="$(grep -nF -- 'delete($this->integrationsTable' "$DASHBOARD_FILE" || true)"
+  protected_options="$(grep -nE -- 'delete_option|update_option|add_option' "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_FILE" || true)"
+  protected_perfex="$(grep -nE -- 'tblclients|tblcontacts|tblstaff|tblleads' "$DASHBOARD_FILE" "$MARKETING_CONTROLLER_FILE" || true)"
+
+  if [[ -z "$controller_method" || -z "$controller_permission" || -z "$controller_post_guard" || -z "$controller_target" || -z "$controller_confirmation" || -z "$controller_redirect" || -z "$activity_helper" || -z "$campaigns_helper" || -z "$activity_delete" || -z "$activity_trans" || -z "$campaign_blocked" || -z "$reports_form" || -z "$reports_target_activity" || -z "$reports_target_campaigns" || -z "$reports_warning" || -z "$reports_export" || -z "$reports_typed" || -z "$reports_phrase_activity" || -z "$reports_phrase_campaigns" || -z "$reports_danger_zone" || -z "$reports_activity_card" || -z "$reports_campaign_card" || -n "$forbidden_truncate" || -n "$protected_contacts" || -n "$protected_lists" || -n "$protected_suppressions" || -n "$protected_conversations" || -n "$protected_messages" || -n "$protected_leads" || -n "$protected_integrations" || -n "$protected_options" || -n "$protected_perfex" ]]; then
+    fail \
+      "marketing reports cleanup remains explicit, POST-only, permission-guarded, and narrowly scoped" \
+      "expected reports_cleanup() guardrails, activity-only event deletion with transaction, blocked campaign purge helper, danger-zone copy with export warning and typed confirmations, and no truncate/protected-table cleanup; method=${controller_method:-missing}; permission=${controller_permission:-missing}; post=${controller_post_guard:-missing}; target=${controller_target:-missing}; confirmation=${controller_confirmation:-missing}; redirect=${controller_redirect:-missing}; activity_helper=${activity_helper:-missing}; campaigns_helper=${campaigns_helper:-missing}; activity_delete=${activity_delete:-missing}; activity_trans=${activity_trans:-missing}; campaign_blocked=${campaign_blocked:-missing}; form=${reports_form:-missing}; target_activity=${reports_target_activity:-missing}; target_campaigns=${reports_target_campaigns:-missing}; warning=${reports_warning:-missing}; export=${reports_export:-missing}; typed=${reports_typed:-missing}; phrase_activity=${reports_phrase_activity:-missing}; phrase_campaigns=${reports_phrase_campaigns:-missing}; zone=${reports_danger_zone:-missing}; activity_card=${reports_activity_card:-missing}; campaign_card=${reports_campaign_card:-missing}; forbidden_truncate=${forbidden_truncate:-none}; protected_contacts=${protected_contacts:-none}; protected_lists=${protected_lists:-none}; protected_suppressions=${protected_suppressions:-none}; protected_conversations=${protected_conversations:-none}; protected_messages=${protected_messages:-none}; protected_leads=${protected_leads:-none}; protected_integrations=${protected_integrations:-none}; protected_options=${protected_options:-none}; protected_perfex=${protected_perfex:-none}"
+    return
+  fi
+
+  pass \
+    "marketing reports cleanup remains explicit, POST-only, permission-guarded, and narrowly scoped" \
+    "controller=$controller_method | activity=$activity_helper | campaigns=$campaigns_helper | warning=$reports_warning"
 }
 
 check_whatsapp_send_auth_diagnostics() {
@@ -2577,6 +2623,7 @@ check_settings_mobile_responsive_layout
 check_settings_license_block_order
 check_dashboard_operator_ui_structure
 check_marketing_reports_surface
+check_marketing_reports_cleanup_controls
 check_whatsapp_send_auth_diagnostics
 check_whatsapp_test_alert_safety
 check_whatsapp_token_preserve_and_redaction

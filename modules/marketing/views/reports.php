@@ -48,8 +48,58 @@
     .marketing-reports-card-head .btn {
         white-space: nowrap;
     }
+    .marketing-reports-danger-zone {
+        margin-top: 22px;
+        border: 1px solid #fecaca;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #fff7f7 0%, #ffffff 100%);
+        overflow: hidden;
+        box-shadow: 0 10px 28px rgba(127, 29, 29, 0.05);
+    }
+    .marketing-reports-danger-zone .panel-body {
+        padding: 20px 22px;
+    }
+    .marketing-reports-danger-copy {
+        margin: 10px 0 0;
+        color: #7f1d1d;
+        font-size: 13px;
+        line-height: 1.7;
+    }
+    .marketing-reports-danger-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+    }
+    .marketing-reports-danger-card {
+        border: 1px solid #fecaca;
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 18px;
+    }
+    .marketing-reports-danger-label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #991b1b;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .marketing-reports-danger-helper {
+        margin: 8px 0 0;
+        color: #7f1d1d;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+    .marketing-reports-danger-card .form-group:last-child {
+        margin-bottom: 0;
+    }
     @media (max-width: 991px) {
         .marketing-reports-grid {
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+        .marketing-reports-danger-grid {
             grid-template-columns: repeat(1, minmax(0, 1fr));
         }
     }
@@ -159,6 +209,82 @@
                                             </table>
                                         </div>
                                     <?php } ?>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel_s marketing-reports-danger-zone" data-marketing-reports-danger-zone="1">
+                            <div class="panel-body">
+                                <h4 class="no-margin text-danger"><?= _l('marketing_reports_cleanup_heading'); ?></h4>
+                                <p class="marketing-reports-danger-copy">
+                                    <?= _l('marketing_reports_cleanup_warning'); ?><br />
+                                    <?= _l('marketing_reports_cleanup_export_warning'); ?>
+                                </p>
+
+                                <div class="marketing-reports-danger-grid">
+                                    <div class="marketing-reports-danger-card" data-marketing-reports-cleanup-card="activity">
+                                        <h5 class="no-margin"><?= _l('marketing_reports_cleanup_activity_title'); ?></h5>
+                                        <p class="marketing-reports-danger-helper"><?= _l('marketing_reports_cleanup_activity_note'); ?></p>
+                                        <?= form_open(admin_url('marketing/reports_cleanup')); ?>
+                                            <input type="hidden" name="cleanup_target" value="activity" />
+                                            <div class="form-group mtop15">
+                                                <label class="marketing-reports-danger-label" for="marketing-reports-cleanup-activity-confirmation">
+                                                    <?= _l('marketing_reports_cleanup_confirmation_label'); ?>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    class="form-control"
+                                                    id="marketing-reports-cleanup-activity-confirmation"
+                                                    name="cleanup_confirmation"
+                                                    value=""
+                                                    autocomplete="off"
+                                                    spellcheck="false"
+                                                    placeholder="<?= html_escape($reports_cleanup['activity_confirmation_phrase'] ?? 'DELETE ACTIVITY REPORTS'); ?>"
+                                                />
+                                                <p class="marketing-reports-danger-helper">
+                                                    <?= sprintf(
+                                                        _l('marketing_reports_cleanup_confirmation_phrase'),
+                                                        '<code>' . html_escape($reports_cleanup['activity_confirmation_phrase'] ?? 'DELETE ACTIVITY REPORTS') . '</code>'
+                                                    ); ?>
+                                                </p>
+                                            </div>
+                                            <button type="submit" class="btn btn-danger">
+                                                <?= _l('marketing_reports_cleanup_activity_title'); ?>
+                                            </button>
+                                        <?= form_close(); ?>
+                                    </div>
+
+                                    <div class="marketing-reports-danger-card" data-marketing-reports-cleanup-card="campaigns">
+                                        <h5 class="no-margin"><?= _l('marketing_reports_cleanup_campaigns_title'); ?></h5>
+                                        <p class="marketing-reports-danger-helper"><?= _l('marketing_reports_cleanup_campaigns_note'); ?></p>
+                                        <?= form_open(admin_url('marketing/reports_cleanup')); ?>
+                                            <input type="hidden" name="cleanup_target" value="campaigns" />
+                                            <div class="form-group mtop15">
+                                                <label class="marketing-reports-danger-label" for="marketing-reports-cleanup-campaigns-confirmation">
+                                                    <?= _l('marketing_reports_cleanup_confirmation_label'); ?>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    class="form-control"
+                                                    id="marketing-reports-cleanup-campaigns-confirmation"
+                                                    name="cleanup_confirmation"
+                                                    value=""
+                                                    autocomplete="off"
+                                                    spellcheck="false"
+                                                    placeholder="<?= html_escape($reports_cleanup['campaigns_confirmation_phrase'] ?? 'DELETE CAMPAIGN REPORTS'); ?>"
+                                                />
+                                                <p class="marketing-reports-danger-helper">
+                                                    <?= sprintf(
+                                                        _l('marketing_reports_cleanup_confirmation_phrase'),
+                                                        '<code>' . html_escape($reports_cleanup['campaigns_confirmation_phrase'] ?? 'DELETE CAMPAIGN REPORTS') . '</code>'
+                                                    ); ?>
+                                                </p>
+                                            </div>
+                                            <button type="submit" class="btn btn-danger">
+                                                <?= _l('marketing_reports_cleanup_campaigns_title'); ?>
+                                            </button>
+                                        <?= form_close(); ?>
+                                    </div>
                                 </div>
                             </div>
                         </div>

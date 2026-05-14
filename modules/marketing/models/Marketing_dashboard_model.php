@@ -222,6 +222,59 @@ class Marketing_dashboard_model extends App_Model
         return $this->db->get($this->eventsTable, $limit)->result_array();
     }
 
+    public function purge_report_activity()
+    {
+        $result = [
+            'success' => false,
+            'target' => 'activity',
+            'deleted_counts' => [
+                self::EVENTS_TABLE => 0,
+            ],
+            'message' => _l('marketing_reports_cleanup_activity_table_missing'),
+        ];
+
+        if (!$this->db->table_exists($this->eventsTable) || !$this->db->field_exists('id', $this->eventsTable)) {
+            return $result;
+        }
+
+        $this->db->trans_begin();
+
+        $this->db->where('id >', 0);
+        $deleted = $this->db->delete($this->eventsTable);
+        if (!$deleted) {
+            $this->db->trans_rollback();
+            $result['message'] = _l('marketing_reports_cleanup_activity_failed');
+
+            return $result;
+        }
+
+        $affected = max(0, (int) $this->db->affected_rows());
+        $this->db->trans_commit();
+
+        $result['success'] = true;
+        $result['deleted_counts'][self::EVENTS_TABLE] = $affected;
+        $result['message'] = $affected > 0
+            ? sprintf(_l('marketing_reports_cleanup_activity_success'), $affected)
+            : _l('marketing_reports_cleanup_activity_none');
+
+        return $result;
+    }
+
+    public function purge_report_campaigns()
+    {
+        return [
+            'success' => false,
+            'target' => 'campaigns',
+            'deleted_counts' => [
+                self::CAMPAIGNS_TABLE => 0,
+                self::RECIPIENTS_TABLE => 0,
+                self::PUBLIC_LINKS_TABLE => 0,
+                self::EVENTS_TABLE => 0,
+            ],
+            'message' => _l('marketing_reports_cleanup_campaigns_blocked'),
+        ];
+    }
+
     protected function extract_click_url(array $row)
     {
         $directUrl = trim((string) ($row['url'] ?? ''));

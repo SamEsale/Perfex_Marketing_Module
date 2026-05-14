@@ -61,6 +61,10 @@ class Marketing extends AdminController
         $data = [
             'recent_campaigns' => [],
             'recent_activity' => [],
+            'reports_cleanup' => [
+                'activity_confirmation_phrase' => $this->get_reports_cleanup_confirmation_phrase('activity'),
+                'campaigns_confirmation_phrase' => $this->get_reports_cleanup_confirmation_phrase('campaigns'),
+            ],
         ];
 
         try {
@@ -78,6 +82,57 @@ class Marketing extends AdminController
         $data['title'] = _l('marketing_reports_heading');
 
         $this->load->view('marketing/reports', $data);
+    }
+
+    public function reports_cleanup()
+    {
+        if (staff_cant('settings', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $target = trim((string) $this->input->post('cleanup_target', true));
+        $confirmation = trim((string) $this->input->post('cleanup_confirmation', false));
+        $expectedConfirmation = $this->get_reports_cleanup_confirmation_phrase($target);
+
+        if ($expectedConfirmation === null) {
+            set_alert('danger', _l('marketing_reports_cleanup_invalid_target'));
+            redirect(admin_url('marketing/reports'));
+        }
+
+        if ($confirmation !== $expectedConfirmation) {
+            set_alert('danger', sprintf(_l('marketing_reports_cleanup_confirmation_invalid'), $expectedConfirmation));
+            redirect(admin_url('marketing/reports'));
+        }
+
+        if ($target === 'activity') {
+            $result = $this->marketing_dashboard_model->purge_report_activity();
+        } else {
+            $result = $this->marketing_dashboard_model->purge_report_campaigns();
+        }
+
+        $message = trim((string) ($result['message'] ?? ''));
+        $deletedCounts = isset($result['deleted_counts']) && is_array($result['deleted_counts']) ? $result['deleted_counts'] : [];
+        $deletedTotal = array_sum(array_map('intval', $deletedCounts));
+
+        if (!empty($result['success'])) {
+            if ($deletedTotal > 0) {
+                if ($target === 'activity') {
+                    set_alert('success', sprintf(_l('marketing_reports_cleanup_activity_success'), $deletedTotal));
+                } else {
+                    set_alert('success', sprintf(_l('marketing_reports_cleanup_campaigns_success'), $deletedTotal));
+                }
+            } else {
+                set_alert('warning', $message !== '' ? $message : _l('marketing_reports_cleanup_no_rows'));
+            }
+        } else {
+            set_alert('danger', $message !== '' ? $message : _l('marketing_reports_cleanup_failed'));
+        }
+
+        redirect(admin_url('marketing/reports'));
     }
 
     public function queue_control()
@@ -177,6 +232,19 @@ class Marketing extends AdminController
         }
 
         redirect(admin_url('marketing'));
+    }
+
+    protected function get_reports_cleanup_confirmation_phrase($target)
+    {
+        if ($target === 'activity') {
+            return 'DELETE ACTIVITY REPORTS';
+        }
+
+        if ($target === 'campaigns') {
+            return 'DELETE CAMPAIGN REPORTS';
+        }
+
+        return null;
     }
 
     protected function get_default_dashboard_data()
