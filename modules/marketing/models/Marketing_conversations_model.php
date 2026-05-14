@@ -516,6 +516,95 @@ class Marketing_conversations_model extends App_Model
         return $summary;
     }
 
+    public function get_whatsapp_conversation_context($conversationId)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0
+            || !$this->tables_available()
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('channel', $this->conversationsTable)
+            || !$this->db->field_exists('provider', $this->conversationsTable)) {
+            return null;
+        }
+
+        $select = [
+            'c.id',
+            ($this->db->field_exists('lead_id', $this->conversationsTable) ? 'c.lead_id' : 'NULL as lead_id'),
+            ($this->db->field_exists('contact_phone', $this->conversationsTable) ? 'c.contact_phone' : 'NULL as contact_phone'),
+            ($this->db->field_exists('normalized_phone', $this->conversationsTable) ? 'c.normalized_phone' : 'NULL as normalized_phone'),
+            ($this->db->field_exists('email', $this->conversationsTable) ? 'c.email' : 'NULL as email'),
+            ($this->db->field_exists('marketing_contact_id', $this->conversationsTable) ? 'c.marketing_contact_id' : 'NULL as marketing_contact_id'),
+            ($this->db->field_exists('last_message_at', $this->conversationsTable) ? 'c.last_message_at' : 'NULL as last_message_at'),
+            'NULL as contact_full_name',
+        ];
+
+        $canJoinContacts = $this->db->table_exists($this->contactsTable)
+            && $this->db->field_exists('marketing_contact_id', $this->conversationsTable)
+            && $this->db->field_exists('id', $this->contactsTable);
+        if ($canJoinContacts) {
+            if ($this->db->field_exists('full_name', $this->contactsTable)) {
+                $select[count($select) - 1] = 'mc.full_name as contact_full_name';
+            } elseif ($this->db->field_exists('first_name', $this->contactsTable) && $this->db->field_exists('last_name', $this->contactsTable)) {
+                $select[count($select) - 1] = "TRIM(CONCAT(COALESCE(mc.first_name, ''), ' ', COALESCE(mc.last_name, ''))) as contact_full_name";
+            }
+        }
+
+        $this->db->select(implode(', ', $select), false);
+        $this->db->from($this->conversationsTable . ' c');
+        if ($canJoinContacts) {
+            $this->db->join($this->contactsTable . ' mc', 'mc.id = c.marketing_contact_id', 'left');
+        }
+        $this->db->where('c.id', $conversationId);
+        $this->db->where('c.channel', 'whatsapp');
+        $this->db->where('c.provider', 'whatsapp_cloud');
+        $row = $this->db->limit(1)->get()->row_array();
+        if (empty($row)) {
+            return null;
+        }
+
+        return [
+            'conversation_id' => (int) ($row['id'] ?? 0),
+            'lead_id' => !empty($row['lead_id']) ? (int) $row['lead_id'] : null,
+            'marketing_contact_id' => !empty($row['marketing_contact_id']) ? (int) $row['marketing_contact_id'] : null,
+            'contact_name' => trim((string) ($row['contact_full_name'] ?? '')),
+            'phone' => trim((string) ($row['contact_phone'] ?? '')),
+            'normalized_phone' => trim((string) ($row['normalized_phone'] ?? '')),
+            'email' => trim((string) ($row['email'] ?? '')),
+            'preview' => $this->get_latest_inbound_message_preview($conversationId),
+            'last_activity_at' => trim((string) ($row['last_message_at'] ?? '')),
+            'channel' => 'whatsapp',
+            'provider' => 'whatsapp_cloud',
+        ];
+    }
+
+    public function set_conversation_lead_id($conversationId, $leadId)
+    {
+        $conversationId = (int) $conversationId;
+        $leadId = (int) $leadId;
+        if ($conversationId <= 0
+            || $leadId <= 0
+            || !$this->db->table_exists($this->conversationsTable)
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('lead_id', $this->conversationsTable)) {
+            return false;
+        }
+
+        $update = ['lead_id' => $leadId];
+        if ($this->db->field_exists('dateupdated', $this->conversationsTable)) {
+            $update['dateupdated'] = date('Y-m-d H:i:s');
+        }
+
+        $this->db->where('id', $conversationId);
+        if ($this->db->field_exists('channel', $this->conversationsTable)) {
+            $this->db->where('channel', 'whatsapp');
+        }
+        if ($this->db->field_exists('provider', $this->conversationsTable)) {
+            $this->db->where('provider', 'whatsapp_cloud');
+        }
+
+        return $this->db->update($this->conversationsTable, $this->filter_existing_columns($this->conversationsTable, $update));
+    }
+
     private function touch_conversation($conversationId, array $data = [])
     {
         if (!$this->db->table_exists($this->conversationsTable)) {

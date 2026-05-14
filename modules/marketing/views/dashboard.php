@@ -573,6 +573,8 @@
                                                                         $contactLabel = $contactName !== '' ? $contactName : ($contactPhone !== '' ? $contactPhone : _l('marketing_dashboard_whatsapp_contact_unknown'));
                                                                         $preview = trim((string) ($conversation['preview'] ?? ''));
                                                                         $preview = $preview !== '' ? mb_substr($preview, 0, 120) : _l('marketing_dashboard_whatsapp_preview_empty');
+                                                                        $leadConversion = isset($conversation['lead_conversion']) && is_array($conversation['lead_conversion']) ? $conversation['lead_conversion'] : [];
+                                                                        $conversionLabel = trim((string) ($leadConversion['label'] ?? _l('marketing_dashboard_whatsapp_convert_unavailable')));
                                                                         ?>
                                                                         <tr>
                                                                             <td>#<?= (int) ($conversation['id'] ?? 0); ?></td>
@@ -592,8 +594,13 @@
                                                                             <td>
                                                                                 <?php if (!empty($conversation['lead_id'])) { ?>
                                                                                     <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_lead_linked'); ?> #<?= (int) $conversation['lead_id']; ?></span>
+                                                                                <?php } elseif (!empty($leadConversion['actionable'])) { ?>
+                                                                                    <?= form_open(admin_url('marketing/convert_whatsapp_conversation'), ['class' => 'inline-block']); ?>
+                                                                                        <input type="hidden" name="conversation_id" value="<?= (int) ($conversation['id'] ?? 0); ?>">
+                                                                                        <button type="submit" class="btn btn-default btn-sm"><?= html_escape($conversionLabel); ?></button>
+                                                                                    <?= form_close(); ?>
                                                                                 <?php } else { ?>
-                                                                                    <span class="text-muted"><?= _l('marketing_dashboard_whatsapp_lead_unlinked'); ?></span>
+                                                                                    <span class="text-muted"><?= html_escape($conversionLabel); ?></span>
                                                                                 <?php } ?>
                                                                             </td>
                                                                             <td><?= html_escape($preview); ?></td>

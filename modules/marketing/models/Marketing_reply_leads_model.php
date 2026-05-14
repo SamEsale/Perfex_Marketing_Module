@@ -25,6 +25,142 @@ class Marketing_reply_leads_model extends App_Model
         $this->eventsTable       = db_prefix() . 'marketing_events';
     }
 
+    public function convert_whatsapp_conversation_to_lead($conversationId, $staffId = null)
+    {
+        $result = [
+            'success' => false,
+            'lead_id' => null,
+            'conversation_id' => (int) $conversationId,
+            'action' => 'unavailable',
+            'message' => 'WhatsApp conversion is unavailable.',
+            'readiness' => null,
+        ];
+
+        $conversationId = (int) $conversationId;
+        $staffId = $staffId !== null ? (int) $staffId : 0;
+        if ($conversationId <= 0) {
+            $result['message'] = 'Invalid WhatsApp conversation.';
+
+            return $result;
+        }
+
+        $conversationModel = $this->get_conversations_model();
+        if (!is_object($conversationModel) || !method_exists($conversationModel, 'get_whatsapp_conversation_context')) {
+            $result['message'] = 'WhatsApp conversation model is unavailable.';
+
+            return $result;
+        }
+
+        $context = $conversationModel->get_whatsapp_conversation_context($conversationId);
+        if (empty($context)) {
+            $result['message'] = 'WhatsApp conversation not found or not eligible for manual conversion.';
+
+            return $result;
+        }
+
+        $readiness = $this->get_whatsapp_lead_conversion_readiness([
+            'conversation_lead_id' => $context['lead_id'] ?? null,
+            'lead_id' => $context['lead_id'] ?? null,
+            'email' => $context['email'] ?? '',
+            'normalized_phone' => $context['normalized_phone'] ?? '',
+            'phone' => $context['phone'] ?? '',
+        ]);
+        $result['readiness'] = $readiness;
+
+        if (($readiness['status'] ?? '') === 'already_linked' && !empty($readiness['lead_id'])) {
+            return [
+                'success' => true,
+                'lead_id' => (int) $readiness['lead_id'],
+                'conversation_id' => $conversationId,
+                'action' => 'already_linked',
+                'message' => 'WhatsApp conversation is already linked to a lead.',
+                'readiness' => $readiness,
+            ];
+        }
+
+        if (($readiness['status'] ?? '') === 'existing_lead' && !empty($readiness['lead_id'])) {
+            $linked = $this->link_whatsapp_conversation_to_lead($conversationId, (int) $readiness['lead_id']);
+
+            return [
+                'success' => $linked,
+                'lead_id' => (int) $readiness['lead_id'],
+                'conversation_id' => $conversationId,
+                'action' => 'linked_existing',
+                'message' => $linked ? 'Existing lead linked to WhatsApp conversation.' : 'Existing lead found but the conversation link could not be saved.',
+                'readiness' => $readiness,
+            ];
+        }
+
+        if (!empty($readiness['ready']) && ($readiness['status'] ?? '') === 'ready_create') {
+            $existingLead = $this->find_safe_whatsapp_existing_lead($context);
+            if ($existingLead) {
+                $linked = $this->link_whatsapp_conversation_to_lead($conversationId, (int) $existingLead['id']);
+
+                return [
+                    'success' => $linked,
+                    'lead_id' => (int) $existingLead['id'],
+                    'conversation_id' => $conversationId,
+                    'action' => 'linked_existing',
+                    'message' => $linked ? 'Existing lead linked to WhatsApp conversation.' : 'Existing lead found but the conversation link could not be saved.',
+                    'readiness' => $readiness,
+                ];
+            }
+
+            $leadData = $this->build_whatsapp_lead_data($context, $staffId);
+            if (empty($leadData)) {
+                $result['action'] = 'failed';
+                $result['message'] = 'WhatsApp lead defaults are unavailable for manual conversion.';
+
+                return $result;
+            }
+
+            $leadId = (int) $this->create_lead_direct($leadData);
+            if ($leadId <= 0) {
+                $safeDbError = '';
+                $db = $this->getDb();
+                if ($db !== null) {
+                    $dbError = $db->error();
+                    $safeDbError = $this->sanitize_model_error($dbError['message'] ?? '');
+                }
+
+                $existingLead = $this->find_safe_whatsapp_existing_lead($context);
+                if ($existingLead) {
+                    $linked = $this->link_whatsapp_conversation_to_lead($conversationId, (int) $existingLead['id']);
+
+                    return [
+                        'success' => $linked,
+                        'lead_id' => (int) $existingLead['id'],
+                        'conversation_id' => $conversationId,
+                        'action' => 'linked_existing',
+                        'message' => $linked ? 'Existing lead linked to WhatsApp conversation.' : 'Existing lead found after insert contention but the conversation link could not be saved.',
+                        'readiness' => $readiness,
+                    ];
+                }
+
+                $result['action'] = 'failed';
+                $result['message'] = $safeDbError !== '' ? $safeDbError : 'Lead insert failed.';
+
+                return $result;
+            }
+
+            $linked = $this->link_whatsapp_conversation_to_lead($conversationId, $leadId);
+
+            return [
+                'success' => $linked,
+                'lead_id' => $leadId,
+                'conversation_id' => $conversationId,
+                'action' => 'created',
+                'message' => $linked ? 'New lead created from WhatsApp conversation.' : 'Lead created but the conversation link could not be saved.',
+                'readiness' => $readiness,
+            ];
+        }
+
+        $result['action'] = 'not_ready';
+        $result['message'] = $this->whatsapp_readiness_message($readiness);
+
+        return $result;
+    }
+
     public function leads_available()
     {
         $db = $this->getDb();
@@ -216,6 +352,7 @@ class Marketing_reply_leads_model extends App_Model
         $phoneMatch = $this->find_lead_by_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
         if (!empty($phoneMatch['lead'])) {
             $result['status'] = 'existing_lead';
+            $result['ready'] = true;
             $result['lead_id'] = (int) ($phoneMatch['lead']['id'] ?? 0);
             $result['matched_by'] = 'phone';
             $result['reason'] = 'existing_lead_by_phone';
@@ -226,6 +363,27 @@ class Marketing_reply_leads_model extends App_Model
         if (!empty($phoneMatch['reason'])) {
             $result['reason'] = (string) $phoneMatch['reason'];
         }
+
+        $normalizedPhone = $this->normalize_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
+        if ($normalizedPhone === '') {
+            $result['status'] = 'not_ready';
+            $result['reason'] = 'phone_missing';
+
+            return $result;
+        }
+
+        $statusId = $this->resolve_status_id(get_option('marketing_reply_to_lead_status'));
+        $sourceId = $this->resolve_source_id(get_option('marketing_reply_to_lead_source'));
+        if ($statusId <= 0 || $sourceId <= 0 || !$this->status_exists($statusId) || !$this->source_exists($sourceId)) {
+            $result['status'] = 'not_ready';
+            $result['reason'] = 'lead_defaults_unavailable';
+
+            return $result;
+        }
+
+        $result['status'] = 'ready_create';
+        $result['ready'] = true;
+        $result['reason'] = 'phone_ready_for_manual_conversion';
 
         return $result;
     }
@@ -345,6 +503,67 @@ class Marketing_reply_leads_model extends App_Model
 
         if (!empty($context['conversation_id'])) {
             $lines[] = 'Conversation ID: ' . (int) $context['conversation_id'];
+        }
+
+        $description = strip_tags(implode("\n", $lines));
+        $description = preg_replace('/\s+/', ' ', (string) $description);
+
+        return mb_substr(trim($description), 0, 1200);
+    }
+
+    private function build_whatsapp_lead_data(array $context, $staffId = 0)
+    {
+        $statusId = $this->resolve_status_id(get_option('marketing_reply_to_lead_status'));
+        $sourceId = $this->resolve_source_id(get_option('marketing_reply_to_lead_source'));
+        $assignedStaffId = $staffId > 0 ? $staffId : $this->resolve_staff_id(get_option('marketing_reply_to_lead_assigned_staff'));
+
+        if ($statusId <= 0 || $sourceId <= 0 || !$this->status_exists($statusId) || !$this->source_exists($sourceId)) {
+            return [];
+        }
+
+        $phone = $this->normalize_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
+        if ($phone === '') {
+            return [];
+        }
+
+        $leadData = [
+            'name' => $this->build_whatsapp_lead_name($context, $phone),
+            'email' => $this->normalize_email($context['email'] ?? ''),
+            'phone' => $phone,
+            'status' => (int) $statusId,
+            'source' => (int) $sourceId,
+            'assigned' => $assignedStaffId > 0 ? (int) $assignedStaffId : 0,
+            'description' => $this->build_whatsapp_lead_description($context),
+            'address' => '',
+        ];
+
+        return $leadData;
+    }
+
+    private function build_whatsapp_lead_name(array $context, $phone)
+    {
+        $contactName = trim((string) ($context['contact_name'] ?? $context['sender_name'] ?? ''));
+        if ($contactName !== '') {
+            return mb_substr($contactName, 0, 191);
+        }
+
+        return mb_substr('WhatsApp Conversation ' . $phone, 0, 191);
+    }
+
+    private function build_whatsapp_lead_description(array $context)
+    {
+        $lines = ['Source: WhatsApp conversation'];
+
+        if (!empty($context['conversation_id'])) {
+            $lines[] = 'Conversation ID: ' . (int) $context['conversation_id'];
+        }
+        if (!empty($context['phone'])) {
+            $lines[] = 'Phone: ' . trim((string) $context['phone']);
+        } elseif (!empty($context['normalized_phone'])) {
+            $lines[] = 'Phone: ' . trim((string) $context['normalized_phone']);
+        }
+        if (!empty($context['preview'])) {
+            $lines[] = 'Latest Preview: ' . trim((string) $context['preview']);
         }
 
         $description = strip_tags(implode("\n", $lines));
@@ -520,6 +739,21 @@ class Marketing_reply_leads_model extends App_Model
         ];
     }
 
+    private function find_safe_whatsapp_existing_lead(array $context)
+    {
+        $email = $this->normalize_email($context['email'] ?? '');
+        if ($email !== '') {
+            $existingLead = $this->find_lead_by_email($email);
+            if ($existingLead) {
+                return $existingLead;
+            }
+        }
+
+        $phoneMatch = $this->find_lead_by_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
+
+        return !empty($phoneMatch['lead']) ? $phoneMatch['lead'] : null;
+    }
+
     private function get_reply_lead_event_map(array $emails, $campaignId = null)
     {
         $db = $this->getDb();
@@ -692,7 +926,12 @@ class Marketing_reply_leads_model extends App_Model
             'country' => 0,
         ];
 
-        if ($insert['name'] === '' || $insert['email'] === '') {
+        $phoneField = $this->resolve_leads_phone_field();
+        if ($phoneField !== null) {
+            $insert[$phoneField] = $this->normalize_phone($leadData['phone'] ?? '');
+        }
+
+        if ($insert['name'] === '' || ($insert['email'] === '' && empty($insert[$phoneField ?? '']))) {
             return 0;
         }
 
@@ -710,6 +949,52 @@ class Marketing_reply_leads_model extends App_Model
         $db->insert($this->leadsTable, $insert);
 
         return (int) $db->insert_id();
+    }
+
+    private function link_whatsapp_conversation_to_lead($conversationId, $leadId)
+    {
+        $conversationModel = $this->get_conversations_model();
+        if (!is_object($conversationModel) || !method_exists($conversationModel, 'set_conversation_lead_id')) {
+            return false;
+        }
+
+        return (bool) $conversationModel->set_conversation_lead_id((int) $conversationId, (int) $leadId);
+    }
+
+    private function get_conversations_model()
+    {
+        if (isset($this->ci->marketing_conversations_model) && is_object($this->ci->marketing_conversations_model)) {
+            return $this->ci->marketing_conversations_model;
+        }
+
+        if (isset($this->ci->load)) {
+            $this->ci->load->model('marketing/Marketing_conversations_model', 'marketing_conversations_model');
+        }
+
+        return isset($this->ci->marketing_conversations_model) && is_object($this->ci->marketing_conversations_model)
+            ? $this->ci->marketing_conversations_model
+            : null;
+    }
+
+    private function whatsapp_readiness_message(array $readiness)
+    {
+        switch ((string) ($readiness['reason'] ?? '')) {
+            case 'conversation_already_linked':
+                return 'WhatsApp conversation is already linked to a lead.';
+            case 'existing_lead_by_email':
+            case 'existing_lead_by_phone':
+                return 'An existing lead match is available for this WhatsApp conversation.';
+            case 'phone_missing':
+                return 'Not enough phone identity is available for manual WhatsApp conversion.';
+            case 'lead_defaults_unavailable':
+                return 'Lead status/source defaults are unavailable for manual WhatsApp conversion.';
+            case 'lead_phone_lookup_not_available':
+                return 'Lead phone lookup is unavailable in this Perfex installation.';
+            case 'leads_unavailable':
+                return 'Perfex leads are unavailable in this installation.';
+            default:
+                return 'WhatsApp conversation is not ready for manual lead conversion.';
+        }
     }
 
     private function ensureDatabaseAvailable()

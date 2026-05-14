@@ -16,6 +16,7 @@ class Marketing extends AdminController
         $this->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
         $this->load->model('marketing/Marketing_conversations_model', 'marketing_conversations_model');
         $this->load->model('marketing/Marketing_integrity_model', 'marketing_integrity_model');
+        $this->load->model('marketing/Marketing_reply_leads_model', 'marketing_reply_leads_model');
     }
 
     public function index()
@@ -42,6 +43,7 @@ class Marketing extends AdminController
         try {
             $whatsappConversations = $this->marketing_conversations_model->get_recent_whatsapp_conversations(5);
             if (is_array($whatsappConversations)) {
+                $whatsappConversations = $this->decorate_whatsapp_conversations_with_conversion_state($whatsappConversations);
                 $data['whatsapp_conversations'] = array_replace_recursive($data['whatsapp_conversations'] ?? [], $whatsappConversations);
             }
         } catch (Throwable $exception) {
@@ -83,6 +85,44 @@ class Marketing extends AdminController
             set_alert($recovered > 0 ? 'success' : 'info', $recovered > 0 ? ('Recovered ' . $recovered . ' stale processing recipient row(s).') : 'No stale recipient processing rows were eligible for recovery.');
         } else {
             set_alert('warning', 'Unknown queue control action.');
+        }
+
+        redirect(admin_url('marketing'));
+    }
+
+    public function convert_whatsapp_conversation()
+    {
+        if (staff_cant('settings', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $conversationId = (int) $this->input->post('conversation_id', true);
+        if ($conversationId <= 0) {
+            set_alert('warning', _l('marketing_dashboard_whatsapp_convert_invalid'));
+            redirect(admin_url('marketing'));
+        }
+
+        $result = $this->marketing_reply_leads_model->convert_whatsapp_conversation_to_lead($conversationId, get_staff_user_id());
+        $leadId = (int) ($result['lead_id'] ?? 0);
+        $message = trim((string) ($result['message'] ?? ''));
+        if ($message === '') {
+            $message = _l('marketing_dashboard_whatsapp_convert_unavailable');
+        }
+
+        if (!empty($result['success'])) {
+            if (($result['action'] ?? '') === 'created') {
+                set_alert('success', sprintf(_l('marketing_dashboard_whatsapp_convert_created'), $leadId, $conversationId));
+            } elseif (($result['action'] ?? '') === 'linked_existing' || ($result['action'] ?? '') === 'already_linked') {
+                set_alert('success', sprintf(_l('marketing_dashboard_whatsapp_convert_linked_existing'), $leadId, $conversationId));
+            } else {
+                set_alert('success', $message);
+            }
+        } else {
+            set_alert('warning', $message);
         }
 
         redirect(admin_url('marketing'));
@@ -166,6 +206,72 @@ class Marketing extends AdminController
             ],
             'recent_campaigns' => [],
             'recent_activity' => [],
+        ];
+    }
+
+    protected function decorate_whatsapp_conversations_with_conversion_state(array $summary)
+    {
+        $items = isset($summary['items']) && is_array($summary['items']) ? $summary['items'] : [];
+        if (empty($items)) {
+            $summary['items'] = [];
+
+            return $summary;
+        }
+
+        foreach ($items as &$item) {
+            $readiness = $this->marketing_reply_leads_model->get_whatsapp_lead_conversion_readiness([
+                'conversation_lead_id' => $item['lead_id'] ?? null,
+                'lead_id' => $item['lead_id'] ?? null,
+                'normalized_phone' => $item['normalized_phone'] ?? '',
+                'phone' => $item['contact_phone'] ?? '',
+            ]);
+            $item['lead_conversion'] = $this->normalize_whatsapp_conversion_state($readiness, $item);
+        }
+        unset($item);
+
+        $summary['items'] = $items;
+
+        return $summary;
+    }
+
+    protected function normalize_whatsapp_conversion_state(array $readiness, array $item)
+    {
+        if (!empty($item['lead_id'])) {
+            return [
+                'actionable' => false,
+                'label' => _l('marketing_dashboard_whatsapp_lead_linked'),
+                'status' => 'linked',
+            ];
+        }
+
+        if (!empty($readiness['ready']) && ($readiness['status'] ?? '') === 'existing_lead' && !empty($readiness['lead_id'])) {
+            return [
+                'actionable' => true,
+                'label' => sprintf(_l('marketing_dashboard_whatsapp_convert_link_existing_action'), (int) $readiness['lead_id']),
+                'status' => 'existing_lead',
+            ];
+        }
+
+        if (!empty($readiness['ready']) && ($readiness['status'] ?? '') === 'ready_create') {
+            return [
+                'actionable' => true,
+                'label' => _l('marketing_dashboard_whatsapp_convert_action'),
+                'status' => 'ready_create',
+            ];
+        }
+
+        if (($readiness['reason'] ?? '') === 'phone_missing') {
+            return [
+                'actionable' => false,
+                'label' => _l('marketing_dashboard_whatsapp_convert_not_enough_identity'),
+                'status' => 'not_ready',
+            ];
+        }
+
+        return [
+            'actionable' => false,
+            'label' => _l('marketing_dashboard_whatsapp_convert_unavailable'),
+            'status' => 'unavailable',
         ];
     }
 }

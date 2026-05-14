@@ -1972,7 +1972,7 @@ check_whatsapp_dashboard_visibility() {
   view_title="$(first_fixed_match "_l('marketing_dashboard_whatsapp_conversations')" "$DASHBOARD_VIEW_FILE")"
   view_note="$(first_fixed_match "_l('marketing_dashboard_whatsapp_conversations_note')" "$DASHBOARD_VIEW_FILE")"
   view_escape="$(first_fixed_match "html_escape(\$preview)" "$DASHBOARD_VIEW_FILE")"
-  view_lead_state="$(first_fixed_match "_l('marketing_dashboard_whatsapp_lead_unlinked')" "$DASHBOARD_VIEW_FILE")"
+  view_lead_state="$(first_fixed_match "_l('marketing_dashboard_whatsapp_convert_unavailable')" "$DASHBOARD_VIEW_FILE")"
   destructive_sql="$(grep -nE -- '\\b(DELETE|TRUNCATE|DROP|ALTER|CREATE)\\b' "$CONVERSATIONS_FILE" "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_VIEW_FILE" || true)"
 
   if [[ -z "$helper_line" || -z "$summary_line" || -z "$preview_helper" || -z "$controller_load" || -z "$controller_call" || -z "$default_data" || -z "$view_title" || -z "$view_note" || -z "$view_escape" || -z "$view_lead_state" || -n "$destructive_sql" ]]; then
@@ -1985,6 +1985,35 @@ check_whatsapp_dashboard_visibility() {
   pass \
     "WhatsApp dashboard visibility remains bounded, read-only, and escaped" \
     "helper=$helper_line | controller=$controller_call | title=$view_title"
+}
+
+check_whatsapp_manual_lead_conversion() {
+  local controller_method controller_permission controller_post_guard controller_call model_convert model_readiness model_existing_link model_create_link model_context model_phone_match dashboard_form dashboard_escape dashboard_deferred destructive_sql
+  controller_method="$(first_match 'function[[:space:]]+convert_whatsapp_conversation' "$MARKETING_CONTROLLER_FILE")"
+  controller_permission="$(first_fixed_match "staff_cant('settings', 'marketing')" "$MARKETING_CONTROLLER_FILE")"
+  controller_post_guard="$(first_fixed_match "if (!\$this->input->post()) {" "$MARKETING_CONTROLLER_FILE")"
+  controller_call="$(first_fixed_match "convert_whatsapp_conversation_to_lead(\$conversationId, get_staff_user_id())" "$MARKETING_CONTROLLER_FILE")"
+  model_convert="$(first_match 'function[[:space:]]+convert_whatsapp_conversation_to_lead' "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_readiness="$(first_fixed_match "get_whatsapp_lead_conversion_readiness([" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_existing_link="$(first_fixed_match "link_whatsapp_conversation_to_lead(\$conversationId, (int) \$readiness['lead_id'])" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_create_link="$(first_fixed_match "link_whatsapp_conversation_to_lead(\$conversationId, \$leadId)" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_context="$(first_fixed_match "get_whatsapp_conversation_context(\$conversationId)" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_phone_match="$(first_fixed_match "find_safe_whatsapp_existing_lead(\$context)" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  dashboard_form="$(first_fixed_match "form_open(admin_url('marketing/convert_whatsapp_conversation')" "$DASHBOARD_VIEW_FILE")"
+  dashboard_escape="$(first_fixed_match "html_escape(\$conversionLabel)" "$DASHBOARD_VIEW_FILE")"
+  dashboard_deferred="$(first_fixed_match '$conversionLabel = trim((string) ($leadConversion[' "$DASHBOARD_VIEW_FILE")"
+  destructive_sql="$(grep -nE -- '\\b(DELETE|TRUNCATE|DROP|ALTER|CREATE)\\b' "$MARKETING_CONTROLLER_FILE" "modules/marketing/models/Marketing_reply_leads_model.php" "$DASHBOARD_VIEW_FILE" || true)"
+
+  if [[ -z "$controller_method" || -z "$controller_permission" || -z "$controller_post_guard" || -z "$controller_call" || -z "$model_convert" || -z "$model_readiness" || -z "$model_existing_link" || -z "$model_create_link" || -z "$model_context" || -z "$model_phone_match" || -z "$dashboard_form" || -z "$dashboard_escape" || -z "$dashboard_deferred" || -n "$destructive_sql" ]]; then
+    fail \
+      "manual WhatsApp lead conversion remains POST-only, duplicate-safe, and dashboard-bounded" \
+      "expected POST-only controller action in $MARKETING_CONTROLLER_FILE, explicit conversion helper in modules/marketing/models/Marketing_reply_leads_model.php, bounded dashboard form in $DASHBOARD_VIEW_FILE, and no destructive SQL; method=${controller_method:-missing}; permission=${controller_permission:-missing}; post=${controller_post_guard:-missing}; call=${controller_call:-missing}; model=${model_convert:-missing}; readiness=${model_readiness:-missing}; existing=${model_existing_link:-missing}; created=${model_create_link:-missing}; context=${model_context:-missing}; phone=${model_phone_match:-missing}; form=${dashboard_form:-missing}; escape=${dashboard_escape:-missing}; action_label=${dashboard_deferred:-missing}; destructive=${destructive_sql:-none}"
+    return
+  fi
+
+  pass \
+    "manual WhatsApp lead conversion remains POST-only, duplicate-safe, and dashboard-bounded" \
+    "controller=$controller_method | model=$model_convert | form=$dashboard_form"
 }
 
 check_no_facebook_linkedin_active_ui_or_release_docs() {
@@ -2471,6 +2500,7 @@ check_conversation_model_optional_column_guards
 check_whatsapp_inbound_conversation_metadata
 check_whatsapp_lead_conversion_deferred
 check_whatsapp_dashboard_visibility
+check_whatsapp_manual_lead_conversion
 check_no_facebook_linkedin_active_ui_or_release_docs
 check_release_validator_exists
 check_module_metadata_header
