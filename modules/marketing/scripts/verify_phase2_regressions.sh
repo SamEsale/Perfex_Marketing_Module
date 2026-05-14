@@ -672,14 +672,14 @@ check_queue_diagnostics_stale_processing_count() {
 
 check_dashboard_queue_diagnostics_surface() {
   local view_heading_line view_warning_line controller_line
-  view_heading_line="$(first_fixed_match 'Queue Diagnostics' "$DASHBOARD_VIEW_FILE")"
+  view_heading_line="$(first_fixed_match "marketing_dashboard_operations_center" "$DASHBOARD_VIEW_FILE")"
   view_warning_line="$(first_fixed_match "recent_warning_counts" "$DASHBOARD_VIEW_FILE")"
   controller_line="$(first_fixed_match "\$this->load->view('marketing/dashboard', \$data);" "$MARKETING_CONTROLLER_FILE")"
 
   if [[ -z "$view_heading_line" || -z "$view_warning_line" || -z "$controller_line" ]]; then
     fail \
       "existing dashboard route consumes queue diagnostics without route changes" \
-      "expected queue diagnostics section in dashboard view and existing dashboard controller route; heading=${view_heading_line:-missing}; warnings=${view_warning_line:-missing}; controller=${controller_line:-missing}"
+      "expected delivery operations section in dashboard view and existing dashboard controller route; heading=${view_heading_line:-missing}; warnings=${view_warning_line:-missing}; controller=${controller_line:-missing}"
     return
   fi
 
@@ -1740,7 +1740,8 @@ check_settings_license_block_order() {
 }
 
 check_dashboard_operator_ui_structure() {
-  local controls_line health_line warnings_line failure_line audit_line retention_line compact_grid_line
+  local operations_title_line controls_line health_line warnings_line failure_line audit_line retention_line compact_grid_line executive_shell_line advanced_details_line visible_raw_command
+  operations_title_line="$(first_fixed_match "marketing_dashboard_operations_center" "$DASHBOARD_VIEW_FILE")"
   controls_line="$(first_fixed_match 'Queue Controls' "$DASHBOARD_VIEW_FILE")"
   health_line="$(first_fixed_match 'Queue Health' "$DASHBOARD_VIEW_FILE")"
   warnings_line="$(first_fixed_match 'Recent Warnings' "$DASHBOARD_VIEW_FILE")"
@@ -1748,17 +1749,20 @@ check_dashboard_operator_ui_structure() {
   audit_line="$(first_fixed_match 'Operator Audit' "$DASHBOARD_VIEW_FILE")"
   retention_line="$(first_fixed_match 'Telemetry Retention' "$DASHBOARD_VIEW_FILE")"
   compact_grid_line="$(first_fixed_match 'marketing-ops-compact-grid' "$DASHBOARD_VIEW_FILE")"
+  executive_shell_line="$(first_fixed_match 'marketing-dashboard-hero' "$DASHBOARD_VIEW_FILE")"
+  advanced_details_line="$(first_fixed_match 'marketing-ops-advanced' "$DASHBOARD_VIEW_FILE")"
+  visible_raw_command="$(grep -nF "marketing-ops-section-copy\">Read-only runtime integrity checks for queue state, provider events, inbound replies, and schema drift. Run <code>php modules/marketing/scripts/verify_phase4_integrity_runtime.php</code>" "$DASHBOARD_VIEW_FILE" || true)"
 
-  if [[ -z "$controls_line" || -z "$health_line" || -z "$warnings_line" || -z "$failure_line" || -z "$audit_line" || -z "$retention_line" || -z "$compact_grid_line" ]]; then
+  if [[ -z "$operations_title_line" || -z "$controls_line" || -z "$health_line" || -z "$warnings_line" || -z "$failure_line" || -z "$audit_line" || -z "$retention_line" || -z "$compact_grid_line" || -z "$executive_shell_line" || -z "$advanced_details_line" || -n "$visible_raw_command" ]]; then
     fail \
       "dashboard operator controls are rendered as structured commercial UI sections" \
-      "expected Queue Controls, Queue Health, Recent Warnings, Failure Metrics, Operator Audit, Telemetry Retention, and compact diagnostics grid markup in $DASHBOARD_VIEW_FILE; controls=${controls_line:-missing}; health=${health_line:-missing}; warnings=${warnings_line:-missing}; failure=${failure_line:-missing}; audit=${audit_line:-missing}; retention=${retention_line:-missing}; compact_grid=${compact_grid_line:-missing}"
+      "expected executive dashboard shell, Delivery Operations, Queue Controls, Queue Health, Recent Warnings, Failure Metrics, Operator Audit, Telemetry Retention, compact diagnostics grid, and collapsed advanced diagnostics commands without raw CLI copy in always-visible integrity text; hero=${executive_shell_line:-missing}; operations=${operations_title_line:-missing}; controls=${controls_line:-missing}; health=${health_line:-missing}; warnings=${warnings_line:-missing}; failure=${failure_line:-missing}; audit=${audit_line:-missing}; retention=${retention_line:-missing}; compact_grid=${compact_grid_line:-missing}; advanced=${advanced_details_line:-missing}; visible_raw=${visible_raw_command:-none}"
     return
   fi
 
   pass \
     "dashboard operator controls are rendered as structured commercial UI sections" \
-    "controls=$controls_line | health=$health_line | compact_grid=$compact_grid_line"
+    "hero=$executive_shell_line | operations=$operations_title_line | controls=$controls_line | advanced=$advanced_details_line"
 }
 
 check_whatsapp_send_auth_diagnostics() {
@@ -2195,13 +2199,15 @@ check_inbound_reply_hardening() {
 }
 
 check_phase4_integrity_diagnostics() {
-  local model_helper runtime_script runtime_method dashboard_controller_load dashboard_view_title dashboard_view_note inbound_message_channel inbound_message_provider whatsapp_message_channel destructive_sql cli_guard bootstrap_guard db_prefix_guard exit_zero exit_one exit_two orphaned_warning_model orphaned_warning_runtime orphaned_reported_runtime reconciliation_model reconciliation_runtime reconciliation_runtime_warning reconciliation_exclusion runtime_exclusion
+  local model_helper runtime_script runtime_method dashboard_controller_load dashboard_view_title dashboard_view_note dashboard_view_advanced dashboard_view_hidden_apply inbound_message_channel inbound_message_provider whatsapp_message_channel destructive_sql cli_guard bootstrap_guard db_prefix_guard exit_zero exit_one exit_two orphaned_warning_model orphaned_warning_runtime orphaned_reported_runtime reconciliation_model reconciliation_runtime reconciliation_runtime_warning reconciliation_exclusion runtime_exclusion
   model_helper="$(first_match 'class[[:space:]]+Marketing_integrity_model' "$INTEGRITY_MODEL_FILE")"
   runtime_script="$(first_fixed_match 'Marketing Integrity Diagnostics' "$INTEGRITY_RUNTIME_FILE")"
   runtime_method="$(first_match 'function[[:space:]]+get_integrity_diagnostics' "$INTEGRITY_MODEL_FILE")"
   dashboard_controller_load="$(first_fixed_match "Marketing_integrity_model" "$MARKETING_CONTROLLER_FILE")"
   dashboard_view_title="$(first_fixed_match 'Integrity Health' "$DASHBOARD_VIEW_FILE")"
-  dashboard_view_note="$(first_fixed_match 'verify_phase4_integrity_runtime.php' "$DASHBOARD_VIEW_FILE")"
+  dashboard_view_note="$(first_fixed_match "marketing_dashboard_integrity_health_copy" "$DASHBOARD_VIEW_FILE")"
+  dashboard_view_advanced="$(first_fixed_match 'marketing-ops-advanced' "$DASHBOARD_VIEW_FILE")"
+  dashboard_view_hidden_apply="$(first_fixed_match 'repair_phase4_integrity_runtime.php --apply' "$DASHBOARD_VIEW_FILE")"
   inbound_message_channel="$(first_fixed_match "'channel' => 'email'" "$WEBHOOKS_FILE")"
   inbound_message_provider="$(first_fixed_match "'provider' => 'inbound_email'" "$WEBHOOKS_FILE")"
   whatsapp_message_channel="$(first_fixed_match "'channel' => 'whatsapp'" "$WEBHOOKS_FILE")"
@@ -2221,16 +2227,16 @@ check_phase4_integrity_diagnostics() {
   runtime_exclusion="$(first_fixed_match "e.campaign_recipient_id = 0 or r.id is not null" "$INTEGRITY_RUNTIME_FILE")"
   destructive_sql="$(grep -nE '\b(DELETE|UPDATE|INSERT|TRUNCATE|DROP|ALTER|CREATE)\b' "$INTEGRITY_RUNTIME_FILE" || true)"
 
-  if [[ -z "$model_helper" || -z "$runtime_script" || -z "$runtime_method" || -z "$dashboard_controller_load" || -z "$dashboard_view_title" || -z "$dashboard_view_note" || -z "$inbound_message_channel" || -z "$inbound_message_provider" || -z "$whatsapp_message_channel" || -z "$cli_guard" || -z "$bootstrap_guard" || -z "$db_prefix_guard" || -z "$exit_zero" || -z "$exit_one" || -z "$exit_two" || -z "$orphaned_warning_model" || -z "$orphaned_warning_runtime" || -z "$orphaned_reported_runtime" || -z "$reconciliation_model" || -z "$reconciliation_runtime" || -z "$reconciliation_runtime_warning" || -z "$reconciliation_exclusion" || -z "$runtime_exclusion" || -n "$destructive_sql" ]]; then
+  if [[ -z "$model_helper" || -z "$runtime_script" || -z "$runtime_method" || -z "$dashboard_controller_load" || -z "$dashboard_view_title" || -z "$dashboard_view_note" || -z "$dashboard_view_advanced" || -z "$dashboard_view_hidden_apply" || -z "$inbound_message_channel" || -z "$inbound_message_provider" || -z "$whatsapp_message_channel" || -z "$cli_guard" || -z "$bootstrap_guard" || -z "$db_prefix_guard" || -z "$exit_zero" || -z "$exit_one" || -z "$exit_two" || -z "$orphaned_warning_model" || -z "$orphaned_warning_runtime" || -z "$orphaned_reported_runtime" || -z "$reconciliation_model" || -z "$reconciliation_runtime" || -z "$reconciliation_runtime_warning" || -z "$reconciliation_exclusion" || -z "$runtime_exclusion" || -n "$destructive_sql" ]]; then
     fail \
       "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
-      "expected integrity model/runtime script/dashboard wiring, safe CLI bootstrap/db_prefix/exit handling, warning-only orphaned audit refs, warning-only reconciliation skipped diagnostics excluding orphaned recipient refs, plus inbound email message channel metadata and preserved WhatsApp markers; model=${model_helper:-missing}; runtime=${runtime_script:-missing}; method=${runtime_method:-missing}; controller=${dashboard_controller_load:-missing}; title=${dashboard_view_title:-missing}; note=${dashboard_view_note:-missing}; cli=${cli_guard:-missing}; basepath=${bootstrap_guard:-missing}; db_prefix=${db_prefix_guard:-missing}; exit0=${exit_zero:-missing}; exit2=${exit_one:-missing}; exit_final=${exit_two:-missing}; orphaned_model=${orphaned_warning_model:-missing}; orphaned_runtime=${orphaned_warning_runtime:-missing}; orphaned_severity=${orphaned_reported_runtime:-missing}; reconciliation_model=${reconciliation_model:-missing}; reconciliation_runtime=${reconciliation_runtime:-missing}; reconciliation_runtime_warning=${reconciliation_runtime_warning:-missing}; reconciliation_exclusion=${reconciliation_exclusion:-missing}; runtime_exclusion=${runtime_exclusion:-missing}; inbound_channel=${inbound_message_channel:-missing}; inbound_provider=${inbound_message_provider:-missing}; whatsapp_channel=${whatsapp_message_channel:-missing}; destructive=${destructive_sql:-none}"
+      "expected integrity model/runtime script/dashboard wiring, safe CLI bootstrap/db_prefix/exit handling, warning-only orphaned audit refs, warning-only reconciliation skipped diagnostics excluding orphaned recipient refs, advanced/collapsed dashboard diagnostics commands, plus inbound email message channel metadata and preserved WhatsApp markers; model=${model_helper:-missing}; runtime=${runtime_script:-missing}; method=${runtime_method:-missing}; controller=${dashboard_controller_load:-missing}; title=${dashboard_view_title:-missing}; note=${dashboard_view_note:-missing}; advanced=${dashboard_view_advanced:-missing}; hidden_apply=${dashboard_view_hidden_apply:-missing}; cli=${cli_guard:-missing}; basepath=${bootstrap_guard:-missing}; db_prefix=${db_prefix_guard:-missing}; exit0=${exit_zero:-missing}; exit2=${exit_one:-missing}; exit_final=${exit_two:-missing}; orphaned_model=${orphaned_warning_model:-missing}; orphaned_runtime=${orphaned_warning_runtime:-missing}; orphaned_severity=${orphaned_reported_runtime:-missing}; reconciliation_model=${reconciliation_model:-missing}; reconciliation_runtime=${reconciliation_runtime:-missing}; reconciliation_runtime_warning=${reconciliation_runtime_warning:-missing}; reconciliation_exclusion=${reconciliation_exclusion:-missing}; runtime_exclusion=${runtime_exclusion:-missing}; inbound_channel=${inbound_message_channel:-missing}; inbound_provider=${inbound_message_provider:-missing}; whatsapp_channel=${whatsapp_message_channel:-missing}; destructive=${destructive_sql:-none}"
     return
   fi
 
   pass \
     "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
-    "model=$model_helper | runtime=$runtime_script | orphaned=$orphaned_warning_model | reconciliation=$reconciliation_model | cli=$cli_guard"
+    "model=$model_helper | runtime=$runtime_script | advanced=$dashboard_view_advanced | orphaned=$orphaned_warning_model | reconciliation=$reconciliation_model | cli=$cli_guard"
 }
 
 check_phase4_integrity_repair() {

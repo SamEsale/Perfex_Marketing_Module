@@ -1,6 +1,107 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
 <style>
+    .marketing-dashboard-hero {
+        margin-bottom: 18px;
+        padding: 22px 24px;
+        border: 1px solid #e2e8f0;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 55%, #fff7ed 100%);
+    }
+    .marketing-dashboard-hero-copy {
+        margin: 8px 0 0;
+        max-width: 780px;
+        color: #64748b;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .marketing-dashboard-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 14px;
+    }
+    .marketing-dashboard-summary-card {
+        padding: 16px 18px;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+    }
+    .marketing-dashboard-summary-label {
+        display: block;
+        color: #64748b;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        font-weight: 700;
+    }
+    .marketing-dashboard-summary-value {
+        display: block;
+        margin-top: 10px;
+        color: #0f172a;
+        font-size: 30px;
+        line-height: 1.1;
+        font-weight: 700;
+    }
+    .marketing-dashboard-summary-helper {
+        display: block;
+        margin-top: 8px;
+        color: #94a3b8;
+        font-size: 12px;
+    }
+    .marketing-dashboard-section-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 18px;
+        background: #ffffff;
+        overflow: hidden;
+    }
+    .marketing-dashboard-section-card.is-analytics {
+        background: linear-gradient(135deg, #fff8f1 0%, #eff6ff 100%);
+    }
+    .marketing-dashboard-section-body {
+        padding: 22px 24px;
+    }
+    .marketing-dashboard-section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        margin-bottom: 16px;
+    }
+    .marketing-dashboard-section-title {
+        margin: 0;
+        color: #0f172a;
+        font-size: 20px;
+        font-weight: 700;
+    }
+    .marketing-dashboard-section-copy {
+        margin: 8px 0 0;
+        color: #64748b;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .marketing-dashboard-mini-kpis {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        min-width: 260px;
+    }
+    .marketing-dashboard-mini-kpi {
+        padding: 14px 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.92);
+        text-align: left;
+    }
+    .marketing-dashboard-mini-kpi .marketing-dashboard-summary-value {
+        font-size: 24px;
+    }
+    .marketing-dashboard-inline-note {
+        margin: 0 0 16px;
+        color: #64748b;
+        font-size: 13px;
+    }
     .marketing-ops-shell {
         border: 1px solid #e2e8f0;
         background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
@@ -170,7 +271,56 @@
         background: #fff7ed;
         color: #c2410c;
     }
+    .marketing-ops-advanced {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        background: #ffffff;
+    }
+    .marketing-ops-advanced summary {
+        cursor: pointer;
+        color: #0f172a;
+        font-weight: 700;
+        list-style: none;
+    }
+    .marketing-ops-advanced summary::-webkit-details-marker {
+        display: none;
+    }
+    .marketing-ops-advanced-copy {
+        margin: 10px 0 0;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .marketing-ops-command-list {
+        margin: 12px 0 0;
+        padding-left: 18px;
+        color: #475569;
+    }
+    .marketing-ops-command-list li {
+        margin-bottom: 8px;
+    }
+    .marketing-dashboard-whatsapp-summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 14px;
+    }
+    .marketing-dashboard-whatsapp-summary .marketing-ops-metric {
+        min-height: 0;
+    }
     @media (max-width: 991px) {
+        .marketing-dashboard-summary-grid,
+        .marketing-dashboard-whatsapp-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .marketing-dashboard-section-head {
+            flex-direction: column;
+        }
+        .marketing-dashboard-mini-kpis {
+            width: 100%;
+        }
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid,
@@ -180,6 +330,11 @@
         }
     }
     @media (max-width: 767px) {
+        .marketing-dashboard-summary-grid,
+        .marketing-dashboard-mini-kpis,
+        .marketing-dashboard-whatsapp-summary {
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid,
@@ -237,84 +392,75 @@
             <div class="col-md-12">
                 <div class="panel_s">
                     <div class="panel-body">
-                        <h4 class="no-margin"><?= _l('marketing_dashboard'); ?></h4>
-                        <p class="text-muted mtop10"><?= _l('marketing_phase_1_notice'); ?></p>
-                        <hr />
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_audiences'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape($total_lists); ?></h3>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_contacts'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape($total_contacts); ?></h3>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_total_memberships'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape($total_memberships); ?></h3>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_campaigns'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape($total_campaigns); ?></h3>
-                                </div>
-                            </div>
+                        <div class="marketing-dashboard-hero">
+                            <h4 class="no-margin"><?= _l('marketing_dashboard'); ?></h4>
+                            <p class="marketing-dashboard-hero-copy"><?= _l('marketing_dashboard_executive_overview_note'); ?></p>
                         </div>
-                        <div class="row tw-mt-15">
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_delivery_rate'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape(number_format($delivery_rate, 2)); ?>%</h3>
-                                </div>
+                        <div class="marketing-dashboard-summary-grid">
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_audiences'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape($total_lists); ?></span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_audiences_helper'); ?></span>
                             </div>
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_open_rate'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape(number_format($open_rate, 2)); ?>%</h3>
-                                </div>
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_contacts'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape($total_contacts); ?></span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_contacts_helper'); ?></span>
                             </div>
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_bounce_rate'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape(number_format($bounce_rate, 2)); ?>%</h3>
-                                </div>
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_total_memberships'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape($total_memberships); ?></span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_memberships_helper'); ?></span>
                             </div>
-                            <div class="col-md-3">
-                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                    <span class="text-muted text-uppercase small"><?= _l('marketing_active_suppressions'); ?></span>
-                                    <h3 class="tw-mt-10"><?= html_escape($active_suppressions); ?></h3>
-                                </div>
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_campaigns'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape($total_campaigns); ?></span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_campaigns_helper'); ?></span>
+                            </div>
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_delivery_rate'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape(number_format($delivery_rate, 2)); ?>%</span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_delivery_helper'); ?></span>
+                            </div>
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_open_rate'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape(number_format($open_rate, 2)); ?>%</span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_open_helper'); ?></span>
+                            </div>
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_bounce_rate'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape(number_format($bounce_rate, 2)); ?>%</span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_bounce_helper'); ?></span>
+                            </div>
+                            <div class="marketing-dashboard-summary-card">
+                                <span class="marketing-dashboard-summary-label"><?= _l('marketing_active_suppressions'); ?></span>
+                                <span class="marketing-dashboard-summary-value"><?= html_escape($active_suppressions); ?></span>
+                                <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_suppressions_helper'); ?></span>
                             </div>
                         </div>
                         <div class="row tw-mt-15">
                             <div class="col-md-12">
-                                <div class="panel_s" style="border:1px solid #e2e8f0;background:linear-gradient(135deg,#fff8f1 0%,#eff6ff 100%);">
-                                    <div class="panel-body">
-                                        <div class="row">
-                                            <div class="col-md-8">
-                                                <h4 class="no-margin"><?= _l('marketing_link_click_analytics'); ?></h4>
-                                                <p class="text-muted mtop10"><?= _l('marketing_click_analytics_note'); ?></p>
+                                <div class="marketing-dashboard-section-card is-analytics">
+                                    <div class="marketing-dashboard-section-body">
+                                        <div class="marketing-dashboard-section-head">
+                                            <div>
+                                                <h4 class="marketing-dashboard-section-title"><?= _l('marketing_link_click_analytics'); ?></h4>
+                                                <p class="marketing-dashboard-section-copy"><?= _l('marketing_dashboard_click_analytics_copy'); ?></p>
                                             </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small"><?= _l('marketing_human_clicks'); ?></span>
-                                                    <h3 class="tw-mt-10" style="color:#ea580c;"><?= html_escape($click_analytics['human_clicks']); ?></h3>
+                                            <div class="marketing-dashboard-mini-kpis">
+                                                <div class="marketing-dashboard-mini-kpi">
+                                                    <span class="marketing-dashboard-summary-label"><?= _l('marketing_human_clicks'); ?></span>
+                                                    <span class="marketing-dashboard-summary-value" style="color:#ea580c;"><?= html_escape($click_analytics['human_clicks']); ?></span>
+                                                    <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_click_human_helper'); ?></span>
                                                 </div>
-                                            </div>
-                                            <div class="col-md-2">
-                                                <div class="tw-bg-white tw-p-15 tw-rounded tw-border">
-                                                    <span class="text-muted text-uppercase small"><?= _l('marketing_unique_human_clicks'); ?></span>
-                                                    <h3 class="tw-mt-10" style="color:#2563eb;"><?= html_escape($click_analytics['unique_human_clicks']); ?></h3>
+                                                <div class="marketing-dashboard-mini-kpi">
+                                                    <span class="marketing-dashboard-summary-label"><?= _l('marketing_unique_human_clicks'); ?></span>
+                                                    <span class="marketing-dashboard-summary-value" style="color:#2563eb;"><?= html_escape($click_analytics['unique_human_clicks']); ?></span>
+                                                    <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_click_unique_helper'); ?></span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <p class="text-muted mtop15 no-margin"><?= sprintf(_l('marketing_raw_click_events_helper'), (int) $click_analytics['raw_click_events']); ?></p>
+                                        <p class="marketing-dashboard-inline-note"><?= sprintf(_l('marketing_raw_click_events_helper'), (int) $click_analytics['raw_click_events']); ?></p>
 
                                         <?php if (!$click_analytics['has_data']) { ?>
                                             <div class="alert alert-info mtop15 mbot0">
@@ -493,8 +639,8 @@
                                     <div class="panel-body">
                                         <div class="row">
                                             <div class="col-md-8">
-                                                <h4 class="no-margin">Queue Diagnostics</h4>
-                                                <p class="text-muted mtop10">Operational controls and recent execution telemetry for queue health, provider pressure, operator actions, and bounded telemetry retention.</p>
+                                                <h4 class="no-margin"><?= _l('marketing_dashboard_operations_center'); ?></h4>
+                                                <p class="text-muted mtop10"><?= _l('marketing_dashboard_operations_center_note'); ?></p>
                                             </div>
                                             <div class="col-md-4 text-right">
                                                 <span class="marketing-ops-status-pill"><?= !empty($queueDiagnostics['queue_paused']) ? 'Queue Paused' : 'Queue Active'; ?></span>
@@ -504,9 +650,9 @@
                                         </div>
                                         <div class="marketing-ops-section">
                                             <h5 class="marketing-ops-section-title">Integrity Health</h5>
-                                            <p class="marketing-ops-section-copy">Read-only runtime integrity checks for queue state, provider events, inbound replies, and schema drift. Run <code>php modules/marketing/scripts/verify_phase4_integrity_runtime.php</code> for diagnostics, <code>php modules/marketing/scripts/repair_phase4_integrity_runtime.php</code> for dry-run repair planning, and <code>php modules/marketing/scripts/repair_phase4_integrity_runtime.php --apply</code> for explicit metadata repair from the CRM root.</p>
+                                            <p class="marketing-ops-section-copy"><?= _l('marketing_dashboard_integrity_health_copy'); ?></p>
                                             <?php if (empty($integrityDiagnostics['available'])) { ?>
-                                                <div class="marketing-ops-empty">Integrity diagnostics are currently unavailable. The dashboard fell back safely without breaking queue operations.</div>
+                                                <div class="marketing-ops-empty"><?= _l('marketing_dashboard_integrity_health_unavailable'); ?></div>
                                             <?php } else { ?>
                                                 <div class="marketing-ops-integrity-grid">
                                                     <div class="marketing-ops-metric">
@@ -525,8 +671,17 @@
                                                         <span class="marketing-ops-metric-helper">Last dashboard integrity snapshot time.</span>
                                                     </div>
                                                 </div>
+                                                <details class="marketing-ops-advanced">
+                                                    <summary><?= _l('marketing_dashboard_integrity_advanced_title'); ?></summary>
+                                                    <p class="marketing-ops-advanced-copy"><?= _l('marketing_dashboard_integrity_advanced_copy'); ?></p>
+                                                    <ul class="marketing-ops-command-list">
+                                                        <li><code><?= html_escape('php modules/marketing/scripts/verify_phase4_integrity_runtime.php'); ?></code></li>
+                                                        <li><code><?= html_escape('php modules/marketing/scripts/repair_phase4_integrity_runtime.php'); ?></code></li>
+                                                        <li><code><?= html_escape('php modules/marketing/scripts/repair_phase4_integrity_runtime.php --apply'); ?></code></li>
+                                                    </ul>
+                                                </details>
                                                 <?php if (empty($integrityTopCategories)) { ?>
-                                                    <div class="marketing-ops-empty">No integrity anomalies are currently flagged by the bounded dashboard summary.</div>
+                                                    <div class="marketing-ops-empty"><?= _l('marketing_dashboard_integrity_health_empty'); ?></div>
                                                 <?php } else { ?>
                                                     <div class="marketing-ops-badge-grid">
                                                         <?php foreach (array_slice($integrityTopCategories, 0, 5) as $integrityCategory) { ?>
@@ -544,10 +699,22 @@
                                             <?php if (empty($whatsappConversations['available'])) { ?>
                                                 <div class="marketing-ops-empty"><?= _l('marketing_dashboard_whatsapp_conversations_unavailable'); ?></div>
                                             <?php } else { ?>
-                                                <div class="marketing-ops-badge-grid">
-                                                    <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_conversations_shown'); ?>: <?= (int) ($whatsappConversations['shown_count'] ?? 0); ?></span>
-                                                    <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_conversations_unread'); ?>: <?= (int) ($whatsappConversations['unread_conversation_count'] ?? 0); ?></span>
-                                                    <span class="marketing-ops-badge"><?= _l('marketing_dashboard_whatsapp_messages_unread'); ?>: <?= (int) ($whatsappConversations['unread_message_count'] ?? 0); ?></span>
+                                                <div class="marketing-dashboard-whatsapp-summary">
+                                                    <div class="marketing-ops-metric">
+                                                        <span class="marketing-ops-metric-label"><?= _l('marketing_dashboard_whatsapp_conversations_shown'); ?></span>
+                                                        <span class="marketing-ops-metric-value"><?= (int) ($whatsappConversations['shown_count'] ?? 0); ?></span>
+                                                        <span class="marketing-ops-metric-helper"><?= _l('marketing_dashboard_whatsapp_shown_helper'); ?></span>
+                                                    </div>
+                                                    <div class="marketing-ops-metric">
+                                                        <span class="marketing-ops-metric-label"><?= _l('marketing_dashboard_whatsapp_conversations_unread'); ?></span>
+                                                        <span class="marketing-ops-metric-value"><?= (int) ($whatsappConversations['unread_conversation_count'] ?? 0); ?></span>
+                                                        <span class="marketing-ops-metric-helper"><?= _l('marketing_dashboard_whatsapp_unread_conversations_helper'); ?></span>
+                                                    </div>
+                                                    <div class="marketing-ops-metric">
+                                                        <span class="marketing-ops-metric-label"><?= _l('marketing_dashboard_whatsapp_messages_unread'); ?></span>
+                                                        <span class="marketing-ops-metric-value"><?= (int) ($whatsappConversations['unread_message_count'] ?? 0); ?></span>
+                                                        <span class="marketing-ops-metric-helper"><?= _l('marketing_dashboard_whatsapp_unread_messages_helper'); ?></span>
+                                                    </div>
                                                 </div>
                                                 <?php if (empty($whatsappConversationItems)) { ?>
                                                     <div class="marketing-ops-empty"><?= _l('marketing_dashboard_whatsapp_conversations_empty'); ?></div>
