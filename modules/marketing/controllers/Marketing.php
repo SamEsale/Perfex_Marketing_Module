@@ -56,6 +56,30 @@ class Marketing extends AdminController
         $this->load->view('marketing/dashboard', $data);
     }
 
+    public function reports()
+    {
+        $data = [
+            'recent_campaigns' => [],
+            'recent_activity' => [],
+        ];
+
+        try {
+            $data['recent_campaigns'] = $this->marketing_dashboard_model->get_recent_campaigns(5);
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing reports recent campaigns unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        try {
+            $data['recent_activity'] = $this->marketing_dashboard_model->get_recent_activity(10);
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing reports recent activity unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        $data['title'] = _l('marketing_reports_heading');
+
+        $this->load->view('marketing/reports', $data);
+    }
+
     public function queue_control()
     {
         if (staff_cant('settings', 'marketing')) {

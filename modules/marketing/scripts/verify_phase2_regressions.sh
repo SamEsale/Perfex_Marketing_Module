@@ -21,6 +21,7 @@ UNINSTALL_FILE="modules/marketing/uninstall.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
 WHATSAPP_FILE="modules/marketing/libraries/Marketing_whatsapp.php"
 DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
+REPORTS_VIEW_FILE="modules/marketing/views/reports.php"
 MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
 CAMPAIGNS_CONTROLLER_FILE="modules/marketing/controllers/Campaigns.php"
 ANALYTICS_CONTROLLER_FILE="modules/marketing/controllers/Analytics.php"
@@ -1765,33 +1766,44 @@ check_dashboard_operator_ui_structure() {
     "hero=$executive_shell_line | operations=$operations_title_line | controls=$controls_line | advanced=$advanced_details_line"
 }
 
-check_dashboard_recent_table_reset_controls() {
-  local campaigns_button activity_button campaigns_help activity_help campaigns_table activity_table reset_handler reset_search reset_order reset_page reset_draw reset_label destructive_logic reset_form
-  campaigns_button="$(first_fixed_match 'data-marketing-reset-table="campaigns"' "$DASHBOARD_VIEW_FILE")"
-  activity_button="$(first_fixed_match 'data-marketing-reset-table="activity"' "$DASHBOARD_VIEW_FILE")"
-  campaigns_help="$(first_fixed_match "marketing_dashboard_table_reset_view_help" "$DASHBOARD_VIEW_FILE")"
-  activity_help="$(printf '%s\n' "$campaigns_help" | tail -n 1)"
-  campaigns_table="$(first_fixed_match 'marketing-dashboard-recent-campaigns-table' "$DASHBOARD_VIEW_FILE")"
-  activity_table="$(first_fixed_match 'marketing-dashboard-recent-activity-table' "$DASHBOARD_VIEW_FILE")"
-  reset_handler="$(first_fixed_match "trigger.getAttribute('data-marketing-reset-table')" "$DASHBOARD_VIEW_FILE")"
-  reset_search="$(first_fixed_match "dataTable.search('');" "$DASHBOARD_VIEW_FILE")"
-  reset_order="$(first_fixed_match "dataTable.order([]);" "$DASHBOARD_VIEW_FILE")"
-  reset_page="$(first_fixed_match "dataTable.page('first');" "$DASHBOARD_VIEW_FILE")"
-  reset_draw="$(first_fixed_match "dataTable.draw(false);" "$DASHBOARD_VIEW_FILE")"
-  reset_label="$(first_fixed_match "marketing_dashboard_table_reset_view" "modules/marketing/language/english/marketing_lang.php")"
-  destructive_logic="$(grep -nE 'delete\(|truncate\(|empty_table\(|->delete\(|\b(DELETE|TRUNCATE)\b' "$DASHBOARD_VIEW_FILE" "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_FILE" || true)"
-  reset_form="$(grep -nF "form_open(admin_url('marketing/reset" "$DASHBOARD_VIEW_FILE" || true)"
+check_marketing_reports_surface() {
+  local controller_method controller_recent_campaigns controller_recent_activity controller_view menu_item dashboard_campaigns dashboard_activity dashboard_reset reports_title reports_note reports_campaigns reports_activity reports_campaigns_table reports_activity_table reset_campaigns reset_activity reset_handler reset_search reset_order reset_page reset_draw reset_label reset_note reset_form destructive_logic
+  controller_method="$(first_match 'function[[:space:]]+reports' "$MARKETING_CONTROLLER_FILE")"
+  controller_recent_campaigns="$(first_fixed_match "get_recent_campaigns(5)" "$MARKETING_CONTROLLER_FILE")"
+  controller_recent_activity="$(first_fixed_match "get_recent_activity(10)" "$MARKETING_CONTROLLER_FILE")"
+  controller_view="$(first_fixed_match "\$this->load->view('marketing/reports', \$data);" "$MARKETING_CONTROLLER_FILE")"
+  menu_item="$(first_fixed_match "admin_url('marketing/reports')" "$BOOTSTRAP_FILE")"
+  dashboard_campaigns="$(first_fixed_match "_l('marketing_recent_campaigns')" "$DASHBOARD_VIEW_FILE")"
+  dashboard_activity="$(first_fixed_match "_l('marketing_recent_activity')" "$DASHBOARD_VIEW_FILE")"
+  dashboard_reset="$(first_fixed_match 'data-marketing-reset-table=' "$DASHBOARD_VIEW_FILE")"
+  reports_title="$(first_fixed_match "_l('marketing_reports_heading')" "$REPORTS_VIEW_FILE")"
+  reports_note="$(first_fixed_match "_l('marketing_reports_note')" "$REPORTS_VIEW_FILE")"
+  reports_campaigns="$(first_fixed_match "_l('marketing_reports_recent_campaigns')" "$REPORTS_VIEW_FILE")"
+  reports_activity="$(first_fixed_match "_l('marketing_reports_recent_activity')" "$REPORTS_VIEW_FILE")"
+  reports_campaigns_table="$(first_fixed_match 'marketing-reports-recent-campaigns-table' "$REPORTS_VIEW_FILE")"
+  reports_activity_table="$(first_fixed_match 'marketing-reports-recent-activity-table' "$REPORTS_VIEW_FILE")"
+  reset_campaigns="$(first_fixed_match 'data-marketing-reset-table="campaigns"' "$REPORTS_VIEW_FILE")"
+  reset_activity="$(first_fixed_match 'data-marketing-reset-table="activity"' "$REPORTS_VIEW_FILE")"
+  reset_handler="$(first_fixed_match "trigger.getAttribute('data-marketing-reset-table')" "$REPORTS_VIEW_FILE")"
+  reset_search="$(first_fixed_match "dataTable.search('');" "$REPORTS_VIEW_FILE")"
+  reset_order="$(first_fixed_match "dataTable.order([]);" "$REPORTS_VIEW_FILE")"
+  reset_page="$(first_fixed_match "dataTable.page('first');" "$REPORTS_VIEW_FILE")"
+  reset_draw="$(first_fixed_match "dataTable.draw(false);" "$REPORTS_VIEW_FILE")"
+  reset_label="$(first_fixed_match "marketing_table_reset_view" "modules/marketing/language/english/marketing_lang.php")"
+  reset_note="$(first_fixed_match "marketing_table_reset_view_note" "$REPORTS_VIEW_FILE")"
+  reset_form="$(grep -nF "form_open(admin_url('marketing/reset" "$REPORTS_VIEW_FILE" || true)"
+  destructive_logic="$(grep -nE 'delete\(|truncate\(|empty_table\(|->delete\(|\b(DELETE|TRUNCATE)\b' "$REPORTS_VIEW_FILE" "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_FILE" || true)"
 
-  if [[ -z "$campaigns_button" || -z "$activity_button" || -z "$campaigns_table" || -z "$activity_table" || -z "$campaigns_help" || -z "$reset_handler" || -z "$reset_search" || -z "$reset_order" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -n "$destructive_logic" || -n "$reset_form" ]]; then
+  if [[ -z "$controller_method" || -z "$controller_recent_campaigns" || -z "$controller_recent_activity" || -z "$controller_view" || -z "$menu_item" || -n "$dashboard_campaigns" || -n "$dashboard_activity" || -n "$dashboard_reset" || -z "$reports_title" || -z "$reports_note" || -z "$reports_campaigns" || -z "$reports_activity" || -z "$reports_campaigns_table" || -z "$reports_activity_table" || -z "$reset_campaigns" || -z "$reset_activity" || -z "$reset_handler" || -z "$reset_search" || -z "$reset_order" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -z "$reset_note" || -n "$reset_form" || -n "$destructive_logic" ]]; then
     fail \
-      "dashboard recent tables expose non-destructive reset-view controls" \
-      "expected Recent Campaigns and Recent Activity reset buttons, reset help copy, DataTables-only reset handler, and no destructive delete/truncate/empty_table logic or reset POST form; campaigns=${campaigns_button:-missing}; activity=${activity_button:-missing}; campaigns_table=${campaigns_table:-missing}; activity_table=${activity_table:-missing}; help=${campaigns_help:-missing}; handler=${reset_handler:-missing}; search=${reset_search:-missing}; order=${reset_order:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; destructive=${destructive_logic:-none}; reset_form=${reset_form:-none}"
+      "marketing reports page contains recent tables and client-side reset controls while dashboard stays operational" \
+      "expected reports controller/view/menu wiring, dashboard removal of recent campaign/activity tables, reports-only DataTables reset controls, and no destructive reset endpoint; method=${controller_method:-missing}; campaigns=${controller_recent_campaigns:-missing}; activity=${controller_recent_activity:-missing}; view=${controller_view:-missing}; menu=${menu_item:-missing}; dashboard_campaigns=${dashboard_campaigns:-unexpected}; dashboard_activity=${dashboard_activity:-unexpected}; dashboard_reset=${dashboard_reset:-unexpected}; reports_title=${reports_title:-missing}; reports_note=${reports_note:-missing}; reports_campaigns=${reports_campaigns:-missing}; reports_activity=${reports_activity:-missing}; campaigns_table=${reports_campaigns_table:-missing}; activity_table=${reports_activity_table:-missing}; reset_campaigns=${reset_campaigns:-missing}; reset_activity=${reset_activity:-missing}; handler=${reset_handler:-missing}; search=${reset_search:-missing}; order=${reset_order:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; note=${reset_note:-missing}; reset_form=${reset_form:-none}; destructive=${destructive_logic:-none}"
     return
   fi
 
   pass \
-    "dashboard recent tables expose non-destructive reset-view controls" \
-    "campaigns=$campaigns_button | activity=$activity_button | handler=$reset_handler | label=$reset_label"
+    "marketing reports page contains recent tables and client-side reset controls while dashboard stays operational" \
+    "method=$controller_method | menu=$menu_item | campaigns=$reports_campaigns_table | activity=$reports_activity_table"
 }
 
 check_whatsapp_send_auth_diagnostics() {
@@ -2558,7 +2570,7 @@ check_settings_two_column_layout
 check_settings_mobile_responsive_layout
 check_settings_license_block_order
 check_dashboard_operator_ui_structure
-check_dashboard_recent_table_reset_controls
+check_marketing_reports_surface
 check_whatsapp_send_auth_diagnostics
 check_whatsapp_test_alert_safety
 check_whatsapp_token_preserve_and_redaction

@@ -122,6 +122,14 @@ function marketing_module_init_menu_items()
             'badge'    => [],
         ]);
 
+        $CI->app_menu->add_sidebar_children_item('marketing', [
+            'slug'     => 'marketing-reports',
+            'name'     => _l('marketing_reports'),
+            'href'     => admin_url('marketing/reports'),
+            'position' => 27,
+            'badge'    => [],
+        ]);
+
         if (staff_can('settings', 'marketing')) {
             $CI->app_menu->add_sidebar_children_item('marketing', [
                 'slug'     => 'marketing-settings',
