@@ -1765,6 +1765,35 @@ check_dashboard_operator_ui_structure() {
     "hero=$executive_shell_line | operations=$operations_title_line | controls=$controls_line | advanced=$advanced_details_line"
 }
 
+check_dashboard_recent_table_reset_controls() {
+  local campaigns_button activity_button campaigns_help activity_help campaigns_table activity_table reset_handler reset_search reset_order reset_page reset_draw reset_label destructive_logic reset_form
+  campaigns_button="$(first_fixed_match 'data-marketing-reset-table="campaigns"' "$DASHBOARD_VIEW_FILE")"
+  activity_button="$(first_fixed_match 'data-marketing-reset-table="activity"' "$DASHBOARD_VIEW_FILE")"
+  campaigns_help="$(first_fixed_match "marketing_dashboard_table_reset_view_help" "$DASHBOARD_VIEW_FILE")"
+  activity_help="$(printf '%s\n' "$campaigns_help" | tail -n 1)"
+  campaigns_table="$(first_fixed_match 'marketing-dashboard-recent-campaigns-table' "$DASHBOARD_VIEW_FILE")"
+  activity_table="$(first_fixed_match 'marketing-dashboard-recent-activity-table' "$DASHBOARD_VIEW_FILE")"
+  reset_handler="$(first_fixed_match "trigger.getAttribute('data-marketing-reset-table')" "$DASHBOARD_VIEW_FILE")"
+  reset_search="$(first_fixed_match "dataTable.search('');" "$DASHBOARD_VIEW_FILE")"
+  reset_order="$(first_fixed_match "dataTable.order([]);" "$DASHBOARD_VIEW_FILE")"
+  reset_page="$(first_fixed_match "dataTable.page('first');" "$DASHBOARD_VIEW_FILE")"
+  reset_draw="$(first_fixed_match "dataTable.draw(false);" "$DASHBOARD_VIEW_FILE")"
+  reset_label="$(first_fixed_match "marketing_dashboard_table_reset_view" "modules/marketing/language/english/marketing_lang.php")"
+  destructive_logic="$(grep -nE 'delete\(|truncate\(|empty_table\(|->delete\(|\b(DELETE|TRUNCATE)\b' "$DASHBOARD_VIEW_FILE" "$MARKETING_CONTROLLER_FILE" "$DASHBOARD_FILE" || true)"
+  reset_form="$(grep -nF "form_open(admin_url('marketing/reset" "$DASHBOARD_VIEW_FILE" || true)"
+
+  if [[ -z "$campaigns_button" || -z "$activity_button" || -z "$campaigns_table" || -z "$activity_table" || -z "$campaigns_help" || -z "$reset_handler" || -z "$reset_search" || -z "$reset_order" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -n "$destructive_logic" || -n "$reset_form" ]]; then
+    fail \
+      "dashboard recent tables expose non-destructive reset-view controls" \
+      "expected Recent Campaigns and Recent Activity reset buttons, reset help copy, DataTables-only reset handler, and no destructive delete/truncate/empty_table logic or reset POST form; campaigns=${campaigns_button:-missing}; activity=${activity_button:-missing}; campaigns_table=${campaigns_table:-missing}; activity_table=${activity_table:-missing}; help=${campaigns_help:-missing}; handler=${reset_handler:-missing}; search=${reset_search:-missing}; order=${reset_order:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; destructive=${destructive_logic:-none}; reset_form=${reset_form:-none}"
+    return
+  fi
+
+  pass \
+    "dashboard recent tables expose non-destructive reset-view controls" \
+    "campaigns=$campaigns_button | activity=$activity_button | handler=$reset_handler | label=$reset_label"
+}
+
 check_whatsapp_send_auth_diagnostics() {
   local endpoint_line bearer_line message_line type_line code_line subcode_line trace_line
   endpoint_line="$(first_fixed_match "rawurlencode(\$phoneNumberId) . '/messages'" "$WHATSAPP_FILE")"
@@ -2529,6 +2558,7 @@ check_settings_two_column_layout
 check_settings_mobile_responsive_layout
 check_settings_license_block_order
 check_dashboard_operator_ui_structure
+check_dashboard_recent_table_reset_controls
 check_whatsapp_send_auth_diagnostics
 check_whatsapp_test_alert_safety
 check_whatsapp_token_preserve_and_redaction

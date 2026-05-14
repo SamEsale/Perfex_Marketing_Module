@@ -102,6 +102,21 @@
         color: #64748b;
         font-size: 13px;
     }
+    .marketing-dashboard-table-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+    }
+    .marketing-dashboard-table-card-copy {
+        margin: 8px 0 0;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .marketing-dashboard-table-reset {
+        white-space: nowrap;
+    }
     .marketing-ops-shell {
         border: 1px solid #e2e8f0;
         background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
@@ -320,6 +335,10 @@
         }
         .marketing-dashboard-mini-kpis {
             width: 100%;
+        }
+        .marketing-dashboard-table-card-head {
+            flex-direction: column;
+            align-items: flex-start;
         }
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
@@ -1019,13 +1038,26 @@
             <div class="col-md-6">
                 <div class="panel_s">
                     <div class="panel-body">
-                        <h4 class="no-margin"><?= _l('marketing_recent_campaigns'); ?></h4>
+                        <div class="marketing-dashboard-table-card-head">
+                            <div>
+                                <h4 class="no-margin"><?= _l('marketing_recent_campaigns'); ?></h4>
+                                <p class="marketing-dashboard-table-card-copy"><?= _l('marketing_dashboard_table_reset_view_help'); ?></p>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn btn-default btn-sm marketing-dashboard-table-reset"
+                                data-marketing-reset-table="campaigns"
+                                aria-controls="marketing-dashboard-recent-campaigns-table"
+                            >
+                                <?= _l('marketing_dashboard_table_reset_view'); ?>
+                            </button>
+                        </div>
                         <hr />
                         <?php if (empty($recent_campaigns)) { ?>
                             <p class="text-muted"><?= _l('marketing_no_campaigns_yet'); ?></p>
                         <?php } else { ?>
-                            <div class="table-responsive">
-                                <table class="table dt-table">
+                            <div class="table-responsive" data-marketing-dashboard-table-shell="campaigns">
+                                <table class="table dt-table" id="marketing-dashboard-recent-campaigns-table" data-marketing-dashboard-table="campaigns">
                                     <thead>
                                         <tr>
                                             <th><?= _l('id'); ?></th>
@@ -1053,13 +1085,26 @@
             <div class="col-md-6">
                 <div class="panel_s">
                     <div class="panel-body">
-                        <h4 class="no-margin"><?= _l('marketing_recent_activity'); ?></h4>
+                        <div class="marketing-dashboard-table-card-head">
+                            <div>
+                                <h4 class="no-margin"><?= _l('marketing_recent_activity'); ?></h4>
+                                <p class="marketing-dashboard-table-card-copy"><?= _l('marketing_dashboard_table_reset_view_help'); ?></p>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn btn-default btn-sm marketing-dashboard-table-reset"
+                                data-marketing-reset-table="activity"
+                                aria-controls="marketing-dashboard-recent-activity-table"
+                            >
+                                <?= _l('marketing_dashboard_table_reset_view'); ?>
+                            </button>
+                        </div>
                         <hr />
                         <?php if (empty($recent_activity)) { ?>
                             <p class="text-muted"><?= _l('marketing_no_activity_yet'); ?></p>
                         <?php } else { ?>
-                            <div class="table-responsive">
-                                <table class="table dt-table">
+                            <div class="table-responsive" data-marketing-dashboard-table-shell="activity">
+                                <table class="table dt-table" id="marketing-dashboard-recent-activity-table" data-marketing-dashboard-table="activity">
                                     <thead>
                                         <tr>
                                             <th><?= _l('marketing_event_type'); ?></th>
@@ -1088,6 +1133,65 @@
     </div>
 </div>
 <?php init_tail(); ?>
+<script>
+    (function (window, document) {
+        function getDataTableInstance(tableElement) {
+            if (!tableElement || typeof window.jQuery === 'undefined') {
+                return null;
+            }
+
+            var $ = window.jQuery;
+            if (!$.fn || !$.fn.DataTable || !$.fn.dataTable || !$.fn.dataTable.isDataTable) {
+                return null;
+            }
+
+            if (!$.fn.dataTable.isDataTable(tableElement)) {
+                return null;
+            }
+
+            return $(tableElement).DataTable();
+        }
+
+        function resetDashboardTable(tableKey) {
+            var table = document.querySelector('[data-marketing-dashboard-table="' + tableKey + '"]');
+            var dataTable = getDataTableInstance(table);
+
+            if (!dataTable) {
+                return;
+            }
+
+            if (typeof dataTable.search === 'function') {
+                dataTable.search('');
+            }
+
+            if (typeof dataTable.columns === 'function') {
+                dataTable.columns().search('');
+            }
+
+            if (typeof dataTable.order === 'function') {
+                dataTable.order([]);
+            }
+
+            if (typeof dataTable.page === 'function') {
+                dataTable.page('first');
+            }
+
+            if (typeof dataTable.draw === 'function') {
+                dataTable.draw(false);
+            }
+        }
+
+        document.addEventListener('click', function (event) {
+            var trigger = event.target.closest('[data-marketing-reset-table]');
+            if (!trigger) {
+                return;
+            }
+
+            event.preventDefault();
+            resetDashboardTable(trigger.getAttribute('data-marketing-reset-table'));
+        });
+    }(window, document));
+</script>
 <?php if ($click_analytics['has_data']) { ?>
 <script>
     (function () {
