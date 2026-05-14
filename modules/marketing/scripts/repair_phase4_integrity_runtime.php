@@ -157,6 +157,20 @@ function marketing_repair_fetch_rows($mysqli, $sql, $limit = 5)
     return $result->fetch_all(MYSQLI_ASSOC);
 }
 
+function marketing_repair_table_exists($mysqli, $databaseName, $tableName)
+{
+    $sql = "select count(*) as total from information_schema.tables where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and table_name='" . $mysqli->real_escape_string($tableName) . "'";
+
+    return marketing_repair_fetch_count($mysqli, $sql) > 0;
+}
+
+function marketing_repair_field_exists($mysqli, $databaseName, $tableName, $columnName)
+{
+    $sql = "select count(*) as total from information_schema.columns where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and table_name='" . $mysqli->real_escape_string($tableName) . "' and column_name='" . $mysqli->real_escape_string($columnName) . "'";
+
+    return marketing_repair_fetch_count($mysqli, $sql) > 0;
+}
+
 function marketing_repair_print_samples(array $rows)
 {
     if (empty($rows)) {
@@ -217,6 +231,15 @@ if ($crmRoot === null) {
 }
 
 $mysqli = marketing_repair_connect_db($crmRoot);
+$databaseName = $mysqli->query('select database() as db_name')->fetch_assoc()['db_name'] ?? '';
+$hasEventsTable = $databaseName !== '' && marketing_repair_table_exists($mysqli, $databaseName, 'tblmarketing_events');
+$hasRecipientsTable = $databaseName !== '' && marketing_repair_table_exists($mysqli, $databaseName, 'tblmarketing_campaign_recipients');
+$hasEventPayloadJson = $databaseName !== '' && marketing_repair_field_exists($mysqli, $databaseName, 'tblmarketing_events', 'payload_json');
+$hasEventCampaignRecipientId = $databaseName !== '' && marketing_repair_field_exists($mysqli, $databaseName, 'tblmarketing_events', 'campaign_recipient_id');
+$reconciliationJoin = ($hasRecipientsTable && $hasEventCampaignRecipientId) ? " left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id" : '';
+$nonOrphanedReconciliationWhere = ($hasRecipientsTable && $hasEventCampaignRecipientId)
+    ? " and (e.campaign_recipient_id is null or e.campaign_recipient_id = 0 or r.id is not null)"
+    : '';
 
 $repairTargets = [
     [
@@ -244,8 +267,21 @@ $repairTargets = [
 
 $nonRepairable = [
     'title' => 'Audit-Preserved Orphaned Event Recipient Refs',
-    'count' => marketing_repair_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null"),
-    'rows' => marketing_repair_fetch_rows($mysqli, "select e.id from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null order by e.id asc"),
+    'count' => ($hasEventsTable && $hasRecipientsTable && $hasEventCampaignRecipientId)
+        ? marketing_repair_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null")
+        : 0,
+    'rows' => ($hasEventsTable && $hasRecipientsTable && $hasEventCampaignRecipientId)
+        ? marketing_repair_fetch_rows($mysqli, "select e.id from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null order by e.id asc")
+        : [],
+];
+$reconciliationSkipped = [
+    'title' => 'Reconciliation Skipped Events',
+    'count' => ($hasEventsTable && $hasEventPayloadJson)
+        ? marketing_repair_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e" . $reconciliationJoin . " where e.payload_json like '%reconciliation_skipped%'" . $nonOrphanedReconciliationWhere)
+        : 0,
+    'rows' => ($hasEventsTable && $hasEventPayloadJson)
+        ? marketing_repair_fetch_rows($mysqli, "select e.id from tblmarketing_events e" . $reconciliationJoin . " where e.payload_json like '%reconciliation_skipped%'" . $nonOrphanedReconciliationWhere . " order by e.id desc")
+        : [],
 ];
 
 echo "Mode: " . ($applyMode ? 'apply' : 'dry-run') . "\n";
@@ -265,6 +301,8 @@ unset($target);
 
 echo $nonRepairable['title'] . ': ' . (int) $nonRepairable['count'] . " (diagnostic-only; preserved audit events with no automatic relink/delete)\n";
 marketing_repair_print_samples($nonRepairable['rows']);
+echo $reconciliationSkipped['title'] . ': ' . (int) $reconciliationSkipped['count'] . " (diagnostic-only; mutation-safe telemetry where recipient mutation was intentionally skipped)\n";
+marketing_repair_print_samples($reconciliationSkipped['rows']);
 echo "Schema drift remains diagnostic-only in this patch.\n";
 echo "------------------------------\n";
 

@@ -2195,7 +2195,7 @@ check_inbound_reply_hardening() {
 }
 
 check_phase4_integrity_diagnostics() {
-  local model_helper runtime_script runtime_method dashboard_controller_load dashboard_view_title dashboard_view_note inbound_message_channel inbound_message_provider whatsapp_message_channel destructive_sql cli_guard bootstrap_guard db_prefix_guard exit_zero exit_one exit_two orphaned_warning_model orphaned_warning_runtime orphaned_reported_runtime
+  local model_helper runtime_script runtime_method dashboard_controller_load dashboard_view_title dashboard_view_note inbound_message_channel inbound_message_provider whatsapp_message_channel destructive_sql cli_guard bootstrap_guard db_prefix_guard exit_zero exit_one exit_two orphaned_warning_model orphaned_warning_runtime orphaned_reported_runtime reconciliation_model reconciliation_runtime reconciliation_runtime_warning reconciliation_exclusion runtime_exclusion
   model_helper="$(first_match 'class[[:space:]]+Marketing_integrity_model' "$INTEGRITY_MODEL_FILE")"
   runtime_script="$(first_fixed_match 'Marketing Integrity Diagnostics' "$INTEGRITY_RUNTIME_FILE")"
   runtime_method="$(first_match 'function[[:space:]]+get_integrity_diagnostics' "$INTEGRITY_MODEL_FILE")"
@@ -2214,22 +2214,27 @@ check_phase4_integrity_diagnostics() {
   orphaned_warning_model="$(first_fixed_match "Audit-Preserved Orphaned Event Recipient Refs', 'warning'" "$INTEGRITY_MODEL_FILE")"
   orphaned_warning_runtime="$(first_fixed_match "'label' => 'Audit-Preserved Orphaned Event Recipient Refs'" "$INTEGRITY_RUNTIME_FILE")"
   orphaned_reported_runtime="$(first_fixed_match "'severity' => 'warning'" "$INTEGRITY_RUNTIME_FILE")"
+  reconciliation_model="$(first_fixed_match "Reconciliation Skipped Events', 'warning'" "$INTEGRITY_MODEL_FILE")"
+  reconciliation_runtime="$(first_fixed_match "'label' => 'Reconciliation Skipped Events'" "$INTEGRITY_RUNTIME_FILE")"
+  reconciliation_runtime_warning="$(first_fixed_match "'severity' => 'warning'" "$INTEGRITY_RUNTIME_FILE")"
+  reconciliation_exclusion="$(first_fixed_match "e.campaign_recipient_id = 0 OR r.id IS NOT NULL" "$INTEGRITY_MODEL_FILE")"
+  runtime_exclusion="$(first_fixed_match "e.campaign_recipient_id = 0 or r.id is not null" "$INTEGRITY_RUNTIME_FILE")"
   destructive_sql="$(grep -nE '\b(DELETE|UPDATE|INSERT|TRUNCATE|DROP|ALTER|CREATE)\b' "$INTEGRITY_RUNTIME_FILE" || true)"
 
-  if [[ -z "$model_helper" || -z "$runtime_script" || -z "$runtime_method" || -z "$dashboard_controller_load" || -z "$dashboard_view_title" || -z "$dashboard_view_note" || -z "$inbound_message_channel" || -z "$inbound_message_provider" || -z "$whatsapp_message_channel" || -z "$cli_guard" || -z "$bootstrap_guard" || -z "$db_prefix_guard" || -z "$exit_zero" || -z "$exit_one" || -z "$exit_two" || -z "$orphaned_warning_model" || -z "$orphaned_warning_runtime" || -z "$orphaned_reported_runtime" || -n "$destructive_sql" ]]; then
+  if [[ -z "$model_helper" || -z "$runtime_script" || -z "$runtime_method" || -z "$dashboard_controller_load" || -z "$dashboard_view_title" || -z "$dashboard_view_note" || -z "$inbound_message_channel" || -z "$inbound_message_provider" || -z "$whatsapp_message_channel" || -z "$cli_guard" || -z "$bootstrap_guard" || -z "$db_prefix_guard" || -z "$exit_zero" || -z "$exit_one" || -z "$exit_two" || -z "$orphaned_warning_model" || -z "$orphaned_warning_runtime" || -z "$orphaned_reported_runtime" || -z "$reconciliation_model" || -z "$reconciliation_runtime" || -z "$reconciliation_runtime_warning" || -z "$reconciliation_exclusion" || -z "$runtime_exclusion" || -n "$destructive_sql" ]]; then
     fail \
       "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
-      "expected integrity model/runtime script/dashboard wiring, safe CLI bootstrap/db_prefix/exit handling, warning-only orphaned audit refs, plus inbound email message channel metadata and preserved WhatsApp markers; model=${model_helper:-missing}; runtime=${runtime_script:-missing}; method=${runtime_method:-missing}; controller=${dashboard_controller_load:-missing}; title=${dashboard_view_title:-missing}; note=${dashboard_view_note:-missing}; cli=${cli_guard:-missing}; basepath=${bootstrap_guard:-missing}; db_prefix=${db_prefix_guard:-missing}; exit0=${exit_zero:-missing}; exit2=${exit_one:-missing}; exit_final=${exit_two:-missing}; orphaned_model=${orphaned_warning_model:-missing}; orphaned_runtime=${orphaned_warning_runtime:-missing}; orphaned_severity=${orphaned_reported_runtime:-missing}; inbound_channel=${inbound_message_channel:-missing}; inbound_provider=${inbound_message_provider:-missing}; whatsapp_channel=${whatsapp_message_channel:-missing}; destructive=${destructive_sql:-none}"
+      "expected integrity model/runtime script/dashboard wiring, safe CLI bootstrap/db_prefix/exit handling, warning-only orphaned audit refs, warning-only reconciliation skipped diagnostics excluding orphaned recipient refs, plus inbound email message channel metadata and preserved WhatsApp markers; model=${model_helper:-missing}; runtime=${runtime_script:-missing}; method=${runtime_method:-missing}; controller=${dashboard_controller_load:-missing}; title=${dashboard_view_title:-missing}; note=${dashboard_view_note:-missing}; cli=${cli_guard:-missing}; basepath=${bootstrap_guard:-missing}; db_prefix=${db_prefix_guard:-missing}; exit0=${exit_zero:-missing}; exit2=${exit_one:-missing}; exit_final=${exit_two:-missing}; orphaned_model=${orphaned_warning_model:-missing}; orphaned_runtime=${orphaned_warning_runtime:-missing}; orphaned_severity=${orphaned_reported_runtime:-missing}; reconciliation_model=${reconciliation_model:-missing}; reconciliation_runtime=${reconciliation_runtime:-missing}; reconciliation_runtime_warning=${reconciliation_runtime_warning:-missing}; reconciliation_exclusion=${reconciliation_exclusion:-missing}; runtime_exclusion=${runtime_exclusion:-missing}; inbound_channel=${inbound_message_channel:-missing}; inbound_provider=${inbound_message_provider:-missing}; whatsapp_channel=${whatsapp_message_channel:-missing}; destructive=${destructive_sql:-none}"
     return
   fi
 
   pass \
     "phase 4 integrity diagnostics remain read-only, reusable, and dashboard-visible" \
-    "model=$model_helper | runtime=$runtime_script | orphaned=$orphaned_warning_model | cli=$cli_guard | db_prefix=$db_prefix_guard | dashboard=$dashboard_view_title"
+    "model=$model_helper | runtime=$runtime_script | orphaned=$orphaned_warning_model | reconciliation=$reconciliation_model | cli=$cli_guard"
 }
 
 check_phase4_integrity_repair() {
-  local repair_script repair_cli_guard repair_bootstrap_guard repair_db_prefix_guard repair_help repair_apply repair_dry_run repair_exit_dry repair_exit_bootstrap repair_exit_apply repair_orphaned_note dashboard_repair_note dashboard_repair_apply forbidden_sql validator_runtime
+  local repair_script repair_cli_guard repair_bootstrap_guard repair_db_prefix_guard repair_help repair_apply repair_dry_run repair_exit_dry repair_exit_bootstrap repair_exit_apply repair_orphaned_note repair_reconciliation_note repair_reconciliation_exclusion dashboard_repair_note dashboard_repair_apply forbidden_sql validator_runtime
   repair_script="$(first_fixed_match 'Marketing Integrity Repair' "$INTEGRITY_REPAIR_FILE")"
   repair_cli_guard="$(first_fixed_match "PHP_SAPI !== 'cli'" "$INTEGRITY_REPAIR_FILE")"
   repair_bootstrap_guard="$(first_fixed_match "define('BASEPATH', \$crmRoot . '/system/');" "$INTEGRITY_REPAIR_FILE")"
@@ -2241,15 +2246,17 @@ check_phase4_integrity_repair() {
   repair_exit_bootstrap="$(first_fixed_match "marketing_repair_exit(2, \"Perfex CRM root not found. Run this from the deployed CRM root.\");" "$INTEGRITY_REPAIR_FILE")"
   repair_exit_apply="$(first_fixed_match "marketing_repair_exit(3, \"Apply failed while repairing: \" . \$target['title']);" "$INTEGRITY_REPAIR_FILE")"
   repair_orphaned_note="$(first_fixed_match 'preserved audit events with no automatic relink/delete' "$INTEGRITY_REPAIR_FILE")"
+  repair_reconciliation_note="$(first_fixed_match 'mutation-safe telemetry where recipient mutation was intentionally skipped' "$INTEGRITY_REPAIR_FILE")"
+  repair_reconciliation_exclusion="$(first_fixed_match "e.campaign_recipient_id = 0 or r.id is not null" "$INTEGRITY_REPAIR_FILE")"
   dashboard_repair_note="$(first_fixed_match 'repair_phase4_integrity_runtime.php' "$DASHBOARD_VIEW_FILE")"
   dashboard_repair_apply="$(first_fixed_match 'repair_phase4_integrity_runtime.php --apply' "$DASHBOARD_VIEW_FILE")"
   validator_runtime="$(first_fixed_match 'Marketing Integrity Diagnostics' "$INTEGRITY_RUNTIME_FILE")"
   forbidden_sql="$(grep -nE '\b(DELETE|TRUNCATE|DROP|ALTER|CREATE)\b' "$INTEGRITY_REPAIR_FILE" || true)"
 
-  if [[ -z "$repair_script" || -z "$repair_cli_guard" || -z "$repair_bootstrap_guard" || -z "$repair_db_prefix_guard" || -z "$repair_help" || -z "$repair_apply" || -z "$repair_dry_run" || -z "$repair_exit_dry" || -z "$repair_exit_bootstrap" || -z "$repair_exit_apply" || -z "$repair_orphaned_note" || -z "$dashboard_repair_note" || -z "$dashboard_repair_apply" || -z "$validator_runtime" || -n "$forbidden_sql" ]]; then
+  if [[ -z "$repair_script" || -z "$repair_cli_guard" || -z "$repair_bootstrap_guard" || -z "$repair_db_prefix_guard" || -z "$repair_help" || -z "$repair_apply" || -z "$repair_dry_run" || -z "$repair_exit_dry" || -z "$repair_exit_bootstrap" || -z "$repair_exit_apply" || -z "$repair_orphaned_note" || -z "$repair_reconciliation_note" || -z "$repair_reconciliation_exclusion" || -z "$dashboard_repair_note" || -z "$dashboard_repair_apply" || -z "$validator_runtime" || -n "$forbidden_sql" ]]; then
     fail \
       "phase 4 integrity repair remains explicit, CLI-only, and non-destructive" \
-      "expected repair runtime script with CLI bootstrap, db_prefix fallback, dry-run default, apply-only writes, explicit exit handling, orphaned-event diagnostic note, dashboard repair commands, and preserved read-only validator; script=${repair_script:-missing}; cli=${repair_cli_guard:-missing}; basepath=${repair_bootstrap_guard:-missing}; db_prefix=${repair_db_prefix_guard:-missing}; help=${repair_help:-missing}; apply=${repair_apply:-missing}; dry_run=${repair_dry_run:-missing}; exit1=${repair_exit_dry:-missing}; exit2=${repair_exit_bootstrap:-missing}; exit3=${repair_exit_apply:-missing}; orphaned=${repair_orphaned_note:-missing}; dashboard=${dashboard_repair_note:-missing}; dashboard_apply=${dashboard_repair_apply:-missing}; validator=${validator_runtime:-missing}; forbidden=${forbidden_sql:-none}"
+      "expected repair runtime script with CLI bootstrap, db_prefix fallback, dry-run default, apply-only writes, explicit exit handling, orphaned-event and reconciliation-skipped diagnostic notes, orphaned-exclusion parity, dashboard repair commands, and preserved read-only validator; script=${repair_script:-missing}; cli=${repair_cli_guard:-missing}; basepath=${repair_bootstrap_guard:-missing}; db_prefix=${repair_db_prefix_guard:-missing}; help=${repair_help:-missing}; apply=${repair_apply:-missing}; dry_run=${repair_dry_run:-missing}; exit1=${repair_exit_dry:-missing}; exit2=${repair_exit_bootstrap:-missing}; exit3=${repair_exit_apply:-missing}; orphaned=${repair_orphaned_note:-missing}; reconciliation=${repair_reconciliation_note:-missing}; reconciliation_exclusion=${repair_reconciliation_exclusion:-missing}; dashboard=${dashboard_repair_note:-missing}; dashboard_apply=${dashboard_repair_apply:-missing}; validator=${validator_runtime:-missing}; forbidden=${forbidden_sql:-none}"
     return
   fi
 

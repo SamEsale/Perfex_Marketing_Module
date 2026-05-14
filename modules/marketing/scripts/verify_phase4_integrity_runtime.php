@@ -149,6 +149,20 @@ function marketing_fetch_rows($mysqli, $sql, $limit = 5)
     return $result->fetch_all(MYSQLI_ASSOC);
 }
 
+function marketing_table_exists($mysqli, $databaseName, $tableName)
+{
+    $sql = "select count(*) as total from information_schema.tables where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and table_name='" . $mysqli->real_escape_string($tableName) . "'";
+
+    return marketing_fetch_count($mysqli, $sql) > 0;
+}
+
+function marketing_field_exists($mysqli, $databaseName, $tableName, $columnName)
+{
+    $sql = "select count(*) as total from information_schema.columns where table_schema='" . $mysqli->real_escape_string($databaseName) . "' and table_name='" . $mysqli->real_escape_string($tableName) . "' and column_name='" . $mysqli->real_escape_string($columnName) . "'";
+
+    return marketing_fetch_count($mysqli, $sql) > 0;
+}
+
 function marketing_print_section($label, $severity, $count, array $rows = [])
 {
     printf("[%s] %s: %d\n", strtoupper($severity), $label, (int) $count);
@@ -187,12 +201,34 @@ if ($crmRoot === null) {
 [$mysqli, $databaseName] = marketing_connect_db($crmRoot);
 
 $categories = [];
+$hasEventsTable = marketing_table_exists($mysqli, $databaseName, 'tblmarketing_events');
+$hasRecipientsTable = marketing_table_exists($mysqli, $databaseName, 'tblmarketing_campaign_recipients');
+$hasEventPayloadJson = marketing_field_exists($mysqli, $databaseName, 'tblmarketing_events', 'payload_json');
+$hasEventCampaignRecipientId = marketing_field_exists($mysqli, $databaseName, 'tblmarketing_events', 'campaign_recipient_id');
+$reconciliationJoin = ($hasRecipientsTable && $hasEventCampaignRecipientId) ? " left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id" : '';
+$nonOrphanedReconciliationWhere = ($hasRecipientsTable && $hasEventCampaignRecipientId)
+    ? " and (e.campaign_recipient_id is null or e.campaign_recipient_id = 0 or r.id is not null)"
+    : '';
 
 $categories[] = [
     'label' => 'Audit-Preserved Orphaned Event Recipient Refs',
     'severity' => 'warning',
-    'count' => marketing_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null"),
-    'rows' => marketing_fetch_rows($mysqli, "select e.id, e.campaign_recipient_id from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null order by e.id asc"),
+    'count' => ($hasEventsTable && $hasRecipientsTable && $hasEventCampaignRecipientId)
+        ? marketing_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null")
+        : 0,
+    'rows' => ($hasEventsTable && $hasRecipientsTable && $hasEventCampaignRecipientId)
+        ? marketing_fetch_rows($mysqli, "select e.id, e.campaign_recipient_id from tblmarketing_events e left join tblmarketing_campaign_recipients r on r.id = e.campaign_recipient_id where e.campaign_recipient_id is not null and r.id is null order by e.id asc")
+        : [],
+];
+$categories[] = [
+    'label' => 'Reconciliation Skipped Events',
+    'severity' => 'warning',
+    'count' => ($hasEventsTable && $hasEventPayloadJson)
+        ? marketing_fetch_count($mysqli, "select count(*) as total from tblmarketing_events e" . $reconciliationJoin . " where e.payload_json like '%reconciliation_skipped%'" . $nonOrphanedReconciliationWhere)
+        : 0,
+    'rows' => ($hasEventsTable && $hasEventPayloadJson)
+        ? marketing_fetch_rows($mysqli, "select e.id, e.provider_message_id from tblmarketing_events e" . $reconciliationJoin . " where e.payload_json like '%reconciliation_skipped%'" . $nonOrphanedReconciliationWhere . " order by e.id desc")
+        : [],
 ];
 $categories[] = [
     'label' => 'Invalid Recipient Status Values',

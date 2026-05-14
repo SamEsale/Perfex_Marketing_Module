@@ -171,9 +171,12 @@ class Marketing_integrity_model extends App_Model
             return $this->category('reconciliation_skipped_events', 'Reconciliation Skipped Events', 'warning', 0);
         }
 
-        $where = " FROM {$this->eventsTable} WHERE payload_json LIKE '%reconciliation_skipped%'";
+        $where = " FROM {$this->eventsTable} e";
+        $where .= $this->build_reconciliation_skipped_join_clause();
+        $where .= " WHERE e.payload_json LIKE '%reconciliation_skipped%'";
+        $where .= $this->build_non_orphaned_reconciliation_skipped_where_clause();
         $count = $this->fetch_count('SELECT COUNT(*) AS total' . $where);
-        $rows = $this->fetch_rows('SELECT id, event_type, provider, provider_message_id, event_at, payload_json' . $where . ' ORDER BY id DESC', $sampleLimit);
+        $rows = $this->fetch_rows('SELECT e.id, e.event_type, e.provider, e.provider_message_id, e.event_at, e.payload_json' . $where . ' ORDER BY e.id DESC', $sampleLimit);
         $samples = [];
         $reasonCounts = [];
 
@@ -200,7 +203,26 @@ class Marketing_integrity_model extends App_Model
 
         return $this->category('reconciliation_skipped_events', 'Reconciliation Skipped Events', 'warning', $count, $samples, [
             'reasons' => array_slice($reasonCounts, 0, $sampleLimit, true),
+            'policy' => 'mutation_safe_provider_telemetry_with_non_orphaned_recipient_identity',
         ]);
+    }
+
+    protected function build_reconciliation_skipped_join_clause()
+    {
+        if (!$this->table_exists($this->recipientsTable) || !$this->field_exists($this->eventsTable, 'campaign_recipient_id')) {
+            return '';
+        }
+
+        return " LEFT JOIN {$this->recipientsTable} r ON r.id = e.campaign_recipient_id";
+    }
+
+    protected function build_non_orphaned_reconciliation_skipped_where_clause()
+    {
+        if (!$this->table_exists($this->recipientsTable) || !$this->field_exists($this->eventsTable, 'campaign_recipient_id')) {
+            return '';
+        }
+
+        return " AND (e.campaign_recipient_id IS NULL OR e.campaign_recipient_id = 0 OR r.id IS NOT NULL)";
     }
 
     protected function check_recovered_failed_recipient_events($sampleLimit)
