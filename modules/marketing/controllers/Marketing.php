@@ -128,6 +128,33 @@ class Marketing extends AdminController
         redirect(admin_url('marketing'));
     }
 
+    public function mark_whatsapp_conversation_read()
+    {
+        if (staff_cant('settings', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $conversationId = (int) $this->input->post('conversation_id', true);
+        if ($conversationId <= 0) {
+            set_alert('warning', _l('marketing_dashboard_whatsapp_mark_read_invalid'));
+            redirect(admin_url('marketing'));
+        }
+
+        $result = $this->marketing_conversations_model->mark_whatsapp_conversation_read($conversationId);
+        if (!empty($result['success'])) {
+            set_alert('success', sprintf(_l('marketing_dashboard_whatsapp_mark_read_success'), $conversationId));
+        } else {
+            $message = trim((string) ($result['message'] ?? ''));
+            set_alert('warning', $message !== '' ? $message : _l('marketing_dashboard_whatsapp_mark_read_failure'));
+        }
+
+        redirect(admin_url('marketing'));
+    }
+
     protected function get_default_dashboard_data()
     {
         return [

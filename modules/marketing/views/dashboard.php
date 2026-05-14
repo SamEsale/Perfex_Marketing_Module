@@ -587,8 +587,14 @@
                                                                             <td>
                                                                                 <?php if ((int) ($conversation['unread_count'] ?? 0) > 0) { ?>
                                                                                     <span class="marketing-ops-badge"><?= (int) ($conversation['unread_count'] ?? 0); ?></span>
+                                                                                    <div class="mtop5">
+                                                                                        <?= form_open(admin_url('marketing/mark_whatsapp_conversation_read'), ['class' => 'inline-block']); ?>
+                                                                                            <input type="hidden" name="conversation_id" value="<?= (int) ($conversation['id'] ?? 0); ?>">
+                                                                                            <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_dashboard_whatsapp_mark_read_action'); ?></button>
+                                                                                        <?= form_close(); ?>
+                                                                                    </div>
                                                                                 <?php } else { ?>
-                                                                                    <span class="text-muted">0</span>
+                                                                                    <span class="text-muted"><?= _l('marketing_dashboard_whatsapp_mark_read_none'); ?></span>
                                                                                 <?php } ?>
                                                                             </td>
                                                                             <td>

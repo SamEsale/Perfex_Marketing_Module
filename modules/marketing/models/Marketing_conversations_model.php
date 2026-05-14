@@ -605,6 +605,42 @@ class Marketing_conversations_model extends App_Model
         return $this->db->update($this->conversationsTable, $this->filter_existing_columns($this->conversationsTable, $update));
     }
 
+    public function mark_whatsapp_conversation_read($conversationId)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0
+            || !$this->db->table_exists($this->conversationsTable)
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('unread_count', $this->conversationsTable)) {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp conversation unread state is unavailable.',
+            ];
+        }
+
+        $update = ['unread_count' => 0];
+        if ($this->db->field_exists('dateupdated', $this->conversationsTable)) {
+            $update['dateupdated'] = date('Y-m-d H:i:s');
+        }
+
+        $this->db->where('id', $conversationId);
+        if ($this->db->field_exists('channel', $this->conversationsTable)) {
+            $this->db->where('channel', 'whatsapp');
+        }
+        if ($this->db->field_exists('provider', $this->conversationsTable)) {
+            $this->db->where('provider', 'whatsapp_cloud');
+        }
+
+        $updated = $this->db->update($this->conversationsTable, $this->filter_existing_columns($this->conversationsTable, $update));
+
+        return [
+            'success' => (bool) $updated,
+            'conversation_id' => $conversationId,
+            'message' => $updated ? 'WhatsApp conversation marked read.' : 'WhatsApp conversation could not be marked read.',
+        ];
+    }
+
     private function touch_conversation($conversationId, array $data = [])
     {
         if (!$this->db->table_exists($this->conversationsTable)) {

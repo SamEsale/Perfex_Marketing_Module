@@ -2016,6 +2016,31 @@ check_whatsapp_manual_lead_conversion() {
     "controller=$controller_method | model=$model_convert | form=$dashboard_form"
 }
 
+check_whatsapp_mark_read_control() {
+  local controller_method controller_post_guard controller_call model_helper model_scope_channel model_scope_provider model_unread_only dashboard_form dashboard_status destructive_sql
+  controller_method="$(first_match 'function[[:space:]]+mark_whatsapp_conversation_read' "$MARKETING_CONTROLLER_FILE")"
+  controller_post_guard="$(first_fixed_match "if (!\$this->input->post()) {" "$MARKETING_CONTROLLER_FILE")"
+  controller_call="$(first_fixed_match "mark_whatsapp_conversation_read(\$conversationId)" "$MARKETING_CONTROLLER_FILE")"
+  model_helper="$(first_match 'function[[:space:]]+mark_whatsapp_conversation_read' "$CONVERSATIONS_FILE")"
+  model_scope_channel="$(first_fixed_match "\$this->db->where('channel', 'whatsapp');" "$CONVERSATIONS_FILE")"
+  model_scope_provider="$(first_fixed_match "\$this->db->where('provider', 'whatsapp_cloud');" "$CONVERSATIONS_FILE")"
+  model_unread_only="$(first_fixed_match "\$update = ['unread_count' => 0];" "$CONVERSATIONS_FILE")"
+  dashboard_form="$(first_fixed_match "form_open(admin_url('marketing/mark_whatsapp_conversation_read')" "$DASHBOARD_VIEW_FILE")"
+  dashboard_status="$(first_fixed_match "_l('marketing_dashboard_whatsapp_mark_read_none')" "$DASHBOARD_VIEW_FILE")"
+  destructive_sql="$(grep -nE -- '\\b(DELETE|TRUNCATE|DROP|ALTER|CREATE)\\b' "$MARKETING_CONTROLLER_FILE" "$CONVERSATIONS_FILE" "$DASHBOARD_VIEW_FILE" || true)"
+
+  if [[ -z "$controller_method" || -z "$controller_post_guard" || -z "$controller_call" || -z "$model_helper" || -z "$model_scope_channel" || -z "$model_scope_provider" || -z "$model_unread_only" || -z "$dashboard_form" || -z "$dashboard_status" || -n "$destructive_sql" ]]; then
+    fail \
+      "manual WhatsApp mark-read remains POST-only, scoped, and unread-only" \
+      "expected mark-read controller/model/dashboard hooks with WhatsApp channel/provider scoping, unread_count-only mutation, and no destructive SQL; method=${controller_method:-missing}; post=${controller_post_guard:-missing}; call=${controller_call:-missing}; helper=${model_helper:-missing}; channel=${model_scope_channel:-missing}; provider=${model_scope_provider:-missing}; unread=${model_unread_only:-missing}; form=${dashboard_form:-missing}; status=${dashboard_status:-missing}; destructive=${destructive_sql:-none}"
+    return
+  fi
+
+  pass \
+    "manual WhatsApp mark-read remains POST-only, scoped, and unread-only" \
+    "controller=$controller_method | helper=$model_helper | form=$dashboard_form"
+}
+
 check_no_facebook_linkedin_active_ui_or_release_docs() {
   local settings_fb settings_li dashboard_fb dashboard_li readme_fb readme_li install_fb install_li ops_fb ops_li
   settings_fb="$(first_match 'Facebook|facebook' "$SETTINGS_VIEW_FILE")"
@@ -2501,6 +2526,7 @@ check_whatsapp_inbound_conversation_metadata
 check_whatsapp_lead_conversion_deferred
 check_whatsapp_dashboard_visibility
 check_whatsapp_manual_lead_conversion
+check_whatsapp_mark_read_control
 check_no_facebook_linkedin_active_ui_or_release_docs
 check_release_validator_exists
 check_module_metadata_header
