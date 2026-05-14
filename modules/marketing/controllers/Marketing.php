@@ -135,6 +135,47 @@ class Marketing extends AdminController
         redirect(admin_url('marketing/reports'));
     }
 
+    public function whatsapp_conversation($conversationId = null)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0) {
+            show_404();
+        }
+
+        $conversation = $this->marketing_conversations_model->get_whatsapp_conversation($conversationId);
+        if (empty($conversation)) {
+            show_404();
+        }
+
+        $messages = [];
+        try {
+            $messages = $this->marketing_conversations_model->get_whatsapp_conversation_messages($conversationId, 100);
+        } catch (Throwable $exception) {
+            log_message('error', 'Marketing WhatsApp conversation messages unavailable: ' . marketing_sanitize_log_message($exception->getMessage()));
+        }
+
+        $readiness = $this->marketing_reply_leads_model->get_whatsapp_lead_conversion_readiness([
+            'conversation_lead_id' => $conversation['lead_id'] ?? null,
+            'lead_id' => $conversation['lead_id'] ?? null,
+            'email' => $conversation['email'] ?? '',
+            'normalized_phone' => $conversation['normalized_phone'] ?? '',
+            'phone' => $conversation['contact_phone'] ?? '',
+        ]);
+        $conversation['lead_conversion'] = $this->normalize_whatsapp_conversion_state($readiness, $conversation);
+        $conversation['lead_url'] = !empty($conversation['lead_id'])
+            ? admin_url('leads/index/' . (int) $conversation['lead_id'])
+            : null;
+
+        $data = [
+            'title' => _l('marketing_whatsapp_conversation_title'),
+            'conversation' => $conversation,
+            'messages' => is_array($messages) ? $messages : [],
+            'return_to' => 'marketing/whatsapp_conversation/' . $conversationId,
+        ];
+
+        $this->load->view('marketing/whatsapp_conversation', $data);
+    }
+
     public function queue_control()
     {
         if (staff_cant('settings', 'marketing')) {
@@ -182,7 +223,7 @@ class Marketing extends AdminController
         $conversationId = (int) $this->input->post('conversation_id', true);
         if ($conversationId <= 0) {
             set_alert('warning', _l('marketing_dashboard_whatsapp_convert_invalid'));
-            redirect(admin_url('marketing'));
+            redirect($this->get_safe_marketing_redirect());
         }
 
         $result = $this->marketing_reply_leads_model->convert_whatsapp_conversation_to_lead($conversationId, get_staff_user_id());
@@ -204,7 +245,7 @@ class Marketing extends AdminController
             set_alert('warning', $message);
         }
 
-        redirect(admin_url('marketing'));
+        redirect($this->get_safe_marketing_redirect());
     }
 
     public function mark_whatsapp_conversation_read()
@@ -220,7 +261,7 @@ class Marketing extends AdminController
         $conversationId = (int) $this->input->post('conversation_id', true);
         if ($conversationId <= 0) {
             set_alert('warning', _l('marketing_dashboard_whatsapp_mark_read_invalid'));
-            redirect(admin_url('marketing'));
+            redirect($this->get_safe_marketing_redirect());
         }
 
         $result = $this->marketing_conversations_model->mark_whatsapp_conversation_read($conversationId);
@@ -231,7 +272,7 @@ class Marketing extends AdminController
             set_alert('warning', $message !== '' ? $message : _l('marketing_dashboard_whatsapp_mark_read_failure'));
         }
 
-        redirect(admin_url('marketing'));
+        redirect($this->get_safe_marketing_redirect());
     }
 
     protected function get_reports_cleanup_confirmation_phrase($target)
@@ -245,6 +286,16 @@ class Marketing extends AdminController
         }
 
         return null;
+    }
+
+    protected function get_safe_marketing_redirect($fallback = 'marketing')
+    {
+        $returnTo = trim((string) $this->input->post('return_to', true));
+        if ($returnTo !== '' && preg_match('#^marketing(?:/[A-Za-z0-9_/-]+)?$#', $returnTo)) {
+            return admin_url(trim($returnTo, '/'));
+        }
+
+        return admin_url($fallback);
     }
 
     protected function get_default_dashboard_data()

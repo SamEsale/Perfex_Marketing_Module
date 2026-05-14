@@ -577,6 +577,158 @@ class Marketing_conversations_model extends App_Model
         ];
     }
 
+    public function get_whatsapp_conversation($conversationId)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0
+            || !$this->db->table_exists($this->conversationsTable)
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('channel', $this->conversationsTable)
+            || !$this->db->field_exists('provider', $this->conversationsTable)) {
+            return null;
+        }
+
+        $select = [
+            'c.id',
+            ($this->db->field_exists('campaign_id', $this->conversationsTable) ? 'c.campaign_id' : 'NULL as campaign_id'),
+            ($this->db->field_exists('marketing_contact_id', $this->conversationsTable) ? 'c.marketing_contact_id' : 'NULL as marketing_contact_id'),
+            ($this->db->field_exists('lead_id', $this->conversationsTable) ? 'c.lead_id' : 'NULL as lead_id'),
+            ($this->db->field_exists('contact_phone', $this->conversationsTable) ? 'c.contact_phone' : 'NULL as contact_phone'),
+            ($this->db->field_exists('normalized_phone', $this->conversationsTable) ? 'c.normalized_phone' : 'NULL as normalized_phone'),
+            ($this->db->field_exists('email', $this->conversationsTable) ? 'c.email' : 'NULL as email'),
+            ($this->db->field_exists('provider_thread_id', $this->conversationsTable) ? 'c.provider_thread_id' : 'NULL as provider_thread_id'),
+            ($this->db->field_exists('unread_count', $this->conversationsTable) ? 'c.unread_count' : '0 as unread_count'),
+            ($this->db->field_exists('last_message_at', $this->conversationsTable) ? 'c.last_message_at' : 'NULL as last_message_at'),
+            ($this->db->field_exists('last_inbound_at', $this->conversationsTable) ? 'c.last_inbound_at' : 'NULL as last_inbound_at'),
+            ($this->db->field_exists('last_outbound_at', $this->conversationsTable) ? 'c.last_outbound_at' : 'NULL as last_outbound_at'),
+            ($this->db->field_exists('status', $this->conversationsTable) ? 'c.status' : 'NULL as status'),
+            ($this->db->field_exists('source_type', $this->conversationsTable) ? 'c.source_type' : 'NULL as source_type'),
+            ($this->db->field_exists('datecreated', $this->conversationsTable) ? 'c.datecreated' : 'NULL as datecreated'),
+            ($this->db->field_exists('dateupdated', $this->conversationsTable) ? 'c.dateupdated' : 'NULL as dateupdated'),
+            'NULL as contact_full_name',
+        ];
+
+        $canJoinContacts = $this->db->table_exists($this->contactsTable)
+            && $this->db->field_exists('marketing_contact_id', $this->conversationsTable)
+            && $this->db->field_exists('id', $this->contactsTable);
+        if ($canJoinContacts) {
+            if ($this->db->field_exists('full_name', $this->contactsTable)) {
+                $select[count($select) - 1] = 'mc.full_name as contact_full_name';
+            } elseif ($this->db->field_exists('first_name', $this->contactsTable) && $this->db->field_exists('last_name', $this->contactsTable)) {
+                $select[count($select) - 1] = "TRIM(CONCAT(COALESCE(mc.first_name, ''), ' ', COALESCE(mc.last_name, ''))) as contact_full_name";
+            }
+        }
+
+        $this->db->select(implode(', ', $select), false);
+        $this->db->from($this->conversationsTable . ' c');
+        if ($canJoinContacts) {
+            $this->db->join($this->contactsTable . ' mc', 'mc.id = c.marketing_contact_id', 'left');
+        }
+        $this->db->where('c.id', $conversationId);
+        $this->db->where('c.channel', 'whatsapp');
+        $this->db->where('c.provider', 'whatsapp_cloud');
+
+        $row = $this->db->limit(1)->get()->row_array();
+        if (empty($row)) {
+            return null;
+        }
+
+        return [
+            'id' => (int) ($row['id'] ?? 0),
+            'campaign_id' => !empty($row['campaign_id']) ? (int) $row['campaign_id'] : null,
+            'marketing_contact_id' => !empty($row['marketing_contact_id']) ? (int) $row['marketing_contact_id'] : null,
+            'lead_id' => !empty($row['lead_id']) ? (int) $row['lead_id'] : null,
+            'contact_name' => trim((string) ($row['contact_full_name'] ?? '')),
+            'contact_phone' => trim((string) ($row['contact_phone'] ?? '')),
+            'normalized_phone' => trim((string) ($row['normalized_phone'] ?? '')),
+            'email' => trim((string) ($row['email'] ?? '')),
+            'provider_thread_id' => trim((string) ($row['provider_thread_id'] ?? '')),
+            'unread_count' => max(0, (int) ($row['unread_count'] ?? 0)),
+            'last_activity_at' => trim((string) ($row['last_message_at'] ?? ($row['dateupdated'] ?? ''))),
+            'last_inbound_at' => trim((string) ($row['last_inbound_at'] ?? '')),
+            'last_outbound_at' => trim((string) ($row['last_outbound_at'] ?? '')),
+            'status' => trim((string) ($row['status'] ?? 'open')),
+            'source_type' => trim((string) ($row['source_type'] ?? '')),
+            'datecreated' => trim((string) ($row['datecreated'] ?? '')),
+            'dateupdated' => trim((string) ($row['dateupdated'] ?? '')),
+            'channel' => 'whatsapp',
+            'provider' => 'whatsapp_cloud',
+            'preview' => $this->get_latest_inbound_message_preview($conversationId),
+        ];
+    }
+
+    public function get_whatsapp_conversation_messages($conversationId, $limit = 100)
+    {
+        $conversationId = (int) $conversationId;
+        $limit = max(1, min(200, (int) $limit));
+        if ($conversationId <= 0
+            || !$this->tables_available()
+            || !$this->db->field_exists('conversation_id', $this->messagesTable)) {
+            return [];
+        }
+
+        $select = [
+            ($this->db->field_exists('id', $this->messagesTable) ? 'm.id' : 'NULL as id'),
+            ($this->db->field_exists('direction', $this->messagesTable) ? 'm.direction' : 'NULL as direction'),
+            ($this->db->field_exists('message_type', $this->messagesTable) ? 'm.message_type' : 'NULL as message_type'),
+            ($this->db->field_exists('provider_message_id', $this->messagesTable) ? 'm.provider_message_id' : 'NULL as provider_message_id'),
+            ($this->db->field_exists('provider_thread_id', $this->messagesTable) ? 'm.provider_thread_id' : 'NULL as provider_thread_id'),
+            ($this->db->field_exists('provider_status', $this->messagesTable) ? 'm.provider_status' : 'NULL as provider_status'),
+            ($this->db->field_exists('context_provider_message_id', $this->messagesTable) ? 'm.context_provider_message_id' : 'NULL as context_provider_message_id'),
+            ($this->db->field_exists('body_text', $this->messagesTable) ? 'm.body_text' : 'NULL as body_text'),
+            ($this->db->field_exists('body', $this->messagesTable) ? 'm.body' : 'NULL as body'),
+            ($this->db->field_exists('message', $this->messagesTable) ? 'm.message' : 'NULL as message'),
+            ($this->db->field_exists('media_meta_json', $this->messagesTable) ? 'm.media_meta_json' : 'NULL as media_meta_json'),
+            ($this->db->field_exists('datecreated', $this->messagesTable) ? 'm.datecreated' : 'NULL as datecreated'),
+        ];
+
+        $this->db->select(implode(', ', $select), false);
+        $this->db->from($this->messagesTable . ' m');
+        $this->db->join($this->conversationsTable . ' c', 'c.id = m.conversation_id', 'inner');
+        $this->db->where('m.conversation_id', $conversationId);
+        if ($this->db->field_exists('channel', $this->messagesTable)) {
+            $this->db->where('m.channel', 'whatsapp');
+        }
+        if ($this->db->field_exists('provider', $this->messagesTable)) {
+            $this->db->where('m.provider', 'whatsapp_cloud');
+        }
+        $this->db->where('c.channel', 'whatsapp');
+        $this->db->where('c.provider', 'whatsapp_cloud');
+        if ($this->db->field_exists('datecreated', $this->messagesTable)) {
+            $this->db->order_by('m.datecreated', 'ASC');
+        } elseif ($this->db->field_exists('id', $this->messagesTable)) {
+            $this->db->order_by('m.id', 'ASC');
+        }
+
+        $rows = $this->db->limit($limit)->get()->result_array();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $messages = [];
+        foreach ($rows as $row) {
+            $bodyText = trim((string) ($row['body_text'] ?? ''));
+            if ($bodyText === '') {
+                $bodyText = trim((string) ($row['body'] ?? ($row['message'] ?? '')));
+            }
+
+            $messages[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'direction' => trim((string) ($row['direction'] ?? 'inbound')),
+                'message_type' => trim((string) ($row['message_type'] ?? '')),
+                'provider_message_id' => trim((string) ($row['provider_message_id'] ?? '')),
+                'provider_thread_id' => trim((string) ($row['provider_thread_id'] ?? '')),
+                'provider_status' => trim((string) ($row['provider_status'] ?? '')),
+                'context_provider_message_id' => trim((string) ($row['context_provider_message_id'] ?? '')),
+                'body_text' => $bodyText,
+                'datecreated' => trim((string) ($row['datecreated'] ?? '')),
+                'media_summary' => $this->summarize_media_meta_json($row['media_meta_json'] ?? null),
+            ];
+        }
+
+        return $messages;
+    }
+
     public function set_conversation_lead_id($conversationId, $leadId)
     {
         $conversationId = (int) $conversationId;
@@ -756,6 +908,38 @@ class Marketing_conversations_model extends App_Model
         }
 
         return mb_substr(preg_replace('/\s+/', ' ', $body), 0, 180);
+    }
+
+    private function summarize_media_meta_json($value)
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return '';
+        }
+
+        $decoded = json_decode($value, true);
+        if (!is_array($decoded)) {
+            return 'Media attached';
+        }
+
+        $type = trim((string) ($decoded['type'] ?? ''));
+        $mimeType = trim((string) ($decoded['mime_type'] ?? ''));
+        $filename = trim((string) ($decoded['filename'] ?? ''));
+
+        $parts = [];
+        if ($type !== '') {
+            $parts[] = ucfirst(str_replace('_', ' ', $type));
+        } else {
+            $parts[] = 'Media';
+        }
+        if ($filename !== '') {
+            $parts[] = $filename;
+        } elseif ($mimeType !== '') {
+            $parts[] = $mimeType;
+        }
+
+        return implode(' · ', array_filter($parts, static function ($part) {
+            return trim((string) $part) !== '';
+        }));
     }
 
     private function filter_existing_columns($table, array $data)

@@ -742,11 +742,12 @@
                                                                         $preview = $preview !== '' ? mb_substr($preview, 0, 120) : _l('marketing_dashboard_whatsapp_preview_empty');
                                                                         $leadConversion = isset($conversation['lead_conversion']) && is_array($conversation['lead_conversion']) ? $conversation['lead_conversion'] : [];
                                                                         $conversionLabel = trim((string) ($leadConversion['label'] ?? _l('marketing_dashboard_whatsapp_convert_unavailable')));
+                                                                        $conversationUrl = admin_url('marketing/whatsapp_conversation/' . (int) ($conversation['id'] ?? 0));
                                                                         ?>
                                                                         <tr>
-                                                                            <td>#<?= (int) ($conversation['id'] ?? 0); ?></td>
+                                                                            <td><a href="<?= html_escape($conversationUrl); ?>">#<?= (int) ($conversation['id'] ?? 0); ?></a></td>
                                                                             <td>
-                                                                                <strong><?= html_escape($contactLabel); ?></strong>
+                                                                                <strong><a href="<?= html_escape($conversationUrl); ?>"><?= html_escape($contactLabel); ?></a></strong>
                                                                                 <?php if ($contactName !== '' && $contactPhone !== '') { ?>
                                                                                     <br><small><?= html_escape($contactPhone); ?></small>
                                                                                 <?php } ?>
@@ -776,8 +777,8 @@
                                                                                     <span class="text-muted"><?= html_escape($conversionLabel); ?></span>
                                                                                 <?php } ?>
                                                                             </td>
-                                                                            <td><?= html_escape($preview); ?></td>
-                                                                            <td><?= !empty($conversation['last_activity_at']) ? html_escape((string) $conversation['last_activity_at']) : '-'; ?></td>
+                                                                            <td><a href="<?= html_escape($conversationUrl); ?>"><?= html_escape($preview); ?></a></td>
+                                                                            <td><a href="<?= html_escape($conversationUrl); ?>"><?= !empty($conversation['last_activity_at']) ? html_escape((string) $conversation['last_activity_at']) : '-'; ?></a></td>
                                                                         </tr>
                                                                     <?php } ?>
                                                                 </tbody>
