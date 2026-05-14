@@ -27,6 +27,9 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
         align-items: flex-start;
         gap: 18px;
     }
+    .marketing-whatsapp-head-copy {
+        max-width: 760px;
+    }
     .marketing-whatsapp-copy {
         margin: 8px 0 0;
         color: #64748b;
@@ -48,6 +51,58 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
         color: #0f172a;
         font-size: 12px;
         font-weight: 600;
+    }
+    .marketing-whatsapp-badge.is-channel {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+    .marketing-whatsapp-badge.is-provider {
+        background: #e2e8f0;
+        color: #334155;
+    }
+    .marketing-whatsapp-badge.is-unread {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .marketing-whatsapp-badge.is-linked {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .marketing-whatsapp-overview-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 20px;
+    }
+    .marketing-whatsapp-overview-metric {
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 16px 18px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+    }
+    .marketing-whatsapp-overview-label {
+        display: block;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .marketing-whatsapp-overview-value {
+        display: block;
+        margin-top: 8px;
+        color: #0f172a;
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .marketing-whatsapp-overview-helper {
+        display: block;
+        margin-top: 8px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.5;
     }
     .marketing-whatsapp-grid {
         display: grid;
@@ -104,10 +159,36 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
     .marketing-whatsapp-action-row form {
         margin: 0;
     }
+    .marketing-whatsapp-action-note {
+        margin-top: 12px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.6;
+    }
     .marketing-whatsapp-timeline {
         display: grid;
         gap: 14px;
         margin-top: 14px;
+    }
+    .marketing-whatsapp-timeline-row {
+        display: grid;
+        gap: 6px;
+    }
+    .marketing-whatsapp-timeline-row.inbound {
+        justify-items: start;
+    }
+    .marketing-whatsapp-timeline-row.outbound {
+        justify-items: end;
+    }
+    .marketing-whatsapp-timeline-caption {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
     .marketing-whatsapp-message {
         max-width: 78%;
@@ -125,6 +206,23 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
         justify-self: end;
         background: #e8fff4;
         border-color: #b7e4c7;
+    }
+    .marketing-whatsapp-direction-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+    }
+    .marketing-whatsapp-direction-pill.inbound {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+    .marketing-whatsapp-direction-pill.outbound {
+        background: #dcfce7;
+        color: #166534;
     }
     .marketing-whatsapp-message-meta {
         display: flex;
@@ -161,7 +259,21 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
         font-size: 12px;
         font-weight: 600;
     }
+    .marketing-whatsapp-linked-lead {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #166534;
+        font-weight: 700;
+    }
     @media (max-width: 991px) {
+        .marketing-whatsapp-overview-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         .marketing-whatsapp-grid {
             grid-template-columns: 1fr;
         }
@@ -173,6 +285,9 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
         }
         .marketing-whatsapp-message {
             max-width: 100%;
+        }
+        .marketing-whatsapp-overview-grid {
+            grid-template-columns: 1fr;
         }
         .marketing-whatsapp-summary-row {
             flex-direction: column;
@@ -189,20 +304,49 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
                 <div class="panel_s marketing-whatsapp-shell">
                     <div class="panel-body marketing-whatsapp-body">
                         <div class="marketing-whatsapp-head">
-                            <div>
+                            <div class="marketing-whatsapp-head-copy">
                                 <h4 class="no-margin"><?= _l('marketing_whatsapp_conversation_title'); ?></h4>
                                 <p class="marketing-whatsapp-copy"><?= _l('marketing_whatsapp_conversation_note'); ?></p>
                                 <div class="marketing-whatsapp-badges">
-                                    <span class="marketing-whatsapp-badge"><?= _l('marketing_channel'); ?>: <?= html_escape((string) ($conversation['channel'] ?? 'whatsapp')); ?></span>
-                                    <span class="marketing-whatsapp-badge"><?= _l('marketing_provider'); ?>: <?= html_escape((string) ($conversation['provider'] ?? 'whatsapp_cloud')); ?></span>
-                                    <span class="marketing-whatsapp-badge"><?= _l('marketing_whatsapp_conversation_unread_messages'); ?>: <?= (int) ($conversation['unread_count'] ?? 0); ?></span>
+                                    <span class="marketing-whatsapp-badge is-channel"><?= _l('marketing_channel'); ?>: <?= html_escape((string) ($conversation['channel'] ?? 'whatsapp')); ?></span>
+                                    <span class="marketing-whatsapp-badge is-provider"><?= _l('marketing_provider'); ?>: <?= html_escape((string) ($conversation['provider'] ?? 'whatsapp_cloud')); ?></span>
+                                    <span class="marketing-whatsapp-badge is-unread"><?= _l('marketing_whatsapp_conversation_unread_messages'); ?>: <?= (int) ($conversation['unread_count'] ?? 0); ?></span>
                                     <?php if (!empty($conversation['lead_id'])) { ?>
-                                        <span class="marketing-whatsapp-badge"><?= _l('marketing_whatsapp_conversation_linked_lead'); ?> #<?= (int) $conversation['lead_id']; ?></span>
+                                        <span class="marketing-whatsapp-badge is-linked"><?= _l('marketing_whatsapp_conversation_linked_lead'); ?> #<?= (int) $conversation['lead_id']; ?></span>
                                     <?php } ?>
                                 </div>
                             </div>
                             <div>
                                 <a href="<?= admin_url('marketing'); ?>" class="btn btn-default"><?= _l('marketing_whatsapp_conversation_back'); ?></a>
+                            </div>
+                        </div>
+
+                        <div class="marketing-whatsapp-overview-grid">
+                            <div class="marketing-whatsapp-overview-metric">
+                                <span class="marketing-whatsapp-overview-label"><?= _l('marketing_dashboard_whatsapp_contact'); ?></span>
+                                <span class="marketing-whatsapp-overview-value"><?= html_escape($contactLabel); ?></span>
+                                <span class="marketing-whatsapp-overview-helper"><?= _l('marketing_whatsapp_conversation_contact_helper'); ?></span>
+                            </div>
+                            <div class="marketing-whatsapp-overview-metric">
+                                <span class="marketing-whatsapp-overview-label"><?= _l('marketing_whatsapp_conversation_contact_phone'); ?></span>
+                                <span class="marketing-whatsapp-overview-value"><?= $contactPhone !== '' ? html_escape($contactPhone) : '-'; ?></span>
+                                <span class="marketing-whatsapp-overview-helper"><?= _l('marketing_whatsapp_conversation_identity_helper'); ?></span>
+                            </div>
+                            <div class="marketing-whatsapp-overview-metric">
+                                <span class="marketing-whatsapp-overview-label"><?= _l('marketing_whatsapp_conversation_last_activity'); ?></span>
+                                <span class="marketing-whatsapp-overview-value"><?= !empty($conversation['last_activity_at']) ? html_escape((string) $conversation['last_activity_at']) : '-'; ?></span>
+                                <span class="marketing-whatsapp-overview-helper"><?= _l('marketing_whatsapp_conversation_activity_helper'); ?></span>
+                            </div>
+                            <div class="marketing-whatsapp-overview-metric">
+                                <span class="marketing-whatsapp-overview-label"><?= _l('marketing_whatsapp_conversation_linked_lead'); ?></span>
+                                <span class="marketing-whatsapp-overview-value">
+                                    <?php if (!empty($conversation['lead_id'])) { ?>
+                                        #<?= (int) $conversation['lead_id']; ?>
+                                    <?php } else { ?>
+                                        <?= _l('marketing_dashboard_whatsapp_lead_unlinked'); ?>
+                                    <?php } ?>
+                                </span>
+                                <span class="marketing-whatsapp-overview-helper"><?= _l('marketing_whatsapp_conversation_lead_helper'); ?></span>
                             </div>
                         </div>
 
@@ -227,9 +371,9 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
                                             <span class="marketing-whatsapp-summary-label"><?= _l('marketing_whatsapp_conversation_linked_lead'); ?></span>
                                             <span class="marketing-whatsapp-summary-value">
                                                 <?php if (!empty($conversation['lead_id']) && $leadUrl !== '') { ?>
-                                                    <a href="<?= html_escape($leadUrl); ?>">#<?= (int) $conversation['lead_id']; ?></a>
+                                                    <a href="<?= html_escape($leadUrl); ?>" class="marketing-whatsapp-linked-lead"><?= _l('marketing_whatsapp_conversation_linked_lead'); ?> #<?= (int) $conversation['lead_id']; ?></a>
                                                 <?php } elseif (!empty($conversation['lead_id'])) { ?>
-                                                    #<?= (int) $conversation['lead_id']; ?>
+                                                    <span class="marketing-whatsapp-linked-lead"><?= _l('marketing_whatsapp_conversation_linked_lead'); ?> #<?= (int) $conversation['lead_id']; ?></span>
                                                 <?php } else { ?>
                                                     <?= _l('marketing_dashboard_whatsapp_lead_unlinked'); ?>
                                                 <?php } ?>
@@ -267,6 +411,7 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
                                             <span class="text-muted"><?= html_escape($conversionLabel); ?></span>
                                         <?php } ?>
                                     </div>
+                                    <p class="marketing-whatsapp-action-note"><?= _l('marketing_whatsapp_conversation_actions_note'); ?></p>
                                 </div>
                             </div>
 
@@ -276,7 +421,7 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
                                     <p class="marketing-whatsapp-copy"><?= _l('marketing_whatsapp_conversation_timeline_note'); ?></p>
 
                                     <?php if (empty($messages)) { ?>
-                                        <div class="marketing-whatsapp-empty mtop15"><?= _l('marketing_whatsapp_conversation_no_messages'); ?></div>
+                                        <div class="marketing-whatsapp-empty mtop15"><?= _l('marketing_whatsapp_conversation_no_messages'); ?><br /><small><?= _l('marketing_whatsapp_conversation_no_messages_note'); ?></small></div>
                                     <?php } else { ?>
                                         <div class="marketing-whatsapp-timeline">
                                             <?php foreach ($messages as $message) { ?>
@@ -289,36 +434,44 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
                                                 $providerMessageId = trim((string) ($message['provider_message_id'] ?? ''));
                                                 $mediaSummary = trim((string) ($message['media_summary'] ?? ''));
                                                 ?>
-                                                <div class="marketing-whatsapp-message <?= html_escape($directionClass); ?>">
-                                                    <div class="marketing-whatsapp-message-meta">
-                                                        <span><?= _l('marketing_whatsapp_conversation_direction'); ?>: <?= html_escape($direction !== '' ? ucfirst($direction) : 'Inbound'); ?></span>
-                                                        <?php if ($messageType !== '') { ?>
-                                                            <span><?= _l('marketing_whatsapp_conversation_message_type'); ?>: <?= html_escape($messageType); ?></span>
+                                                <div class="marketing-whatsapp-timeline-row <?= html_escape($directionClass); ?>">
+                                                    <div class="marketing-whatsapp-timeline-caption">
+                                                        <span class="marketing-whatsapp-direction-pill <?= html_escape($directionClass); ?>">
+                                                            <?= html_escape($direction !== '' ? ucfirst($direction) : 'Inbound'); ?>
+                                                        </span>
+                                                        <span><?= _l('marketing_whatsapp_conversation_direction_helper'); ?></span>
+                                                    </div>
+                                                    <div class="marketing-whatsapp-message <?= html_escape($directionClass); ?>">
+                                                        <div class="marketing-whatsapp-message-meta">
+                                                            <span><?= _l('marketing_whatsapp_conversation_direction'); ?>: <?= html_escape($direction !== '' ? ucfirst($direction) : 'Inbound'); ?></span>
+                                                            <?php if ($messageType !== '') { ?>
+                                                                <span><?= _l('marketing_whatsapp_conversation_message_type'); ?>: <?= html_escape($messageType); ?></span>
+                                                            <?php } ?>
+                                                            <?php if (!empty($message['datecreated'])) { ?>
+                                                                <span><?= html_escape((string) $message['datecreated']); ?></span>
+                                                            <?php } ?>
+                                                        </div>
+                                                        <div class="marketing-whatsapp-message-body"><?= nl2br(html_escape($bodyText)); ?></div>
+                                                        <?php if ($mediaSummary !== '') { ?>
+                                                            <div class="marketing-whatsapp-message-foot"><?= html_escape($mediaSummary); ?></div>
                                                         <?php } ?>
-                                                        <?php if (!empty($message['datecreated'])) { ?>
-                                                            <span><?= html_escape((string) $message['datecreated']); ?></span>
+                                                        <?php if ($providerMessageId !== '' || !empty($message['context_provider_message_id']) || !empty($message['provider_status'])) { ?>
+                                                            <details class="marketing-whatsapp-details">
+                                                                <summary><?= _l('marketing_whatsapp_conversation_message_meta'); ?></summary>
+                                                                <div class="marketing-whatsapp-message-foot">
+                                                                    <?php if ($providerMessageId !== '') { ?>
+                                                                        <div><?= _l('marketing_whatsapp_conversation_provider_message_id'); ?>: <code><?= html_escape($providerMessageId); ?></code></div>
+                                                                    <?php } ?>
+                                                                    <?php if (!empty($message['context_provider_message_id'])) { ?>
+                                                                        <div><?= _l('marketing_whatsapp_conversation_context_message_id'); ?>: <code><?= html_escape((string) $message['context_provider_message_id']); ?></code></div>
+                                                                    <?php } ?>
+                                                                    <?php if (!empty($message['provider_status'])) { ?>
+                                                                        <div><?= _l('marketing_status'); ?>: <?= html_escape((string) $message['provider_status']); ?></div>
+                                                                    <?php } ?>
+                                                                </div>
+                                                            </details>
                                                         <?php } ?>
                                                     </div>
-                                                    <div class="marketing-whatsapp-message-body"><?= nl2br(html_escape($bodyText)); ?></div>
-                                                    <?php if ($mediaSummary !== '') { ?>
-                                                        <div class="marketing-whatsapp-message-foot"><?= html_escape($mediaSummary); ?></div>
-                                                    <?php } ?>
-                                                    <?php if ($providerMessageId !== '' || !empty($message['context_provider_message_id']) || !empty($message['provider_status'])) { ?>
-                                                        <details class="marketing-whatsapp-details">
-                                                            <summary><?= _l('marketing_whatsapp_conversation_message_meta'); ?></summary>
-                                                            <div class="marketing-whatsapp-message-foot">
-                                                                <?php if ($providerMessageId !== '') { ?>
-                                                                    <div><?= _l('marketing_whatsapp_conversation_provider_message_id'); ?>: <code><?= html_escape($providerMessageId); ?></code></div>
-                                                                <?php } ?>
-                                                                <?php if (!empty($message['context_provider_message_id'])) { ?>
-                                                                    <div><?= _l('marketing_whatsapp_conversation_context_message_id'); ?>: <code><?= html_escape((string) $message['context_provider_message_id']); ?></code></div>
-                                                                <?php } ?>
-                                                                <?php if (!empty($message['provider_status'])) { ?>
-                                                                    <div><?= _l('marketing_status'); ?>: <?= html_escape((string) $message['provider_status']); ?></div>
-                                                                <?php } ?>
-                                                            </div>
-                                                        </details>
-                                                    <?php } ?>
                                                 </div>
                                             <?php } ?>
                                         </div>
