@@ -536,7 +536,7 @@
                             <p class="text-muted no-margin"><?= _l('marketing_no_records_yet'); ?></p>
                         <?php } else { ?>
                             <div class="table-responsive">
-                                <table class="table dt-table">
+                                <table class="table marketing-analytics-events-table">
                                     <thead>
                                         <tr>
                                             <th><?= _l('id'); ?></th>
