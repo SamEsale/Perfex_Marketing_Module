@@ -34,6 +34,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
    `bash scripts/verify_phase2_regressions.sh`
    `bash scripts/verify_release_package.sh`
 10. Review `Provider Readiness` and `Release Readiness` on the Settings page before final handoff to operators or support staff.
+11. Include `docs/PRODUCTION_CHECKLIST.md` and `docs/RELEASE_MANIFEST.md` in the final release handoff packet.
 
 ## Upgrade
 

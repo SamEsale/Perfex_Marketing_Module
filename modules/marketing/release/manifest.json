@@ -1,0 +1,67 @@
+{
+  "module_name": "Marketing",
+  "version": "1.1.0",
+  "requires_at_least": "3.2.*",
+  "package_root": "marketing/",
+  "install_path": "modules/marketing/marketing.php",
+  "active_integrations": [
+    "smtp_ses_delivery",
+    "ses_sns_webhooks",
+    "inbound_email_reply_webhook",
+    "whatsapp_business_foundation"
+  ],
+  "deferred_integrations": [
+    "facebook",
+    "linkedin",
+    "whatsapp_meta_approval"
+  ],
+  "required_docs": [
+    "README.md",
+    "INSTALLATION.md",
+    "docs/OPERATIONS.md",
+    "docs/PRODUCTION_CHECKLIST.md",
+    "docs/RELEASE_MANIFEST.md"
+  ],
+  "required_scripts": [
+    "scripts/verify_release_package.sh",
+    "scripts/verify_phase2_regressions.sh",
+    "scripts/verify_phase4_integrity_runtime.php"
+  ],
+  "validation_commands": [
+    "bash scripts/verify_release_package.sh",
+    "bash scripts/verify_phase2_regressions.sh",
+    "php modules/marketing/scripts/verify_phase4_integrity_runtime.php"
+  ],
+  "public_routes": [
+    "marketing/webhooks/ses_sns",
+    "marketing/webhooks/inbound_email",
+    "marketing/webhooks/whatsapp",
+    "marketing/track/c/{token}",
+    "marketing/unsubscribe/{token}"
+  ],
+  "csrf_exclusions": [
+    "marketing/webhooks/ses_sns",
+    "marketing/webhooks/inbound_email",
+    "marketing/webhooks/whatsapp"
+  ],
+  "lifecycle_hooks": [
+    "activation",
+    "deactivation",
+    "uninstall",
+    "app_init_csrf_registration",
+    "after_cron_run_queue_processing"
+  ],
+  "external_dependencies": [
+    "perfex_cron",
+    "email_provider_configuration",
+    "ses_sns_provider_side_configuration_when_used",
+    "inbound_email_webhook_delivery_when_used",
+    "meta_approval_and_asset_access_for_whatsapp"
+  ],
+  "security_notes": [
+    "no_secrets_included",
+    "no_perfex_core_modifications",
+    "release_docs_are_read_only_operational_guidance"
+  ],
+  "release_notes_summary": "Commercial release package with bounded analytics, provider readiness, release readiness, integrity diagnostics, and deferred Facebook/LinkedIn integrations."
+}

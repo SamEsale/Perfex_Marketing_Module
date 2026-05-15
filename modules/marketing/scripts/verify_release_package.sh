@@ -45,6 +45,9 @@ REQUIRED_FILES=(
   "README.md"
   "INSTALLATION.md"
   "docs/OPERATIONS.md"
+  "docs/PRODUCTION_CHECKLIST.md"
+  "docs/RELEASE_MANIFEST.md"
+  "release/manifest.json"
 )
 
 for relative_path in "${REQUIRED_FILES[@]}"; do
@@ -113,10 +116,12 @@ if ! grep -qF "marketing_get_option_names()" "$MODULE_DIR/uninstall.php"; then
 fi
 pass "install and uninstall option handling is centralized and idempotent" "missing options are repaired without overwriting saved values"
 
-for doc_file in "$MODULE_DIR/README.md" "$MODULE_DIR/INSTALLATION.md" "$MODULE_DIR/docs/OPERATIONS.md"; do
+for doc_file in "$MODULE_DIR/README.md" "$MODULE_DIR/INSTALLATION.md" "$MODULE_DIR/docs/OPERATIONS.md" "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md" "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; do
   if ! grep -qF 'marketing/' "$doc_file"; then
     fail "zip root expectation documentation missing" "expected marketing/ zip root reference in $(basename "$doc_file")"
   fi
+done
+for doc_file in "$MODULE_DIR/README.md" "$MODULE_DIR/INSTALLATION.md" "$MODULE_DIR/docs/OPERATIONS.md" "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md" "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; do
   if ! grep -qF 'modules/marketing/marketing.php' "$doc_file"; then
     fail "zip root expectation documentation missing" "expected installed-path reference in $(basename "$doc_file")"
   fi
@@ -127,7 +132,60 @@ fi
 if ! grep -qF 'bash scripts/verify_phase2_regressions.sh' "$MODULE_DIR/docs/OPERATIONS.md"; then
   fail "regression validation command missing from operations guide" "expected bash scripts/verify_phase2_regressions.sh in docs/OPERATIONS.md"
 fi
+for command_ref in \
+  'bash scripts/verify_release_package.sh' \
+  'bash scripts/verify_phase2_regressions.sh' \
+  'php modules/marketing/scripts/verify_phase4_integrity_runtime.php'; do
+  if ! grep -qF "$command_ref" "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+    fail "production checklist command missing" "$command_ref"
+  fi
+done
+for doc_file in "$MODULE_DIR/README.md" "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md" "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; do
+  if ! grep -Eq 'deferred|not active|inactive' "$doc_file"; then
+    fail "deferred integration statement missing" "expected deferred/inactive wording in $(basename "$doc_file")"
+  fi
+done
+if ! grep -qF 'modules/marketing/modules/marketing/marketing.php' "$MODULE_DIR/INSTALLATION.md"; then
+  fail "invalid nested module root warning missing" "expected invalid nested-root warning in INSTALLATION.md"
+fi
+if ! grep -qF 'marketing/modules/marketing/marketing.php' "$MODULE_DIR/README.md"; then
+  fail "invalid nested package root warning missing" "expected invalid nested-root warning in README.md"
+fi
+if ! grep -qF 'critical_count=0' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "runtime integrity review guidance missing" "expected critical_count=0 review guidance in docs/PRODUCTION_CHECKLIST.md"
+fi
+if ! grep -qF 'No secrets included' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "no-secrets release statement missing" "expected No secrets included in docs/PRODUCTION_CHECKLIST.md"
+fi
+if ! grep -qF 'No Perfex core modifications' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "no-core-modification release statement missing" "expected No Perfex core modifications in docs/PRODUCTION_CHECKLIST.md"
+fi
+if ! grep -qF 'No secrets included' "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; then
+  fail "no-secrets release statement missing" "expected No secrets included in docs/RELEASE_MANIFEST.md"
+fi
+if ! grep -qF 'No Perfex core modifications' "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; then
+  fail "no-core-modification release statement missing" "expected No Perfex core modifications in docs/RELEASE_MANIFEST.md"
+fi
+if ! grep -qF 'Meta approval' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "Meta approval caveat missing" "expected Meta approval caveat in docs/PRODUCTION_CHECKLIST.md"
+fi
 pass "zip root expectations documented" "docs mention marketing/ zip root, modules/marketing/marketing.php install path, and validation commands"
+
+MANIFEST_FILE="$MODULE_DIR/release/manifest.json"
+for manifest_key in \
+  '"module_name"' \
+  '"version"' \
+  '"package_root"' \
+  '"install_path"' \
+  '"active_integrations"' \
+  '"deferred_integrations"' \
+  '"validation_commands"' \
+  '"security_notes"'; do
+  if ! grep -qF "$manifest_key" "$MANIFEST_FILE"; then
+    fail "release manifest key missing" "$manifest_key"
+  fi
+done
+pass "release manifest is present and contains required distribution keys" "validated release/manifest.json keys"
 
 source_artifacts="$(find "$MODULE_DIR" \
   \( -path "$MODULE_DIR/release" -o -path "$MODULE_DIR/.git" \) -prune -o \
@@ -185,11 +243,16 @@ done
 for zip_doc in \
   "marketing/README.md" \
   "marketing/INSTALLATION.md" \
-  "marketing/docs/OPERATIONS.md"; do
+  "marketing/docs/OPERATIONS.md" \
+  "marketing/docs/PRODUCTION_CHECKLIST.md" \
+  "marketing/docs/RELEASE_MANIFEST.md"; do
   if ! printf '%s\n' "$zip_entries" | grep -qxF "$zip_doc"; then
     fail "required documentation missing from release zip" "$zip_doc"
   fi
 done
+if ! printf '%s\n' "$zip_entries" | grep -qxF "marketing/release/manifest.json"; then
+  fail "required release manifest missing from release zip" "marketing/release/manifest.json"
+fi
 
 for forbidden_pattern in \
   '^\.git/' \
@@ -207,8 +270,8 @@ for forbidden_pattern in \
   '^marketing/temp/' \
   '^marketing/cache/' \
   '^marketing/logs/' \
-  '^marketing/release/' \
   '^marketing/.*\.zip$' \
+  '^marketing/release/.*\.zip$' \
   '^marketing/\.DS_Store$' \
   '^marketing/.*\/\.DS_Store$' \
   '^marketing/\.env(\..*)?$' \

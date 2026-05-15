@@ -143,4 +143,6 @@ php modules/marketing/scripts/verify_phase4_integrity_runtime.php
 - [EULA.md](EULA.md)
 - [CHANGELOG.md](CHANGELOG.md)
 - [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md)
+- [docs/RELEASE_MANIFEST.md](docs/RELEASE_MANIFEST.md)
 - [docs/MARKETPLACE_LISTING.md](docs/MARKETPLACE_LISTING.md)

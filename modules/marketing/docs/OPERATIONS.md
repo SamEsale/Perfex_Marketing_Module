@@ -84,6 +84,15 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - Roll back by restoring the prior module ZIP and matching database backup together when a release must be reversed
 - Do not treat telemetry cleanup or report cleanup as a substitute for rollback
 
+## Handoff Documents
+
+- `README.md`
+- `INSTALLATION.md`
+- `docs/OPERATIONS.md`
+- `docs/PRODUCTION_CHECKLIST.md`
+- `docs/RELEASE_MANIFEST.md`
+- `release/manifest.json`
+
 ## Uninstall Notes
 
 - Module uninstall must not be used as a substitute for a backup

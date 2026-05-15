@@ -32,6 +32,9 @@ INTEGRITY_REPAIR_FILE="modules/marketing/scripts/repair_phase4_integrity_runtime
 README_FILE="modules/marketing/README.md"
 INSTALLATION_FILE="modules/marketing/INSTALLATION.md"
 OPERATIONS_FILE="modules/marketing/docs/OPERATIONS.md"
+PRODUCTION_CHECKLIST_FILE="modules/marketing/docs/PRODUCTION_CHECKLIST.md"
+RELEASE_MANIFEST_DOC_FILE="modules/marketing/docs/RELEASE_MANIFEST.md"
+RELEASE_MANIFEST_JSON_FILE="modules/marketing/release/manifest.json"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
 CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
@@ -2668,6 +2671,61 @@ check_release_packaging_docs_hardening() {
     "validator=$zip_root_line | docs=$ops_preflight | git_diff_mode=$git_diff_mode"
 }
 
+check_release_handoff_manifest_assets() {
+  local checklist_exists manifest_doc_exists manifest_json_exists validator_checklist validator_manifest_doc validator_manifest_json validator_manifest_keys validator_nested_root validator_meta validator_deferred validator_no_secrets validator_no_core checklist_release_cmd checklist_regression_cmd checklist_integrity_cmd checklist_zip_root checklist_nested_root checklist_meta checklist_facebook checklist_linkedin checklist_critical manifest_doc_zip_root manifest_doc_install_path manifest_doc_hooks manifest_doc_no_secrets manifest_doc_no_core manifest_doc_deferred manifest_json_module manifest_json_version manifest_json_root manifest_json_install manifest_json_active manifest_json_deferred manifest_json_commands manifest_json_security forbidden_controller forbidden_model forbidden_library forbidden_view git_diff_mode
+  checklist_exists="$(first_fixed_match '# Production Checklist' "$PRODUCTION_CHECKLIST_FILE")"
+  manifest_doc_exists="$(first_fixed_match '# Release Manifest' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_json_exists="$(first_fixed_match '"module_name": "Marketing"' "$RELEASE_MANIFEST_JSON_FILE")"
+  validator_checklist="$(first_fixed_match '"docs/PRODUCTION_CHECKLIST.md"' "$RELEASE_VALIDATOR_FILE")"
+  validator_manifest_doc="$(first_fixed_match '"docs/RELEASE_MANIFEST.md"' "$RELEASE_VALIDATOR_FILE")"
+  validator_manifest_json="$(first_fixed_match '"release/manifest.json"' "$RELEASE_VALIDATOR_FILE")"
+  validator_manifest_keys="$(first_fixed_match '"security_notes"' "$RELEASE_VALIDATOR_FILE")"
+  validator_nested_root="$(first_fixed_match 'archive must not contain marketing/modules/marketing/' "$RELEASE_VALIDATOR_FILE")"
+  validator_meta="$(first_fixed_match 'Meta approval caveat missing' "$RELEASE_VALIDATOR_FILE")"
+  validator_deferred="$(first_fixed_match 'deferred integration statement missing' "$RELEASE_VALIDATOR_FILE")"
+  validator_no_secrets="$(first_fixed_match 'no-secrets release statement missing' "$RELEASE_VALIDATOR_FILE")"
+  validator_no_core="$(first_fixed_match 'no-core-modification release statement missing' "$RELEASE_VALIDATOR_FILE")"
+  checklist_release_cmd="$(first_fixed_match 'bash scripts/verify_release_package.sh' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_regression_cmd="$(first_fixed_match 'bash scripts/verify_phase2_regressions.sh' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_integrity_cmd="$(first_fixed_match 'php modules/marketing/scripts/verify_phase4_integrity_runtime.php' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_zip_root="$(first_fixed_match 'ZIP root must be exactly `marketing/`' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_nested_root="$(first_fixed_match 'modules/marketing/modules/marketing/marketing.php` is invalid' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_meta="$(first_fixed_match 'Meta approval' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_facebook="$(first_fixed_match 'Facebook and LinkedIn are deferred / inactive' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_linkedin="$checklist_facebook"
+  checklist_critical="$(first_fixed_match 'critical_count=0' "$PRODUCTION_CHECKLIST_FILE")"
+  manifest_doc_zip_root="$(first_fixed_match 'ZIP package root must be `marketing/`' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_doc_install_path="$(first_fixed_match 'modules/marketing/marketing.php' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_doc_hooks="$(first_fixed_match 'Lifecycle Hooks' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_doc_no_secrets="$(first_fixed_match 'No secrets included' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_doc_no_core="$(first_fixed_match 'No Perfex core modifications' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_doc_deferred="$(first_fixed_match 'deferred / inactive' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_json_module="$(first_fixed_match '"module_name"' "$RELEASE_MANIFEST_JSON_FILE")"
+  manifest_json_version="$(first_fixed_match '"version"' "$RELEASE_MANIFEST_JSON_FILE")"
+  manifest_json_root="$(first_fixed_match '"package_root"' "$RELEASE_MANIFEST_JSON_FILE")"
+  manifest_json_install="$(first_fixed_match '"install_path"' "$RELEASE_MANIFEST_JSON_FILE")"
+  manifest_json_active="$(first_fixed_match '"active_integrations"' "$RELEASE_MANIFEST_JSON_FILE")"
+  manifest_json_deferred="$(first_fixed_match '"deferred_integrations"' "$RELEASE_MANIFEST_JSON_FILE")"
+  manifest_json_commands="$(first_fixed_match '"validation_commands"' "$RELEASE_MANIFEST_JSON_FILE")"
+  manifest_json_security="$(first_fixed_match '"security_notes"' "$RELEASE_MANIFEST_JSON_FILE")"
+  forbidden_controller="$(git_changed_path_if_available modules/marketing/controllers/Settings.php)"
+  forbidden_model="$(git_changed_path_if_available modules/marketing/models/Marketing_dashboard_model.php)"
+  forbidden_library="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
+  forbidden_view="$(git_changed_path_if_available modules/marketing/views/settings/index.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$checklist_exists" || -z "$manifest_doc_exists" || -z "$manifest_json_exists" || -z "$validator_checklist" || -z "$validator_manifest_doc" || -z "$validator_manifest_json" || -z "$validator_manifest_keys" || -z "$validator_nested_root" || -z "$validator_meta" || -z "$validator_deferred" || -z "$validator_no_secrets" || -z "$validator_no_core" || -z "$checklist_release_cmd" || -z "$checklist_regression_cmd" || -z "$checklist_integrity_cmd" || -z "$checklist_zip_root" || -z "$checklist_nested_root" || -z "$checklist_meta" || -z "$checklist_facebook" || -z "$checklist_linkedin" || -z "$checklist_critical" || -z "$manifest_doc_zip_root" || -z "$manifest_doc_install_path" || -z "$manifest_doc_hooks" || -z "$manifest_doc_no_secrets" || -z "$manifest_doc_no_core" || -z "$manifest_doc_deferred" || -z "$manifest_json_module" || -z "$manifest_json_version" || -z "$manifest_json_root" || -z "$manifest_json_install" || -z "$manifest_json_active" || -z "$manifest_json_deferred" || -z "$manifest_json_commands" || -z "$manifest_json_security" || -n "$forbidden_controller" || -n "$forbidden_model" || -n "$forbidden_library" || -n "$forbidden_view" ]]; then
+    fail \
+      "production checklist and release manifests harden release handoff without runtime PHP changes" \
+      "expected checklist/doc/json manifest assets, release validator enforcement, required commands, marketing/ root and invalid nested-root warnings, Meta approval caveat, deferred Facebook/LinkedIn statement, no-secrets and no-core-modifications statements, and no runtime PHP diffs; checklist=${checklist_exists:-missing}; manifest_doc=${manifest_doc_exists:-missing}; manifest_json=${manifest_json_exists:-missing}; validator_checklist=${validator_checklist:-missing}; validator_manifest_doc=${validator_manifest_doc:-missing}; validator_manifest_json=${validator_manifest_json:-missing}; validator_manifest_keys=${validator_manifest_keys:-missing}; validator_nested=${validator_nested_root:-missing}; validator_meta=${validator_meta:-missing}; validator_deferred=${validator_deferred:-missing}; validator_no_secrets=${validator_no_secrets:-missing}; validator_no_core=${validator_no_core:-missing}; checklist_release=${checklist_release_cmd:-missing}; checklist_regression=${checklist_regression_cmd:-missing}; checklist_integrity=${checklist_integrity_cmd:-missing}; checklist_zip=${checklist_zip_root:-missing}; checklist_nested=${checklist_nested_root:-missing}; checklist_meta=${checklist_meta:-missing}; checklist_facebook=${checklist_facebook:-missing}; checklist_critical=${checklist_critical:-missing}; manifest_doc_zip=${manifest_doc_zip_root:-missing}; manifest_doc_install=${manifest_doc_install_path:-missing}; manifest_doc_hooks=${manifest_doc_hooks:-missing}; manifest_doc_no_secrets=${manifest_doc_no_secrets:-missing}; manifest_doc_no_core=${manifest_doc_no_core:-missing}; manifest_doc_deferred=${manifest_doc_deferred:-missing}; json_module=${manifest_json_module:-missing}; json_version=${manifest_json_version:-missing}; json_root=${manifest_json_root:-missing}; json_install=${manifest_json_install:-missing}; json_active=${manifest_json_active:-missing}; json_deferred=${manifest_json_deferred:-missing}; json_commands=${manifest_json_commands:-missing}; json_security=${manifest_json_security:-missing}; git_diff_mode=${git_diff_mode:-unknown}; controller_diff=${forbidden_controller:-none}; model_diff=${forbidden_model:-none}; library_diff=${forbidden_library:-none}; view_diff=${forbidden_view:-none}"
+    return
+  fi
+
+  pass \
+    "production checklist and release manifests harden release handoff without runtime PHP changes" \
+    "checklist=$checklist_exists | manifest=$manifest_doc_exists | manifest_json=$manifest_json_exists | git_diff_mode=$git_diff_mode"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_helper ensure_window ensure_skew
   install_helper="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
@@ -2911,6 +2969,7 @@ check_required_config_and_public_endpoints
 check_option_repair_idempotence
 check_release_forbidden_artifact_detection
 check_release_packaging_docs_hardening
+check_release_handoff_manifest_assets
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks
