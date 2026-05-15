@@ -1482,11 +1482,15 @@ check_analytics_view_array_guards() {
 }
 
 check_analytics_event_table_single_pagination() {
-  local event_heading_line event_table_line dt_table_line manual_pagination_line retention_button_line performance_line webhook_diff whatsapp_diff mailer_diff git_diff_mode
+  local event_heading_line event_table_line event_wrap_line click_target_cell_line click_target_css_line dt_table_line manual_pagination_line pagination_guard_line retention_button_line performance_line webhook_diff whatsapp_diff mailer_diff git_diff_mode
   event_heading_line="$(first_fixed_match '<h5 class="marketing-analytics-section-title">Event Activity</h5>' "$ANALYTICS_VIEW_FILE")"
   event_table_line="$(first_fixed_match '<table class="table marketing-analytics-events-table">' "$ANALYTICS_VIEW_FILE")"
+  event_wrap_line="$(first_fixed_match '<div class="table-responsive marketing-analytics-events-table-wrap">' "$ANALYTICS_VIEW_FILE")"
+  click_target_cell_line="$(first_fixed_match '<td class="marketing-analytics-click-target">' "$ANALYTICS_VIEW_FILE")"
+  click_target_css_line="$(first_fixed_match '.marketing-analytics-click-target {' "$ANALYTICS_VIEW_FILE")"
   dt_table_line="$(grep -nF '<table class="table dt-table">' "$ANALYTICS_VIEW_FILE" | tail -n 1 || true)"
   manual_pagination_line="$(first_fixed_match '<ul class="pagination no-margin pull-right">' "$ANALYTICS_VIEW_FILE")"
+  pagination_guard_line="$(first_fixed_match "<?php if (\$events_pagination['total_pages'] > 1) { ?>" "$ANALYTICS_VIEW_FILE")"
   retention_button_line="$(first_fixed_match 'Run Retention Cleanup' "$ANALYTICS_VIEW_FILE")"
   performance_line="$(first_fixed_match "_l('marketing_campaign_performance_reporting')" "$ANALYTICS_VIEW_FILE")"
   webhook_diff="$(git_changed_path_if_available "$WEBHOOKS_FILE")"
@@ -1494,16 +1498,16 @@ check_analytics_event_table_single_pagination() {
   mailer_diff="$(git_changed_path_if_available "$MAILER_FILE")"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$event_heading_line" || -z "$event_table_line" || -n "$dt_table_line" || -z "$manual_pagination_line" || -z "$retention_button_line" || -z "$performance_line" || -n "$webhook_diff" || -n "$whatsapp_diff" || -n "$mailer_diff" ]]; then
+  if [[ -z "$event_heading_line" || -z "$event_table_line" || -z "$event_wrap_line" || -z "$click_target_cell_line" || -z "$click_target_css_line" || -n "$dt_table_line" || -z "$manual_pagination_line" || -z "$pagination_guard_line" || -z "$retention_button_line" || -z "$performance_line" || -n "$webhook_diff" || -n "$whatsapp_diff" || -n "$mailer_diff" ]]; then
     fail \
       "analytics event activity table keeps bounded manual pagination without DataTables footer duplication" \
-      "expected event activity heading, dedicated non-dt analytics events table, retained manual pagination, retained retention cleanup control, retained campaign performance reporting, and no mailer/webhook/WhatsApp runtime diffs; heading=${event_heading_line:-missing}; table=${event_table_line:-missing}; dt_table=${dt_table_line:-unexpected}; manual_pagination=${manual_pagination_line:-missing}; retention=${retention_button_line:-missing}; performance=${performance_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${webhook_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}; mailer_diff=${mailer_diff:-none}"
+      "expected event activity heading, dedicated wrapped non-dt analytics events table, click-target wrap styling, retained manual events_pagination footer, retained retention cleanup control, retained campaign performance reporting, and no mailer/webhook/WhatsApp runtime diffs; heading=${event_heading_line:-missing}; table=${event_table_line:-missing}; wrap=${event_wrap_line:-missing}; click_cell=${click_target_cell_line:-missing}; click_css=${click_target_css_line:-missing}; dt_table=${dt_table_line:-unexpected}; manual_pagination=${manual_pagination_line:-missing}; pagination_guard=${pagination_guard_line:-missing}; retention=${retention_button_line:-missing}; performance=${performance_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${webhook_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}; mailer_diff=${mailer_diff:-none}"
     return
   fi
 
   pass \
     "analytics event activity table keeps bounded manual pagination without DataTables footer duplication" \
-    "table=$event_table_line | manual_pagination=$manual_pagination_line | git_diff_mode=$git_diff_mode"
+    "table=$event_table_line | wrap=$event_wrap_line | click_target=$click_target_css_line | manual_pagination=$manual_pagination_line | git_diff_mode=$git_diff_mode"
 }
 
 check_analytics_campaign_performance_reporting() {

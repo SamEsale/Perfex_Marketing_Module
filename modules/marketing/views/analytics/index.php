@@ -159,6 +159,66 @@
         font-size: 13px;
         line-height: 1.6;
     }
+    .marketing-analytics-events-table-wrap {
+        overflow-x: auto;
+        border: 1px solid rgba(148, 163, 184, .18);
+        border-radius: 14px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .marketing-analytics-events-table {
+        margin-bottom: 0;
+        table-layout: fixed;
+    }
+    .marketing-analytics-events-table thead th {
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(148, 163, 184, .22);
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .marketing-analytics-events-table tbody td {
+        padding: 12px 14px;
+        border-top: 1px solid rgba(226, 232, 240, .85);
+        vertical-align: middle;
+        font-size: 13px;
+        color: #0f172a;
+    }
+    .marketing-analytics-events-table tbody tr:nth-child(even) {
+        background: rgba(248, 250, 252, .72);
+    }
+    .marketing-analytics-events-table tbody tr:hover {
+        background: rgba(239, 246, 255, .62);
+    }
+    .marketing-analytics-events-table th:nth-child(1),
+    .marketing-analytics-events-table td:nth-child(1) {
+        width: 72px;
+    }
+    .marketing-analytics-events-table th:nth-child(2),
+    .marketing-analytics-events-table td:nth-child(2) {
+        width: 160px;
+    }
+    .marketing-analytics-events-table th:nth-child(4),
+    .marketing-analytics-events-table td:nth-child(4) {
+        width: 140px;
+    }
+    .marketing-analytics-events-table th:nth-child(6),
+    .marketing-analytics-events-table td:nth-child(6) {
+        width: 168px;
+        white-space: nowrap;
+    }
+    .marketing-analytics-click-target {
+        min-width: 240px;
+        max-width: 100%;
+        color: #475569;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        line-height: 1.5;
+    }
     @media (max-width: 1199px) {
         .marketing-analytics-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -170,6 +230,10 @@
     @media (max-width: 767px) {
         .marketing-analytics-grid {
             grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+        .marketing-analytics-events-table thead th,
+        .marketing-analytics-events-table tbody td {
+            padding: 10px 12px;
         }
     }
 </style>
@@ -535,7 +599,7 @@
                         <?php if (empty($recent)) { ?>
                             <p class="text-muted no-margin"><?= _l('marketing_no_records_yet'); ?></p>
                         <?php } else { ?>
-                            <div class="table-responsive">
+                            <div class="table-responsive marketing-analytics-events-table-wrap">
                                 <table class="table marketing-analytics-events-table">
                                     <thead>
                                         <tr>
@@ -560,7 +624,7 @@
                                                 <td><span class="label label-<?= html_escape($badgeClass); ?>"><?= html_escape($eventLabel); ?></span></td>
                                                 <td><?= html_escape($event['email'] ?: '-'); ?></td>
                                                 <td><?= html_escape($event['provider']); ?></td>
-                                                <td><?= html_escape($event['url'] ?: '-'); ?></td>
+                                                <td class="marketing-analytics-click-target"><?= html_escape($event['url'] ?: '-'); ?></td>
                                                 <td><?= html_escape($eventAt); ?></td>
                                             </tr>
                                         <?php } ?>
