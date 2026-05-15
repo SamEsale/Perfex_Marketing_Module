@@ -105,6 +105,79 @@ if (($license_state['status'] ?? '') === 'active') {
         justify-content: flex-end;
         flex-wrap: wrap;
     }
+    .marketing-provider-readiness-list {
+        display: grid;
+        gap: 14px;
+    }
+    .marketing-provider-readiness-item {
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 14px 16px;
+        background: #fff;
+    }
+    .marketing-provider-readiness-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+    }
+    .marketing-provider-readiness-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .marketing-provider-readiness-status {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+    }
+    .marketing-provider-readiness-status-ready {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .marketing-provider-readiness-status-needs_configuration,
+    .marketing-provider-readiness-status-blocked {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .marketing-provider-readiness-status-optional {
+        background: #e2e8f0;
+        color: #334155;
+    }
+    .marketing-provider-readiness-note {
+        margin: 0 0 10px;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.55;
+    }
+    .marketing-provider-readiness-checks {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+    }
+    .marketing-provider-readiness-checks li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        font-size: 13px;
+        color: #334155;
+        flex-wrap: wrap;
+    }
+    .marketing-provider-readiness-check-value {
+        color: #0f172a;
+        font-weight: 600;
+    }
     @media (max-width: 767px) {
         .marketing-settings-shell {
             padding: 14px;
@@ -459,6 +532,37 @@ if (($license_state['status'] ?? '') === 'active') {
                             </div>
 
                             <div class="marketing-settings-column">
+                                <div class="panel_s marketing-settings-panel">
+                                    <div class="panel-body">
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_provider_readiness_heading'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_provider_readiness_note'); ?></p>
+
+                                        <div class="marketing-provider-readiness-list">
+                                            <?php foreach ($provider_readiness as $providerStatus) { ?>
+                                                <div class="marketing-provider-readiness-item">
+                                                    <div class="marketing-provider-readiness-header">
+                                                        <h5 class="marketing-provider-readiness-title"><?= html_escape($providerStatus['title']); ?></h5>
+                                                        <span class="marketing-provider-readiness-status marketing-provider-readiness-status-<?= html_escape((string) $providerStatus['status_key']); ?>">
+                                                            <?= html_escape($providerStatus['status_label']); ?>
+                                                        </span>
+                                                    </div>
+                                                    <p class="marketing-provider-readiness-note"><?= html_escape($providerStatus['note']); ?></p>
+                                                    <?php if (!empty($providerStatus['checks']) && is_array($providerStatus['checks'])) { ?>
+                                                        <ul class="marketing-provider-readiness-checks">
+                                                            <?php foreach ($providerStatus['checks'] as $providerCheck) { ?>
+                                                                <li>
+                                                                    <span><?= html_escape($providerCheck['label']); ?></span>
+                                                                    <span class="marketing-provider-readiness-check-value"><?= html_escape($providerCheck['value']); ?></span>
+                                                                </li>
+                                                            <?php } ?>
+                                                        </ul>
+                                                    <?php } ?>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <?= form_open(admin_url('marketing/settings/save'), ['id' => 'marketing-smtp-settings-form']); ?>
                                 <input type="hidden" name="settings_form" value="smtp">
                                 <div class="panel_s marketing-settings-panel">

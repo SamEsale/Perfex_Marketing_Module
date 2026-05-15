@@ -1788,6 +1788,46 @@ check_settings_license_block_order() {
     "inbound=$inbound_line | license=$license_line | second_column=$second_column_line"
 }
 
+check_settings_provider_readiness_panel() {
+  local controller_assignment controller_helper email_line ses_line inbound_line whatsapp_line smtp_check token_check app_secret_check inbound_secret_check preserve_inbound preserve_token preserve_secret view_heading view_note view_panel view_status view_loop view_secret_exposure forbidden_webhook forbidden_queue forbidden_campaign forbidden_whatsapp forbidden_ses git_diff_mode
+  controller_assignment="$(first_fixed_match "\$data['provider_readiness'] = \$this->build_provider_readiness_summary(" "$SETTINGS_CONTROLLER_FILE")"
+  controller_helper="$(first_match 'function[[:space:]]+build_provider_readiness_summary' "$SETTINGS_CONTROLLER_FILE")"
+  email_line="$(first_fixed_match "_l('marketing_provider_readiness_email_delivery')" "$SETTINGS_CONTROLLER_FILE")"
+  ses_line="$(first_fixed_match "_l('marketing_provider_readiness_ses_webhooks')" "$SETTINGS_CONTROLLER_FILE")"
+  inbound_line="$(first_fixed_match "_l('marketing_provider_readiness_inbound_email')" "$SETTINGS_CONTROLLER_FILE")"
+  whatsapp_line="$(first_fixed_match "_l('marketing_provider_readiness_whatsapp')" "$SETTINGS_CONTROLLER_FILE")"
+  smtp_check="$(first_fixed_match "trim((string) get_option('marketing_smtp_host')) !== ''" "$SETTINGS_CONTROLLER_FILE")"
+  token_check="$(first_fixed_match "\$whatsappAccessTokenConfigured" "$SETTINGS_CONTROLLER_FILE")"
+  app_secret_check="$(first_fixed_match "\$whatsappAppSecretConfigured" "$SETTINGS_CONTROLLER_FILE")"
+  inbound_secret_check="$(first_fixed_match "\$inboundEmailSecretConfigured" "$SETTINGS_CONTROLLER_FILE")"
+  preserve_inbound="$(first_fixed_match "'marketing_inbound_email_secret' => \$postedSecret !== '' ? \$postedSecret : \$existingSecret," "$SETTINGS_CONTROLLER_FILE")"
+  preserve_token="$(first_fixed_match "if (\$accessToken !== '') {" "$SETTINGS_CONTROLLER_FILE")"
+  preserve_secret="$(first_fixed_match "if (\$appSecret !== '') {" "$SETTINGS_CONTROLLER_FILE")"
+  view_heading="$(first_fixed_match "_l('marketing_provider_readiness_heading')" "$SETTINGS_VIEW_FILE")"
+  view_note="$(first_fixed_match "_l('marketing_provider_readiness_note')" "$SETTINGS_VIEW_FILE")"
+  view_panel="$(first_fixed_match 'marketing-provider-readiness-list' "$SETTINGS_VIEW_FILE")"
+  view_status="$(first_fixed_match 'marketing-provider-readiness-status-' "$SETTINGS_VIEW_FILE")"
+  view_loop="$(first_fixed_match "<?php foreach (\$provider_readiness as \$providerStatus) { ?>" "$SETTINGS_VIEW_FILE")"
+  view_secret_exposure="$(grep -nE -- "get_option\\('marketing_(whatsapp_access_token|whatsapp_app_secret|inbound_email_secret)'\\)" "$SETTINGS_VIEW_FILE" || true)"
+  forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
+  forbidden_queue="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
+  forbidden_campaign="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
+  forbidden_whatsapp="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
+  forbidden_ses="$(git_changed_path_if_available modules/marketing/libraries/Marketing_ses_sns.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$email_line" || -z "$ses_line" || -z "$inbound_line" || -z "$whatsapp_line" || -z "$smtp_check" || -z "$token_check" || -z "$app_secret_check" || -z "$inbound_secret_check" || -z "$preserve_inbound" || -z "$preserve_token" || -z "$preserve_secret" || -z "$view_heading" || -z "$view_note" || -z "$view_panel" || -z "$view_status" || -z "$view_loop" || -n "$view_secret_exposure" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" || -n "$forbidden_whatsapp" || -n "$forbidden_ses" ]]; then
+    fail \
+      "settings page adds read-only provider readiness without exposing secrets or changing provider runtime files" \
+      "expected controller-driven provider readiness summary in $SETTINGS_CONTROLLER_FILE, read-only readiness panel markup in $SETTINGS_VIEW_FILE, preserved blank-secret/token save behavior, no direct secret rendering via get_option() in the view, and no webhook/queue/campaign-send/provider library file changes; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; email=${email_line:-missing}; ses=${ses_line:-missing}; inbound=${inbound_line:-missing}; whatsapp=${whatsapp_line:-missing}; smtp=${smtp_check:-missing}; token=${token_check:-missing}; app_secret=${app_secret_check:-missing}; inbound_secret=${inbound_secret_check:-missing}; preserve_inbound=${preserve_inbound:-missing}; preserve_token=${preserve_token:-missing}; preserve_secret=${preserve_secret:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; panel=${view_panel:-missing}; status=${view_status:-missing}; loop=${view_loop:-missing}; view_secret_exposure=${view_secret_exposure:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}; whatsapp_diff=${forbidden_whatsapp:-none}; ses_diff=${forbidden_ses:-none}"
+    return
+  fi
+
+  pass \
+    "settings page adds read-only provider readiness without exposing secrets or changing provider runtime files" \
+    "controller=$controller_helper | panel=$view_heading | git_diff_mode=$git_diff_mode"
+}
+
 check_dashboard_operator_ui_structure() {
   local operations_title_line controls_line health_line warnings_line failure_line audit_line retention_line compact_grid_line executive_shell_line advanced_details_line visible_raw_command
   operations_title_line="$(first_fixed_match "marketing_dashboard_operations_center" "$DASHBOARD_VIEW_FILE")"
@@ -2756,6 +2796,7 @@ check_events_public_links_fail_closed
 check_settings_two_column_layout
 check_settings_mobile_responsive_layout
 check_settings_license_block_order
+check_settings_provider_readiness_panel
 check_dashboard_operator_ui_structure
 check_marketing_reports_surface
 check_marketing_reports_cleanup_controls

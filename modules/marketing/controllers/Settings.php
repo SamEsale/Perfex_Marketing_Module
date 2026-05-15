@@ -121,6 +121,12 @@ class Settings extends AdminController
         }
         $data['whatsapp_access_token_configured'] = $data['whatsapp_settings']['access_token'] !== '';
         $data['whatsapp_app_secret_configured'] = trim((string) ($data['whatsapp_settings']['app_secret'] ?? '')) !== '';
+        $data['provider_readiness'] = $this->build_provider_readiness_summary(
+            $data['whatsapp_settings'],
+            $data['inbound_email_secret_configured'],
+            $data['whatsapp_access_token_configured'],
+            $data['whatsapp_app_secret_configured']
+        );
         $data['schema_report'] = $this->marketing_schema->get_readiness_report();
         $data['license_available'] = $this->marketingLicenseAvailable;
         $data['license_state'] = $this->marketingLicenseAvailable
@@ -139,6 +145,133 @@ class Settings extends AdminController
         }
 
         $this->load->view('marketing/settings/index', $data);
+    }
+
+    protected function build_provider_readiness_summary(
+        array $whatsappSettings,
+        $inboundEmailSecretConfigured,
+        $whatsappAccessTokenConfigured,
+        $whatsappAppSecretConfigured
+    ) {
+        $sendEnabled = (string) get_option('marketing_send_enabled') === '1';
+        $smtpEnabled = (string) get_option('marketing_smtp_enabled') === '1';
+        $smtpPasswordConfigured = trim((string) get_option('marketing_smtp_password')) !== '';
+        $smtpReady = $smtpEnabled
+            && trim((string) get_option('marketing_smtp_host')) !== ''
+            && (int) get_option('marketing_smtp_port') > 0
+            && trim((string) get_option('marketing_smtp_username')) !== ''
+            && $smtpPasswordConfigured
+            && trim((string) get_option('marketing_smtp_from_email')) !== '';
+
+        $sesSignatureEnabled = (string) get_option('marketing_ses_verify_signature') === '1';
+        $sesRegionConfigured = trim((string) get_option('marketing_ses_region')) !== '';
+        $sesTopicConfigured = trim((string) get_option('marketing_ses_sns_topic_arn')) !== '';
+        $whatsappEnabled = !empty($whatsappSettings['enabled']);
+        $whatsappWebhookTokenConfigured = trim((string) ($whatsappSettings['webhook_verify_token'] ?? '')) !== '';
+        $whatsappPhoneIdConfigured = trim((string) ($whatsappSettings['phone_number_id'] ?? '')) !== '';
+        $whatsappBusinessIdConfigured = trim((string) ($whatsappSettings['business_account_id'] ?? '')) !== '';
+        $whatsappGraphVersionConfigured = trim((string) ($whatsappSettings['graph_version'] ?? '')) !== '';
+
+        return [
+            [
+                'title' => _l('marketing_provider_readiness_email_delivery'),
+                'status_key' => $smtpReady ? 'ready' : ($sendEnabled ? 'needs_configuration' : 'optional'),
+                'status_label' => $smtpReady
+                    ? _l('marketing_provider_readiness_status_ready')
+                    : ($sendEnabled ? _l('marketing_provider_readiness_status_needs_configuration') : _l('marketing_provider_readiness_status_optional')),
+                'note' => $smtpReady
+                    ? _l('marketing_provider_readiness_email_delivery_ready_note')
+                    : ($sendEnabled ? _l('marketing_provider_readiness_email_delivery_config_note') : _l('marketing_provider_readiness_email_delivery_optional_note')),
+                'checks' => [
+                    [
+                        'label' => _l('marketing_smtp_enabled'),
+                        'value' => $smtpEnabled ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_smtp_password'),
+                        'value' => $smtpPasswordConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_default_from_email'),
+                        'value' => trim((string) get_option('marketing_default_from_email')) !== '' || trim((string) get_option('marketing_smtp_from_email')) !== ''
+                            ? _l('marketing_provider_readiness_check_configured')
+                            : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                ],
+            ],
+            [
+                'title' => _l('marketing_provider_readiness_ses_webhooks'),
+                'status_key' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured)
+                    ? 'ready'
+                    : ($sesSignatureEnabled ? 'needs_configuration' : 'optional'),
+                'status_label' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured)
+                    ? _l('marketing_provider_readiness_status_ready')
+                    : ($sesSignatureEnabled ? _l('marketing_provider_readiness_status_needs_configuration') : _l('marketing_provider_readiness_status_optional')),
+                'note' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured)
+                    ? _l('marketing_provider_readiness_ses_ready_note')
+                    : ($sesSignatureEnabled ? _l('marketing_provider_readiness_ses_config_note') : _l('marketing_provider_readiness_ses_optional_note')),
+                'checks' => [
+                    [
+                        'label' => _l('marketing_ses_verify_signature'),
+                        'value' => $sesSignatureEnabled
+                            ? _l('marketing_provider_readiness_signature_enabled')
+                            : _l('marketing_provider_readiness_signature_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_ses_region'),
+                        'value' => $sesRegionConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_ses_sns_topic_arn'),
+                        'value' => $sesTopicConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                ],
+            ],
+            [
+                'title' => _l('marketing_provider_readiness_inbound_email'),
+                'status_key' => $inboundEmailSecretConfigured ? 'ready' : 'needs_configuration',
+                'status_label' => $inboundEmailSecretConfigured
+                    ? _l('marketing_provider_readiness_status_ready')
+                    : _l('marketing_provider_readiness_status_needs_configuration'),
+                'note' => $inboundEmailSecretConfigured
+                    ? _l('marketing_provider_readiness_inbound_ready_note')
+                    : _l('marketing_provider_readiness_inbound_config_note'),
+                'checks' => [
+                    [
+                        'label' => _l('marketing_inbound_email_secret'),
+                        'value' => $inboundEmailSecretConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                ],
+            ],
+            [
+                'title' => _l('marketing_provider_readiness_whatsapp'),
+                'status_key' => ($whatsappEnabled && $whatsappAccessTokenConfigured && $whatsappPhoneIdConfigured && $whatsappBusinessIdConfigured && $whatsappGraphVersionConfigured && $whatsappWebhookTokenConfigured)
+                    ? ($whatsappAppSecretConfigured ? 'ready' : 'blocked')
+                    : ($whatsappEnabled ? 'needs_configuration' : 'optional'),
+                'status_label' => ($whatsappEnabled && $whatsappAccessTokenConfigured && $whatsappPhoneIdConfigured && $whatsappBusinessIdConfigured && $whatsappGraphVersionConfigured && $whatsappWebhookTokenConfigured)
+                    ? ($whatsappAppSecretConfigured ? _l('marketing_provider_readiness_status_ready') : _l('marketing_provider_readiness_status_blocked'))
+                    : ($whatsappEnabled ? _l('marketing_provider_readiness_status_needs_configuration') : _l('marketing_provider_readiness_status_optional')),
+                'note' => ($whatsappEnabled && $whatsappAccessTokenConfigured && $whatsappPhoneIdConfigured && $whatsappBusinessIdConfigured && $whatsappGraphVersionConfigured && $whatsappWebhookTokenConfigured)
+                    ? ($whatsappAppSecretConfigured ? _l('marketing_provider_readiness_whatsapp_ready_note') : _l('marketing_provider_readiness_whatsapp_blocked_note'))
+                    : ($whatsappEnabled ? _l('marketing_provider_readiness_whatsapp_config_note') : _l('marketing_provider_readiness_whatsapp_optional_note')),
+                'checks' => [
+                    [
+                        'label' => _l('marketing_whatsapp_access_token'),
+                        'value' => $whatsappAccessTokenConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_whatsapp_app_secret'),
+                        'value' => $whatsappAppSecretConfigured
+                            ? _l('marketing_provider_readiness_signature_enabled')
+                            : _l('marketing_provider_readiness_signature_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_whatsapp_webhook_verify_token'),
+                        'value' => $whatsappWebhookTokenConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                ],
+            ],
+        ];
     }
 
     public function save()
