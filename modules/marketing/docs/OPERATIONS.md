@@ -75,6 +75,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - Confirm `Marketing -> Settings -> Provider Readiness` reflects the expected saved provider state
 - Confirm `Marketing -> Settings -> Release Readiness` is available for packaging and support handoff
 - Confirm `Marketing -> Dashboard -> Integrity Health` remains visible and read-only
+- Imported contacts remain active for audience eligibility unless they are explicitly unsubscribed, actively suppressed, removed from membership, marked inactive by an operator, or filtered out by campaign targeting
 - Confirm rendered webhook URLs match the deployed base URL
 - Confirm cron is active before resuming campaign send or schedule operations
 

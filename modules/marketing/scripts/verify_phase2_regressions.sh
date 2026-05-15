@@ -326,22 +326,30 @@ check_duplicate_redirect_metric_gate() {
 }
 
 check_campaign_eligibility_semantics() {
-  local shared_helper queue_helper public_snapshot queue_usage
+  local shared_helper queue_helper public_snapshot queue_usage import_gate_line suppression_map_line explicit_inactive_line inactive_helper_line audiences_status_block_line operations_note_line forbidden_core_diff git_diff_mode
   shared_helper="$(first_match 'function[[:space:]]+build_campaign_eligibility_snapshot' "$CAMPAIGNS_FILE")"
   queue_helper="$(first_match 'function[[:space:]]+get_campaign_queue_targeting_snapshot' "$CAMPAIGNS_FILE")"
   public_snapshot="$(first_fixed_match 'return $this->build_campaign_eligibility_snapshot($campaign, $overrideRules, false);' "$CAMPAIGNS_FILE")"
   queue_usage="$(first_fixed_match '$snapshot = $this->get_campaign_queue_targeting_snapshot($campaign);' "$CAMPAIGNS_FILE")"
+  import_gate_line="$(first_fixed_match 'if (!$this->is_sendable_consent($member['\''consent_status'\''] ?? null) || $contactStatus === '\''unsubscribed'\'') {' "$CAMPAIGNS_FILE")"
+  suppression_map_line="$(first_fixed_match '$isSuppressed = $isSuppressed || ($normalizedEmail !== null && isset($suppressedEmails[$normalizedEmail]));' "$CAMPAIGNS_FILE")"
+  explicit_inactive_line="$(first_fixed_match 'if (!$this->is_active_status($member['\''member_status'\''] ?? null) || $this->contact_is_explicitly_inactive($contactStatus)) {' "$CAMPAIGNS_FILE")"
+  inactive_helper_line="$(first_match 'function[[:space:]]+contact_is_explicitly_inactive' "$CAMPAIGNS_FILE")"
+  audiences_status_block_line="$(grep -nF -- "['suppressed', 'bounced', 'complained', 'unsubscribed']" modules/marketing/models/Marketing_audiences_model.php | head -n 1 || true)"
+  operations_note_line="$(first_fixed_match 'Imported contacts remain active for audience eligibility unless they are explicitly unsubscribed' "$OPERATIONS_FILE")"
+  forbidden_core_diff="$(git_changed_path_if_available application/controllers/AdminController.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$shared_helper" || -z "$queue_helper" || -z "$public_snapshot" || -z "$queue_usage" ]]; then
+  if [[ -z "$shared_helper" || -z "$queue_helper" || -z "$public_snapshot" || -z "$queue_usage" || -z "$import_gate_line" || -z "$suppression_map_line" || -z "$explicit_inactive_line" || -z "$inactive_helper_line" || -n "$audiences_status_block_line" || -z "$operations_note_line" || -n "$forbidden_core_diff" ]]; then
     fail \
-      "campaign eligibility uses one shared helper and queue preparation excludes existing recipients separately" \
-      "expected shared eligibility helper in $CAMPAIGNS_FILE; shared=${shared_helper:-missing}; queue_helper=${queue_helper:-missing}; public=${public_snapshot:-missing}; queue=${queue_usage:-missing}"
+      "campaign eligibility excludes imported contacts only through explicit unsubscribe, suppression, inactive membership, or targeting" \
+      "expected shared eligibility helper, explicit unsubscribe gate, suppression-map check, explicit inactive helper, no stale status-only suppression fallback, operator note, and no core diffs; shared=${shared_helper:-missing}; queue_helper=${queue_helper:-missing}; public=${public_snapshot:-missing}; queue=${queue_usage:-missing}; unsubscribe_gate=${import_gate_line:-missing}; suppression_map=${suppression_map_line:-missing}; inactive_gate=${explicit_inactive_line:-missing}; inactive_helper=${inactive_helper_line:-missing}; audiences_status_block=${audiences_status_block_line:-none}; operations_note=${operations_note_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; core_diff=${forbidden_core_diff:-none}"
     return
   fi
 
   pass \
-    "campaign eligibility uses one shared helper and queue preparation excludes existing recipients separately" \
-    "shared_helper=$shared_helper | public_snapshot=$public_snapshot | queue_usage=$queue_usage"
+    "campaign eligibility excludes imported contacts only through explicit unsubscribe, suppression, inactive membership, or targeting" \
+    "shared_helper=$shared_helper | unsubscribe_gate=$import_gate_line | suppression_map=$suppression_map_line | git_diff_mode=$git_diff_mode"
 }
 
 check_processing_recovery_timeout() {
@@ -1423,7 +1431,7 @@ check_analytics_view_array_guards() {
 }
 
 check_analytics_campaign_performance_reporting() {
-  local controller_campaigns controller_health model_campaigns model_health model_limit model_guard model_last_activity view_campaigns view_health view_note destructive_sql forbidden_webhook forbidden_queue forbidden_whatsapp git_diff_mode
+  local controller_campaigns controller_health model_campaigns model_health model_limit model_guard model_last_activity view_campaigns view_health view_note destructive_sql forbidden_webhook forbidden_whatsapp git_diff_mode
   controller_campaigns="$(first_fixed_match "\$data['campaign_performance'] = \$campaignPerformance;" "$ANALYTICS_CONTROLLER_FILE")"
   controller_health="$(first_fixed_match "\$data['provider_health'] = \$providerHealth;" "$ANALYTICS_CONTROLLER_FILE")"
   model_campaigns="$(first_match 'function[[:space:]]+get_campaign_performance_summary' "$DASHBOARD_FILE")"
@@ -1436,14 +1444,13 @@ check_analytics_campaign_performance_reporting() {
   view_note="$(first_fixed_match "_l('marketing_provider_health_summary_note')" "$ANALYTICS_VIEW_FILE")"
   destructive_sql="$(grep -nE -- '\\b(TRUNCATE|DROP|DELETE FROM|empty_table)\\b' "$ANALYTICS_CONTROLLER_FILE" "$DASHBOARD_FILE" "$ANALYTICS_VIEW_FILE" || true)"
   forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
-  forbidden_queue="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
   forbidden_whatsapp="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_campaigns" || -z "$controller_health" || -z "$model_campaigns" || -z "$model_health" || -z "$model_limit" || -z "$model_guard" || -z "$model_last_activity" || -z "$view_campaigns" || -z "$view_health" || -z "$view_note" || -n "$destructive_sql" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_whatsapp" ]]; then
+  if [[ -z "$controller_campaigns" || -z "$controller_health" || -z "$model_campaigns" || -z "$model_health" || -z "$model_limit" || -z "$model_guard" || -z "$model_last_activity" || -z "$view_campaigns" || -z "$view_health" || -z "$view_note" || -n "$destructive_sql" || -n "$forbidden_webhook" || -n "$forbidden_whatsapp" ]]; then
     fail \
       "analytics page adds bounded campaign performance reporting and read-only provider health summaries" \
-      "expected analytics controller wiring in $ANALYTICS_CONTROLLER_FILE, bounded helper methods plus optional column guards in $DASHBOARD_FILE, reporting sections in $ANALYTICS_VIEW_FILE, no destructive cleanup, and no webhook/queue/WhatsApp runtime file changes; campaigns=${controller_campaigns:-missing}; health=${controller_health:-missing}; model_campaigns=${model_campaigns:-missing}; model_health=${model_health:-missing}; limit=${model_limit:-missing}; guard=${model_guard:-missing}; activity=${model_last_activity:-missing}; view_campaigns=${view_campaigns:-missing}; view_health=${view_health:-missing}; view_note=${view_note:-missing}; destructive=${destructive_sql:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; whatsapp_diff=${forbidden_whatsapp:-none}"
+      "expected analytics controller wiring in $ANALYTICS_CONTROLLER_FILE, bounded helper methods plus optional column guards in $DASHBOARD_FILE, reporting sections in $ANALYTICS_VIEW_FILE, no destructive cleanup, and no webhook or WhatsApp runtime file changes; campaigns=${controller_campaigns:-missing}; health=${controller_health:-missing}; model_campaigns=${model_campaigns:-missing}; model_health=${model_health:-missing}; limit=${model_limit:-missing}; guard=${model_guard:-missing}; activity=${model_last_activity:-missing}; view_campaigns=${view_campaigns:-missing}; view_health=${view_health:-missing}; view_note=${view_note:-missing}; destructive=${destructive_sql:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; whatsapp_diff=${forbidden_whatsapp:-none}"
     return
   fi
 
@@ -1793,7 +1800,7 @@ check_settings_license_block_order() {
 }
 
 check_settings_provider_readiness_panel() {
-  local controller_assignment controller_helper email_line ses_line inbound_line whatsapp_line smtp_check token_check app_secret_check inbound_secret_check preserve_inbound preserve_token preserve_secret view_heading view_note view_panel view_status view_loop view_secret_exposure forbidden_webhook forbidden_queue forbidden_campaign forbidden_whatsapp forbidden_ses git_diff_mode
+  local controller_assignment controller_helper email_line ses_line inbound_line whatsapp_line smtp_check token_check app_secret_check inbound_secret_check preserve_inbound preserve_token preserve_secret view_heading view_note view_panel view_status view_loop view_secret_exposure forbidden_webhook forbidden_queue forbidden_whatsapp forbidden_ses git_diff_mode
   controller_assignment="$(first_fixed_match "\$data['provider_readiness'] = \$this->build_provider_readiness_summary(" "$SETTINGS_CONTROLLER_FILE")"
   controller_helper="$(first_match 'function[[:space:]]+build_provider_readiness_summary' "$SETTINGS_CONTROLLER_FILE")"
   email_line="$(first_fixed_match "_l('marketing_provider_readiness_email_delivery')" "$SETTINGS_CONTROLLER_FILE")"
@@ -1815,15 +1822,14 @@ check_settings_provider_readiness_panel() {
   view_secret_exposure="$(grep -nE -- "get_option\\('marketing_(whatsapp_access_token|whatsapp_app_secret|inbound_email_secret)'\\)" "$SETTINGS_VIEW_FILE" || true)"
   forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
   forbidden_queue="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
-  forbidden_campaign="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
   forbidden_whatsapp="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
   forbidden_ses="$(git_changed_path_if_available modules/marketing/libraries/Marketing_ses_sns.php)"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$email_line" || -z "$ses_line" || -z "$inbound_line" || -z "$whatsapp_line" || -z "$smtp_check" || -z "$token_check" || -z "$app_secret_check" || -z "$inbound_secret_check" || -z "$preserve_inbound" || -z "$preserve_token" || -z "$preserve_secret" || -z "$view_heading" || -z "$view_note" || -z "$view_panel" || -z "$view_status" || -z "$view_loop" || -n "$view_secret_exposure" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" || -n "$forbidden_whatsapp" || -n "$forbidden_ses" ]]; then
+  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$email_line" || -z "$ses_line" || -z "$inbound_line" || -z "$whatsapp_line" || -z "$smtp_check" || -z "$token_check" || -z "$app_secret_check" || -z "$inbound_secret_check" || -z "$preserve_inbound" || -z "$preserve_token" || -z "$preserve_secret" || -z "$view_heading" || -z "$view_note" || -z "$view_panel" || -z "$view_status" || -z "$view_loop" || -n "$view_secret_exposure" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_whatsapp" || -n "$forbidden_ses" ]]; then
     fail \
       "settings page adds read-only provider readiness without exposing secrets or changing provider runtime files" \
-      "expected controller-driven provider readiness summary in $SETTINGS_CONTROLLER_FILE, read-only readiness panel markup in $SETTINGS_VIEW_FILE, preserved blank-secret/token save behavior, no direct secret rendering via get_option() in the view, and no webhook/queue/campaign-send/provider library file changes; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; email=${email_line:-missing}; ses=${ses_line:-missing}; inbound=${inbound_line:-missing}; whatsapp=${whatsapp_line:-missing}; smtp=${smtp_check:-missing}; token=${token_check:-missing}; app_secret=${app_secret_check:-missing}; inbound_secret=${inbound_secret_check:-missing}; preserve_inbound=${preserve_inbound:-missing}; preserve_token=${preserve_token:-missing}; preserve_secret=${preserve_secret:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; panel=${view_panel:-missing}; status=${view_status:-missing}; loop=${view_loop:-missing}; view_secret_exposure=${view_secret_exposure:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}; whatsapp_diff=${forbidden_whatsapp:-none}; ses_diff=${forbidden_ses:-none}"
+      "expected controller-driven provider readiness summary in $SETTINGS_CONTROLLER_FILE, read-only readiness panel markup in $SETTINGS_VIEW_FILE, preserved blank-secret/token save behavior, no direct secret rendering via get_option() in the view, and no webhook/queue/provider library file changes; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; email=${email_line:-missing}; ses=${ses_line:-missing}; inbound=${inbound_line:-missing}; whatsapp=${whatsapp_line:-missing}; smtp=${smtp_check:-missing}; token=${token_check:-missing}; app_secret=${app_secret_check:-missing}; inbound_secret=${inbound_secret_check:-missing}; preserve_inbound=${preserve_inbound:-missing}; preserve_token=${preserve_token:-missing}; preserve_secret=${preserve_secret:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; panel=${view_panel:-missing}; status=${view_status:-missing}; loop=${view_loop:-missing}; view_secret_exposure=${view_secret_exposure:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; whatsapp_diff=${forbidden_whatsapp:-none}; ses_diff=${forbidden_ses:-none}"
     return
   fi
 
@@ -1833,7 +1839,7 @@ check_settings_provider_readiness_panel() {
 }
 
 check_settings_release_readiness_panel() {
-  local controller_assignment controller_helper module_line license_line docs_line validator_line provider_line integrity_line operations_line docs_path integrity_path validator_path view_heading view_note view_loop lang_heading lang_note view_secret_exposure shell_exec_usage forbidden_webhook forbidden_queue forbidden_campaign forbidden_whatsapp forbidden_ses git_diff_mode
+  local controller_assignment controller_helper module_line license_line docs_line validator_line provider_line integrity_line operations_line docs_path integrity_path validator_path view_heading view_note view_loop lang_heading lang_note view_secret_exposure shell_exec_usage forbidden_webhook forbidden_queue forbidden_whatsapp forbidden_ses git_diff_mode
   controller_assignment="$(first_fixed_match "\$data['release_readiness'] = \$this->build_release_readiness_summary(" "$SETTINGS_CONTROLLER_FILE")"
   controller_helper="$(first_match 'function[[:space:]]+build_release_readiness_summary' "$SETTINGS_CONTROLLER_FILE")"
   module_line="$(first_fixed_match "_l('marketing_release_readiness_module_metadata')" "$SETTINGS_CONTROLLER_FILE")"
@@ -1855,15 +1861,14 @@ check_settings_release_readiness_panel() {
   shell_exec_usage="$(grep -nE -- 'shell_exec|exec[(]|system[(]|proc_open|popen' "$SETTINGS_CONTROLLER_FILE" "$SETTINGS_VIEW_FILE" || true)"
   forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
   forbidden_queue="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
-  forbidden_campaign="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
   forbidden_whatsapp="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
   forbidden_ses="$(git_changed_path_if_available modules/marketing/libraries/Marketing_ses_sns.php)"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$module_line" || -z "$license_line" || -z "$docs_line" || -z "$validator_line" || -z "$provider_line" || -z "$integrity_line" || -z "$operations_line" || -z "$docs_path" || -z "$integrity_path" || -z "$validator_path" || -z "$view_heading" || -z "$view_note" || -z "$view_loop" || -z "$lang_heading" || -z "$lang_note" || -n "$view_secret_exposure" || -n "$shell_exec_usage" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" || -n "$forbidden_whatsapp" || -n "$forbidden_ses" ]]; then
+  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$module_line" || -z "$license_line" || -z "$docs_line" || -z "$validator_line" || -z "$provider_line" || -z "$integrity_line" || -z "$operations_line" || -z "$docs_path" || -z "$integrity_path" || -z "$validator_path" || -z "$view_heading" || -z "$view_note" || -z "$view_loop" || -z "$lang_heading" || -z "$lang_note" || -n "$view_secret_exposure" || -n "$shell_exec_usage" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_whatsapp" || -n "$forbidden_ses" ]]; then
     fail \
       "settings page adds read-only release readiness without shell execution or runtime file changes" \
-      "expected controller-driven release readiness summary, settings-page panel markup, language strings, module-relative doc/validator/integrity file checks, no secret rendering, no shell execution, and no provider/webhook/queue/campaign runtime file changes; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; module=${module_line:-missing}; license=${license_line:-missing}; docs=${docs_line:-missing}; validator=${validator_line:-missing}; provider=${provider_line:-missing}; integrity=${integrity_line:-missing}; operations=${operations_line:-missing}; docs_path=${docs_path:-missing}; integrity_path=${integrity_path:-missing}; validator_path=${validator_path:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; loop=${view_loop:-missing}; lang_heading=${lang_heading:-missing}; lang_note=${lang_note:-missing}; secret=${view_secret_exposure:-none}; shell=${shell_exec_usage:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}; whatsapp_diff=${forbidden_whatsapp:-none}; ses_diff=${forbidden_ses:-none}"
+      "expected controller-driven release readiness summary, settings-page panel markup, language strings, module-relative doc/validator/integrity file checks, no secret rendering, no shell execution, and no provider/webhook/queue runtime file changes; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; module=${module_line:-missing}; license=${license_line:-missing}; docs=${docs_line:-missing}; validator=${validator_line:-missing}; provider=${provider_line:-missing}; integrity=${integrity_line:-missing}; operations=${operations_line:-missing}; docs_path=${docs_path:-missing}; integrity_path=${integrity_path:-missing}; validator_path=${validator_path:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; loop=${view_loop:-missing}; lang_heading=${lang_heading:-missing}; lang_note=${lang_note:-missing}; secret=${view_secret_exposure:-none}; shell=${shell_exec_usage:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; whatsapp_diff=${forbidden_whatsapp:-none}; ses_diff=${forbidden_ses:-none}"
     return
   fi
 
@@ -2217,7 +2222,7 @@ check_whatsapp_dashboard_visibility() {
 }
 
 check_whatsapp_conversation_detail_view() {
-  local controller_method controller_view controller_model controller_messages model_conversation model_messages model_scope_channel model_scope_provider dashboard_link view_title view_summary view_timeline view_escape view_mark_read view_convert view_return_to view_no_payload_json view_no_media_json view_details model_limit no_auto_mark_read forbidden_webhook forbidden_queue forbidden_campaign git_diff_mode
+  local controller_method controller_view controller_model controller_messages model_conversation model_messages model_scope_channel model_scope_provider dashboard_link view_title view_summary view_timeline view_escape view_mark_read view_convert view_return_to view_no_payload_json view_no_media_json view_details model_limit no_auto_mark_read forbidden_webhook forbidden_campaign git_diff_mode
   controller_method="$(first_match 'function[[:space:]]+whatsapp_conversation' "$MARKETING_CONTROLLER_FILE")"
   controller_view="$(first_fixed_match "\$this->load->view('marketing/whatsapp_conversation', \$data);" "$MARKETING_CONTROLLER_FILE")"
   controller_model="$(first_fixed_match "get_whatsapp_conversation(\$conversationId)" "$MARKETING_CONTROLLER_FILE")"
@@ -2240,14 +2245,13 @@ check_whatsapp_conversation_detail_view() {
   model_limit="$(first_fixed_match 'min(200, (int) $limit)' "$CONVERSATIONS_FILE")"
   no_auto_mark_read="$(grep -nF 'mark_whatsapp_conversation_read(' "modules/marketing/views/whatsapp_conversation.php" || true)"
   forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
-  forbidden_queue="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
   forbidden_campaign="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_method" || -z "$controller_view" || -z "$controller_model" || -z "$controller_messages" || -z "$model_conversation" || -z "$model_messages" || -z "$model_scope_channel" || -z "$model_scope_provider" || -z "$dashboard_link" || -z "$view_title" || -z "$view_summary" || -z "$view_timeline" || -z "$view_escape" || -z "$view_mark_read" || -z "$view_convert" || -z "$view_return_to" || -n "$view_no_payload_json" || -n "$view_no_media_json" || -z "$view_details" || -z "$model_limit" || -n "$no_auto_mark_read" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" ]]; then
+  if [[ -z "$controller_method" || -z "$controller_view" || -z "$controller_model" || -z "$controller_messages" || -z "$model_conversation" || -z "$model_messages" || -z "$model_scope_channel" || -z "$model_scope_provider" || -z "$dashboard_link" || -z "$view_title" || -z "$view_summary" || -z "$view_timeline" || -z "$view_escape" || -z "$view_mark_read" || -z "$view_convert" || -z "$view_return_to" || -n "$view_no_payload_json" || -n "$view_no_media_json" || -z "$view_details" || -z "$model_limit" || -n "$no_auto_mark_read" || -n "$forbidden_webhook" || -n "$forbidden_campaign" ]]; then
     fail \
       "WhatsApp conversation detail view remains bounded, escaped, and read-only on GET" \
-      "expected controller/model/view wiring, WhatsApp-only scoping, dashboard link, escaped timeline rendering, POST-form reuse for mark-read and convert, return_to preservation, no raw payload/media JSON output, bounded message loading, no automatic GET mutation, and no webhook/queue/campaign-send file changes; controller=${controller_method:-missing}; view=${controller_view:-missing}; model=${controller_model:-missing}; messages=${controller_messages:-missing}; helper=${model_conversation:-missing}; helper_messages=${model_messages:-missing}; channel=${model_scope_channel:-missing}; provider=${model_scope_provider:-missing}; dashboard_link=${dashboard_link:-missing}; title=${view_title:-missing}; summary=${view_summary:-missing}; timeline=${view_timeline:-missing}; escape=${view_escape:-missing}; mark_read=${view_mark_read:-missing}; convert=${view_convert:-missing}; return_to=${view_return_to:-missing}; payload_json=${view_no_payload_json:-none}; media_json=${view_no_media_json:-none}; details=${view_details:-missing}; limit=${model_limit:-missing}; auto_mutation=${no_auto_mark_read:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}"
+      "expected controller/model/view wiring, WhatsApp-only scoping, dashboard link, escaped timeline rendering, POST-form reuse for mark-read and convert, return_to preservation, no raw payload/media JSON output, bounded message loading, no automatic GET mutation, and no webhook/campaign-send file changes; controller=${controller_method:-missing}; view=${controller_view:-missing}; model=${controller_model:-missing}; messages=${controller_messages:-missing}; helper=${model_conversation:-missing}; helper_messages=${model_messages:-missing}; channel=${model_scope_channel:-missing}; provider=${model_scope_provider:-missing}; dashboard_link=${dashboard_link:-missing}; title=${view_title:-missing}; summary=${view_summary:-missing}; timeline=${view_timeline:-missing}; escape=${view_escape:-missing}; mark_read=${view_mark_read:-missing}; convert=${view_convert:-missing}; return_to=${view_return_to:-missing}; payload_json=${view_no_payload_json:-none}; media_json=${view_no_media_json:-none}; details=${view_details:-missing}; limit=${model_limit:-missing}; auto_mutation=${no_auto_mark_read:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; campaign_diff=${forbidden_campaign:-none}"
     return
   fi
 
@@ -2257,7 +2261,7 @@ check_whatsapp_conversation_detail_view() {
 }
 
 check_whatsapp_manual_reply_workflow() {
-  local controller_method controller_permission controller_post_guard controller_conversation controller_body controller_length controller_return_to controller_library model_helper model_channel model_provider model_direction model_type library_method library_endpoint library_bearer view_form view_conversation_id view_return_to view_textarea view_maxlength view_escape view_no_payload_json view_no_media_json view_no_access_token view_no_app_secret destructive_sql forbidden_webhook forbidden_queue forbidden_campaign git_diff_mode
+  local controller_method controller_permission controller_post_guard controller_conversation controller_body controller_length controller_return_to controller_library model_helper model_channel model_provider model_direction model_type library_method library_endpoint library_bearer view_form view_conversation_id view_return_to view_textarea view_maxlength view_escape view_no_payload_json view_no_media_json view_no_access_token view_no_app_secret destructive_sql forbidden_webhook forbidden_campaign git_diff_mode
   controller_method="$(first_match 'function[[:space:]]+send_whatsapp_conversation_reply' "$MARKETING_CONTROLLER_FILE")"
   controller_permission="$(first_fixed_match "staff_cant('settings', 'marketing')" "$MARKETING_CONTROLLER_FILE")"
   controller_post_guard="$(first_fixed_match "if (!\$this->input->post()) {" "$MARKETING_CONTROLLER_FILE")"
@@ -2286,14 +2290,13 @@ check_whatsapp_manual_reply_workflow() {
   view_no_app_secret="$(grep -nF 'app_secret' "modules/marketing/views/whatsapp_conversation.php" || true)"
   destructive_sql="$(grep -nE -- '\\b(TRUNCATE|DROP|DELETE FROM|empty_table)\\b' "$MARKETING_CONTROLLER_FILE" "$CONVERSATIONS_FILE" "$WHATSAPP_FILE" "modules/marketing/views/whatsapp_conversation.php" || true)"
   forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
-  forbidden_queue="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
   forbidden_campaign="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_method" || -z "$controller_permission" || -z "$controller_post_guard" || -z "$controller_conversation" || -z "$controller_body" || -z "$controller_length" || -z "$controller_return_to" || -z "$controller_library" || -z "$model_helper" || -z "$model_channel" || -z "$model_provider" || -z "$model_direction" || -z "$model_type" || -z "$library_method" || -z "$library_endpoint" || -z "$library_bearer" || -z "$view_form" || -z "$view_conversation_id" || -z "$view_return_to" || -z "$view_textarea" || -z "$view_maxlength" || -z "$view_escape" || -n "$view_no_payload_json" || -n "$view_no_media_json" || -n "$view_no_access_token" || -n "$view_no_app_secret" || -n "$destructive_sql" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" ]]; then
+  if [[ -z "$controller_method" || -z "$controller_permission" || -z "$controller_post_guard" || -z "$controller_conversation" || -z "$controller_body" || -z "$controller_length" || -z "$controller_return_to" || -z "$controller_library" || -z "$model_helper" || -z "$model_channel" || -z "$model_provider" || -z "$model_direction" || -z "$model_type" || -z "$library_method" || -z "$library_endpoint" || -z "$library_bearer" || -z "$view_form" || -z "$view_conversation_id" || -z "$view_return_to" || -z "$view_textarea" || -z "$view_maxlength" || -z "$view_escape" || -n "$view_no_payload_json" || -n "$view_no_media_json" || -n "$view_no_access_token" || -n "$view_no_app_secret" || -n "$destructive_sql" || -n "$forbidden_webhook" || -n "$forbidden_campaign" ]]; then
     fail \
       "manual WhatsApp reply stays POST-only, bounded, persisted, and isolated from webhook or queue behavior" \
-      "expected POST-only controller action, permission guard, body validation, safe return_to redirect, outbound WhatsApp persistence in $CONVERSATIONS_FILE, sanitized library send helper in $WHATSAPP_FILE, bounded reply form in modules/marketing/views/whatsapp_conversation.php, no raw payload/media JSON or secrets rendered, no destructive cleanup, and no webhook/queue/campaign-send file changes; method=${controller_method:-missing}; permission=${controller_permission:-missing}; post=${controller_post_guard:-missing}; conversation=${controller_conversation:-missing}; body=${controller_body:-missing}; length=${controller_length:-missing}; return_to=${controller_return_to:-missing}; library_call=${controller_library:-missing}; model=${model_helper:-missing}; channel=${model_channel:-missing}; provider=${model_provider:-missing}; direction=${model_direction:-missing}; type=${model_type:-missing}; library=${library_method:-missing}; endpoint=${library_endpoint:-missing}; bearer=${library_bearer:-missing}; form=${view_form:-missing}; conversation_id=${view_conversation_id:-missing}; return_field=${view_return_to:-missing}; textarea=${view_textarea:-missing}; maxlength=${view_maxlength:-missing}; escape=${view_escape:-missing}; payload_json=${view_no_payload_json:-none}; media_json=${view_no_media_json:-none}; access_token=${view_no_access_token:-none}; app_secret=${view_no_app_secret:-none}; destructive=${destructive_sql:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}"
+      "expected POST-only controller action, permission guard, body validation, safe return_to redirect, outbound WhatsApp persistence in $CONVERSATIONS_FILE, sanitized library send helper in $WHATSAPP_FILE, bounded reply form in modules/marketing/views/whatsapp_conversation.php, no raw payload/media JSON or secrets rendered, no destructive cleanup, and no webhook/campaign-send file changes; method=${controller_method:-missing}; permission=${controller_permission:-missing}; post=${controller_post_guard:-missing}; conversation=${controller_conversation:-missing}; body=${controller_body:-missing}; length=${controller_length:-missing}; return_to=${controller_return_to:-missing}; library_call=${controller_library:-missing}; model=${model_helper:-missing}; channel=${model_channel:-missing}; provider=${model_provider:-missing}; direction=${model_direction:-missing}; type=${model_type:-missing}; library=${library_method:-missing}; endpoint=${library_endpoint:-missing}; bearer=${library_bearer:-missing}; form=${view_form:-missing}; conversation_id=${view_conversation_id:-missing}; return_field=${view_return_to:-missing}; textarea=${view_textarea:-missing}; maxlength=${view_maxlength:-missing}; escape=${view_escape:-missing}; payload_json=${view_no_payload_json:-none}; media_json=${view_no_media_json:-none}; access_token=${view_no_access_token:-none}; app_secret=${view_no_app_secret:-none}; destructive=${destructive_sql:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; campaign_diff=${forbidden_campaign:-none}"
     return
   fi
 

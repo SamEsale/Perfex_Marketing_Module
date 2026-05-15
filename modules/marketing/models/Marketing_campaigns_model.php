@@ -3722,7 +3722,7 @@ class Marketing_campaigns_model extends App_Model
                 continue;
             }
 
-            $isSuppressed = in_array($contactStatus, ['suppressed', 'bounced', 'complained'], true);
+            $isSuppressed = false;
             if ($deliveryChannel === 'whatsapp') {
                 $isSuppressed = $isSuppressed || ($normalizedPhone !== null && isset($suppressedPhones[$normalizedPhone]));
             } else {
@@ -3734,7 +3734,7 @@ class Marketing_campaigns_model extends App_Model
                 continue;
             }
 
-            if (!$this->is_active_status($member['member_status'] ?? null) || !$this->is_active_status($contactStatus)) {
+            if (!$this->is_active_status($member['member_status'] ?? null) || $this->contact_is_explicitly_inactive($contactStatus)) {
                 $summary['inactive']++;
                 continue;
             }
@@ -4242,7 +4242,14 @@ class Marketing_campaigns_model extends App_Model
     {
         $status = strtolower(trim((string) $status));
 
-        return $status === '' || $status === 'active' || $status === '1';
+        return !in_array($status, ['inactive', '0'], true);
+    }
+
+    private function contact_is_explicitly_inactive($status)
+    {
+        $status = strtolower(trim((string) $status));
+
+        return in_array($status, ['inactive', '0'], true);
     }
 
     private function sanitize_targeting_value($value)

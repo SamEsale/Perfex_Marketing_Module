@@ -341,13 +341,7 @@ class Marketing_audiences_model extends App_Model
             return true;
         }
 
-        $contact = $this->get_contact_by_normalized_email($normalizedEmail);
-
-        if (!$contact) {
-            return false;
-        }
-
-        return in_array($contact['status'], ['suppressed', 'bounced', 'complained', 'unsubscribed'], true);
+        return false;
     }
 
     public function get_contact_status_options()
