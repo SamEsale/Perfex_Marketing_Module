@@ -1828,6 +1828,46 @@ check_settings_provider_readiness_panel() {
     "controller=$controller_helper | panel=$view_heading | git_diff_mode=$git_diff_mode"
 }
 
+check_settings_release_readiness_panel() {
+  local controller_assignment controller_helper module_line license_line docs_line validator_line provider_line integrity_line operations_line docs_path integrity_path validator_path view_heading view_note view_loop lang_heading lang_note view_secret_exposure shell_exec_usage forbidden_webhook forbidden_queue forbidden_campaign forbidden_whatsapp forbidden_ses git_diff_mode
+  controller_assignment="$(first_fixed_match "\$data['release_readiness'] = \$this->build_release_readiness_summary(" "$SETTINGS_CONTROLLER_FILE")"
+  controller_helper="$(first_match 'function[[:space:]]+build_release_readiness_summary' "$SETTINGS_CONTROLLER_FILE")"
+  module_line="$(first_fixed_match "_l('marketing_release_readiness_module_metadata')" "$SETTINGS_CONTROLLER_FILE")"
+  license_line="$(first_fixed_match "_l('marketing_release_readiness_license_support')" "$SETTINGS_CONTROLLER_FILE")"
+  docs_line="$(first_fixed_match "_l('marketing_release_readiness_docs')" "$SETTINGS_CONTROLLER_FILE")"
+  validator_line="$(first_fixed_match "_l('marketing_release_readiness_release_validation')" "$SETTINGS_CONTROLLER_FILE")"
+  provider_line="$(first_fixed_match "_l('marketing_release_readiness_provider_summary')" "$SETTINGS_CONTROLLER_FILE")"
+  integrity_line="$(first_fixed_match "_l('marketing_release_readiness_integrity')" "$SETTINGS_CONTROLLER_FILE")"
+  operations_line="$(first_fixed_match "_l('marketing_release_readiness_operations')" "$SETTINGS_CONTROLLER_FILE")"
+  docs_path="$(first_fixed_match "'/README.md'" "$SETTINGS_CONTROLLER_FILE")"
+  integrity_path="$(first_fixed_match "'/scripts/verify_phase4_integrity_runtime.php'" "$SETTINGS_CONTROLLER_FILE")"
+  validator_path="$(first_fixed_match "'/scripts/verify_release_package.sh'" "$SETTINGS_CONTROLLER_FILE")"
+  view_heading="$(first_fixed_match "_l('marketing_release_readiness_heading')" "$SETTINGS_VIEW_FILE")"
+  view_note="$(first_fixed_match "_l('marketing_release_readiness_note')" "$SETTINGS_VIEW_FILE")"
+  view_loop="$(first_fixed_match "<?php foreach (\$release_readiness as \$readinessItem) { ?>" "$SETTINGS_VIEW_FILE")"
+  lang_heading="$(first_fixed_match "\$lang['marketing_release_readiness_heading']" "modules/marketing/language/english/marketing_lang.php")"
+  lang_note="$(first_fixed_match "\$lang['marketing_release_readiness_note']" "modules/marketing/language/english/marketing_lang.php")"
+  view_secret_exposure="$(grep -nE -- "license_key|access_token|app_secret|webhook_verify_token|inbound_email_secret" "$SETTINGS_VIEW_FILE" | grep 'release_readiness' || true)"
+  shell_exec_usage="$(grep -nE -- 'shell_exec|exec[(]|system[(]|proc_open|popen' "$SETTINGS_CONTROLLER_FILE" "$SETTINGS_VIEW_FILE" || true)"
+  forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
+  forbidden_queue="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
+  forbidden_campaign="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
+  forbidden_whatsapp="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
+  forbidden_ses="$(git_changed_path_if_available modules/marketing/libraries/Marketing_ses_sns.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$module_line" || -z "$license_line" || -z "$docs_line" || -z "$validator_line" || -z "$provider_line" || -z "$integrity_line" || -z "$operations_line" || -z "$docs_path" || -z "$integrity_path" || -z "$validator_path" || -z "$view_heading" || -z "$view_note" || -z "$view_loop" || -z "$lang_heading" || -z "$lang_note" || -n "$view_secret_exposure" || -n "$shell_exec_usage" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" || -n "$forbidden_whatsapp" || -n "$forbidden_ses" ]]; then
+    fail \
+      "settings page adds read-only release readiness without shell execution or runtime file changes" \
+      "expected controller-driven release readiness summary, settings-page panel markup, language strings, module-relative doc/validator/integrity file checks, no secret rendering, no shell execution, and no provider/webhook/queue/campaign runtime file changes; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; module=${module_line:-missing}; license=${license_line:-missing}; docs=${docs_line:-missing}; validator=${validator_line:-missing}; provider=${provider_line:-missing}; integrity=${integrity_line:-missing}; operations=${operations_line:-missing}; docs_path=${docs_path:-missing}; integrity_path=${integrity_path:-missing}; validator_path=${validator_path:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; loop=${view_loop:-missing}; lang_heading=${lang_heading:-missing}; lang_note=${lang_note:-missing}; secret=${view_secret_exposure:-none}; shell=${shell_exec_usage:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}; whatsapp_diff=${forbidden_whatsapp:-none}; ses_diff=${forbidden_ses:-none}"
+    return
+  fi
+
+  pass \
+    "settings page adds read-only release readiness without shell execution or runtime file changes" \
+    "controller=$controller_helper | panel=$view_heading | git_diff_mode=$git_diff_mode"
+}
+
 check_dashboard_operator_ui_structure() {
   local operations_title_line controls_line health_line warnings_line failure_line audit_line retention_line compact_grid_line executive_shell_line advanced_details_line visible_raw_command
   operations_title_line="$(first_fixed_match "marketing_dashboard_operations_center" "$DASHBOARD_VIEW_FILE")"
@@ -2797,6 +2837,7 @@ check_settings_two_column_layout
 check_settings_mobile_responsive_layout
 check_settings_license_block_order
 check_settings_provider_readiness_panel
+check_settings_release_readiness_panel
 check_dashboard_operator_ui_structure
 check_marketing_reports_surface
 check_marketing_reports_cleanup_controls

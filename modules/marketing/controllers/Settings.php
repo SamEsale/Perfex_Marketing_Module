@@ -132,6 +132,11 @@ class Settings extends AdminController
         $data['license_state'] = $this->marketingLicenseAvailable
             ? $this->marketing_license->get_license_state()
             : $this->get_fallback_license_state();
+        $data['release_readiness'] = $this->build_release_readiness_summary(
+            $data['license_state'],
+            $data['provider_readiness'],
+            $data['schema_report']
+        );
         $data['license_form'] = [
             'marketing_license_key' => '',
             'marketing_license_email' => $data['license_state']['email'],
@@ -270,6 +275,97 @@ class Settings extends AdminController
                         'value' => $whatsappWebhookTokenConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
                     ],
                 ],
+            ],
+        ];
+    }
+
+    protected function build_release_readiness_summary(array $licenseState, array $providerReadiness, array $schemaReport)
+    {
+        $moduleRoot = dirname(__DIR__);
+        $readmePath = $moduleRoot . '/README.md';
+        $installationPath = $moduleRoot . '/INSTALLATION.md';
+        $operationsPath = $moduleRoot . '/docs/OPERATIONS.md';
+        $releaseValidatorPath = $moduleRoot . '/scripts/verify_release_package.sh';
+        $integrityRuntimePath = $moduleRoot . '/scripts/verify_phase4_integrity_runtime.php';
+        $moduleVersion = trim((string) ($licenseState['module_version'] ?? ''));
+        $licenseStatus = trim((string) ($licenseState['status'] ?? 'inactive'));
+        $licenseConfigured = !empty($licenseState['api_configured']) || trim((string) ($licenseState['api_base_url_hint'] ?? '')) !== '';
+        $docsAvailable = is_file($readmePath) && is_file($installationPath) && is_file($operationsPath);
+        $providerReadinessAvailable = !empty($providerReadiness);
+        $schemaHealthy = !empty($schemaReport['ok']);
+
+        return [
+            [
+                'title' => _l('marketing_release_readiness_module_metadata'),
+                'status_key' => $moduleVersion !== '' ? 'ready' : 'unavailable',
+                'status_label' => $moduleVersion !== ''
+                    ? _l('marketing_release_readiness_status_ready')
+                    : _l('marketing_release_readiness_status_unavailable'),
+                'note' => $moduleVersion !== ''
+                    ? sprintf(_l('marketing_release_readiness_module_metadata_note'), $moduleVersion)
+                    : _l('marketing_release_readiness_module_metadata_missing_note'),
+            ],
+            [
+                'title' => _l('marketing_release_readiness_license_support'),
+                'status_key' => !$this->marketingLicenseAvailable
+                    ? 'unavailable'
+                    : (in_array($licenseStatus, ['active', 'grace'], true) && $licenseConfigured ? 'ready' : 'needs_review'),
+                'status_label' => !$this->marketingLicenseAvailable
+                    ? _l('marketing_release_readiness_status_unavailable')
+                    : (in_array($licenseStatus, ['active', 'grace'], true) && $licenseConfigured ? _l('marketing_release_readiness_status_ready') : _l('marketing_release_readiness_status_needs_review')),
+                'note' => !$this->marketingLicenseAvailable
+                    ? _l('marketing_release_readiness_license_unavailable_note')
+                    : sprintf(_l('marketing_release_readiness_license_note'), trim((string) ($licenseState['status_label'] ?? 'Inactive'))),
+            ],
+            [
+                'title' => _l('marketing_release_readiness_docs'),
+                'status_key' => $docsAvailable ? 'ready' : 'needs_review',
+                'status_label' => $docsAvailable
+                    ? _l('marketing_release_readiness_status_ready')
+                    : _l('marketing_release_readiness_status_needs_review'),
+                'note' => $docsAvailable
+                    ? _l('marketing_release_readiness_docs_note')
+                    : _l('marketing_release_readiness_docs_missing_note'),
+            ],
+            [
+                'title' => _l('marketing_release_readiness_release_validation'),
+                'status_key' => is_file($releaseValidatorPath) ? 'ready' : 'unavailable',
+                'status_label' => is_file($releaseValidatorPath)
+                    ? _l('marketing_release_readiness_status_ready')
+                    : _l('marketing_release_readiness_status_unavailable'),
+                'note' => is_file($releaseValidatorPath)
+                    ? _l('marketing_release_readiness_release_validation_note')
+                    : _l('marketing_release_readiness_release_validation_missing_note'),
+            ],
+            [
+                'title' => _l('marketing_release_readiness_provider_summary'),
+                'status_key' => $providerReadinessAvailable ? 'ready' : 'unavailable',
+                'status_label' => $providerReadinessAvailable
+                    ? _l('marketing_release_readiness_status_ready')
+                    : _l('marketing_release_readiness_status_unavailable'),
+                'note' => $providerReadinessAvailable
+                    ? _l('marketing_release_readiness_provider_summary_note')
+                    : _l('marketing_release_readiness_provider_summary_missing_note'),
+            ],
+            [
+                'title' => _l('marketing_release_readiness_integrity'),
+                'status_key' => is_file($integrityRuntimePath) && $schemaHealthy ? 'ready' : (is_file($integrityRuntimePath) ? 'needs_review' : 'unavailable'),
+                'status_label' => is_file($integrityRuntimePath) && $schemaHealthy
+                    ? _l('marketing_release_readiness_status_ready')
+                    : (is_file($integrityRuntimePath) ? _l('marketing_release_readiness_status_needs_review') : _l('marketing_release_readiness_status_unavailable')),
+                'note' => is_file($integrityRuntimePath)
+                    ? ($schemaHealthy ? _l('marketing_release_readiness_integrity_note') : _l('marketing_release_readiness_integrity_review_note'))
+                    : _l('marketing_release_readiness_integrity_missing_note'),
+            ],
+            [
+                'title' => _l('marketing_release_readiness_operations'),
+                'status_key' => is_file($operationsPath) ? 'ready' : 'needs_review',
+                'status_label' => is_file($operationsPath)
+                    ? _l('marketing_release_readiness_status_ready')
+                    : _l('marketing_release_readiness_status_needs_review'),
+                'note' => is_file($operationsPath)
+                    ? _l('marketing_release_readiness_operations_note')
+                    : _l('marketing_release_readiness_operations_missing_note'),
             ],
         ];
     }

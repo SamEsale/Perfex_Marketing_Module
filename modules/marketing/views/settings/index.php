@@ -148,9 +148,17 @@ if (($license_state['status'] ?? '') === 'active') {
         background: #fee2e2;
         color: #991b1b;
     }
+    .marketing-provider-readiness-status-needs_review {
+        background: #fef3c7;
+        color: #92400e;
+    }
     .marketing-provider-readiness-status-optional {
         background: #e2e8f0;
         color: #334155;
+    }
+    .marketing-provider-readiness-status-unavailable {
+        background: #e5e7eb;
+        color: #4b5563;
     }
     .marketing-provider-readiness-note {
         margin: 0 0 10px;
@@ -557,6 +565,27 @@ if (($license_state['status'] ?? '') === 'active') {
                                                             <?php } ?>
                                                         </ul>
                                                     <?php } ?>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="panel_s marketing-settings-panel">
+                                    <div class="panel-body">
+                                        <h4 class="marketing-settings-panel-title"><?= _l('marketing_release_readiness_heading'); ?></h4>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_release_readiness_note'); ?></p>
+
+                                        <div class="marketing-provider-readiness-list">
+                                            <?php foreach ($release_readiness as $readinessItem) { ?>
+                                                <div class="marketing-provider-readiness-item">
+                                                    <div class="marketing-provider-readiness-header">
+                                                        <h5 class="marketing-provider-readiness-title"><?= html_escape($readinessItem['title']); ?></h5>
+                                                        <span class="marketing-provider-readiness-status marketing-provider-readiness-status-<?= html_escape((string) $readinessItem['status_key']); ?>">
+                                                            <?= html_escape($readinessItem['status_label']); ?>
+                                                        </span>
+                                                    </div>
+                                                    <p class="marketing-provider-readiness-note"><?= html_escape($readinessItem['note']); ?></p>
                                                 </div>
                                             <?php } ?>
                                         </div>
