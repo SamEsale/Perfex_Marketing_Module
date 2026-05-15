@@ -89,6 +89,24 @@ first_fixed_match() {
   grep -nF -- "$needle" "$file" | head -n 1
 }
 
+git_worktree_available() {
+  if ! command -v git >/dev/null 2>&1; then
+    return 1
+  fi
+
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+git_changed_path_if_available() {
+  local path="$1"
+
+  if ! git_worktree_available; then
+    return 0
+  fi
+
+  git diff --name-only -- "$path" 2>/dev/null || true
+}
+
 check_no_raw_expression_where_in() {
   local matches bad
   matches="$(grep -nE -- 'where_in[[:space:]]*\(' "$EVENTS_FILE" "$DASHBOARD_FILE" || true)"
@@ -2085,7 +2103,7 @@ check_whatsapp_dashboard_visibility() {
 }
 
 check_whatsapp_conversation_detail_view() {
-  local controller_method controller_view controller_model controller_messages model_conversation model_messages model_scope_channel model_scope_provider dashboard_link view_title view_summary view_timeline view_escape view_mark_read view_convert view_return_to view_no_payload_json view_no_media_json view_details model_limit no_auto_mark_read forbidden_webhook forbidden_queue forbidden_campaign
+  local controller_method controller_view controller_model controller_messages model_conversation model_messages model_scope_channel model_scope_provider dashboard_link view_title view_summary view_timeline view_escape view_mark_read view_convert view_return_to view_no_payload_json view_no_media_json view_details model_limit no_auto_mark_read forbidden_webhook forbidden_queue forbidden_campaign git_diff_mode
   controller_method="$(first_match 'function[[:space:]]+whatsapp_conversation' "$MARKETING_CONTROLLER_FILE")"
   controller_view="$(first_fixed_match "\$this->load->view('marketing/whatsapp_conversation', \$data);" "$MARKETING_CONTROLLER_FILE")"
   controller_model="$(first_fixed_match "get_whatsapp_conversation(\$conversationId)" "$MARKETING_CONTROLLER_FILE")"
@@ -2107,20 +2125,21 @@ check_whatsapp_conversation_detail_view() {
   view_details="$(first_fixed_match '<details class="marketing-whatsapp-details">' "modules/marketing/views/whatsapp_conversation.php")"
   model_limit="$(first_fixed_match 'min(200, (int) $limit)' "$CONVERSATIONS_FILE")"
   no_auto_mark_read="$(grep -nF 'mark_whatsapp_conversation_read(' "modules/marketing/views/whatsapp_conversation.php" || true)"
-  forbidden_webhook="$(git diff --name-only -- modules/marketing/controllers/Webhooks.php)"
-  forbidden_queue="$(git diff --name-only -- modules/marketing/models/Marketing_campaigns_model.php)"
-  forbidden_campaign="$(git diff --name-only -- modules/marketing/controllers/Campaigns.php)"
+  forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
+  forbidden_queue="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
+  forbidden_campaign="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
   if [[ -z "$controller_method" || -z "$controller_view" || -z "$controller_model" || -z "$controller_messages" || -z "$model_conversation" || -z "$model_messages" || -z "$model_scope_channel" || -z "$model_scope_provider" || -z "$dashboard_link" || -z "$view_title" || -z "$view_summary" || -z "$view_timeline" || -z "$view_escape" || -z "$view_mark_read" || -z "$view_convert" || -z "$view_return_to" || -n "$view_no_payload_json" || -n "$view_no_media_json" || -z "$view_details" || -z "$model_limit" || -n "$no_auto_mark_read" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" ]]; then
     fail \
       "WhatsApp conversation detail view remains bounded, escaped, and read-only on GET" \
-      "expected controller/model/view wiring, WhatsApp-only scoping, dashboard link, escaped timeline rendering, POST-form reuse for mark-read and convert, return_to preservation, no raw payload/media JSON output, bounded message loading, no automatic GET mutation, and no webhook/queue/campaign-send file changes; controller=${controller_method:-missing}; view=${controller_view:-missing}; model=${controller_model:-missing}; messages=${controller_messages:-missing}; helper=${model_conversation:-missing}; helper_messages=${model_messages:-missing}; channel=${model_scope_channel:-missing}; provider=${model_scope_provider:-missing}; dashboard_link=${dashboard_link:-missing}; title=${view_title:-missing}; summary=${view_summary:-missing}; timeline=${view_timeline:-missing}; escape=${view_escape:-missing}; mark_read=${view_mark_read:-missing}; convert=${view_convert:-missing}; return_to=${view_return_to:-missing}; payload_json=${view_no_payload_json:-none}; media_json=${view_no_media_json:-none}; details=${view_details:-missing}; limit=${model_limit:-missing}; auto_mutation=${no_auto_mark_read:-none}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}"
+      "expected controller/model/view wiring, WhatsApp-only scoping, dashboard link, escaped timeline rendering, POST-form reuse for mark-read and convert, return_to preservation, no raw payload/media JSON output, bounded message loading, no automatic GET mutation, and no webhook/queue/campaign-send file changes; controller=${controller_method:-missing}; view=${controller_view:-missing}; model=${controller_model:-missing}; messages=${controller_messages:-missing}; helper=${model_conversation:-missing}; helper_messages=${model_messages:-missing}; channel=${model_scope_channel:-missing}; provider=${model_scope_provider:-missing}; dashboard_link=${dashboard_link:-missing}; title=${view_title:-missing}; summary=${view_summary:-missing}; timeline=${view_timeline:-missing}; escape=${view_escape:-missing}; mark_read=${view_mark_read:-missing}; convert=${view_convert:-missing}; return_to=${view_return_to:-missing}; payload_json=${view_no_payload_json:-none}; media_json=${view_no_media_json:-none}; details=${view_details:-missing}; limit=${model_limit:-missing}; auto_mutation=${no_auto_mark_read:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}"
     return
   fi
 
   pass \
     "WhatsApp conversation detail view remains bounded, escaped, and read-only on GET" \
-    "controller=$controller_method | helper=$model_conversation | view=$view_title | return_to=$view_return_to"
+    "controller=$controller_method | helper=$model_conversation | view=$view_title | return_to=$view_return_to | git_diff_mode=$git_diff_mode"
 }
 
 check_whatsapp_manual_lead_conversion() {
