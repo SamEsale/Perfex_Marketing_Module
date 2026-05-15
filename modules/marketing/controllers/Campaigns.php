@@ -456,6 +456,7 @@ class Campaigns extends AdminController
         ];
         $data['can_send'] = staff_can('send', 'marketing');
         $data['can_prepare_recipients'] = $data['can_send'] && $this->marketing_campaigns_model->can_prepare_recipients($campaign);
+        $data['can_reprepare_recipients'] = $data['can_send'] && $this->marketing_campaigns_model->can_reprepare_recipients($campaign);
         $data['can_schedule'] = $data['can_send'] && $this->marketing_campaigns_model->can_schedule($campaign);
         $data['can_edit_campaign'] = staff_can('edit', 'marketing') && $this->marketing_campaigns_model->campaign_can_be_edited($campaign);
         $data['can_reset_campaign'] = $data['can_send']
@@ -623,6 +624,61 @@ class Campaigns extends AdminController
             set_alert('warning', $this->build_prepare_summary_message($summary));
         } else {
             set_alert('success', $this->build_prepare_summary_message($summary));
+        }
+
+        redirect(admin_url('marketing/campaigns/show/' . $id));
+    }
+
+    public function reprepare_recipients($id)
+    {
+        if (staff_cant('send', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $campaign = $this->marketing_campaigns_model->get($id);
+
+        if (!$campaign) {
+            show_404();
+        }
+
+        if (staff_cant('view', 'marketing') && staff_can('view_own', 'marketing')) {
+            if ($campaign['created_by'] !== get_staff_user_id()) {
+                access_denied('marketing');
+            }
+        }
+
+        if (!$this->marketing_campaigns_model->can_reprepare_recipients($campaign)) {
+            set_alert('warning', _l('marketing_campaign_reprepare_recipients_restricted'));
+            redirect(admin_url('marketing/campaigns/show/' . $id));
+        }
+
+        $queuedRecipients = $this->marketing_campaigns_model->count_recipients_by_status($id, 'queued');
+        if ($queuedRecipients === 0) {
+            set_alert('warning', _l('marketing_campaign_reprepare_recipients_restricted'));
+            redirect(admin_url('marketing/campaigns/show/' . $id));
+        }
+
+        $snapshot = $this->marketing_campaigns_model->get_campaign_targeting_snapshot($campaign);
+        if ($this->should_require_prepare_license($snapshot) && !marketing_is_feature_allowed('recipient_prepare')) {
+            set_alert('warning', marketing_license_block_message());
+            redirect(admin_url('marketing/campaigns/show/' . $id));
+        }
+
+        $this->marketing_campaigns_model->record_operator_action('manual_reprepare_recipients_requested', [], $id, get_staff_user_id());
+        $summary = $this->marketing_campaigns_model->sync_newly_eligible_recipients($id);
+
+        if (is_array($summary) && !empty($summary['license_blocked'])) {
+            set_alert('warning', $summary['license_message'] ?? marketing_license_block_message());
+        } elseif ($summary === false) {
+            set_alert('danger', _l('marketing_campaign_prepare_recipients_failure'));
+        } elseif ((int) ($summary['added_count'] ?? 0) > 0) {
+            set_alert('success', sprintf(_l('marketing_campaign_reprepare_recipients_success'), (int) $summary['added_count']));
+        } else {
+            set_alert('warning', _l('marketing_campaign_reprepare_recipients_none'));
         }
 
         redirect(admin_url('marketing/campaigns/show/' . $id));

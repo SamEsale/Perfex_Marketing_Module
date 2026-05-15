@@ -1,6 +1,9 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
 <?php
+$builderCssPath = module_dir_path('marketing', 'assets/css/marketing-builder.css');
+$builderCssUrl  = module_dir_url('marketing', 'assets/css/marketing-builder.css');
+$builderCssVer  = is_file($builderCssPath) ? (string) filemtime($builderCssPath) : '1';
 $isWhatsappCampaign = ($campaign['delivery_channel'] ?? 'email') === 'whatsapp';
 $showConfigurationWarnings = !empty($campaign_readiness['show_configuration_warnings']);
 $readinessGuidance = !empty($campaign_readiness['show_send_readiness_messages'])
@@ -59,6 +62,7 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
     return admin_url('marketing/campaigns/show/' . $campaign['id'] . '?' . http_build_query($query));
 };
 ?>
+<link rel="stylesheet" href="<?= html_escape($builderCssUrl . '?v=' . $builderCssVer); ?>">
 <style>
     .marketing-campaign-layout {
         display: grid;
@@ -189,6 +193,11 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                                 <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
                                                     <input type="hidden" name="prepare_campaign_id" value="<?= (int) $campaign['id']; ?>">
                                                     <button type="submit" class="btn btn-info btn-sm"><?= _l('marketing_campaign_prepare_recipients'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                            <?php if ($can_reprepare_recipients && (int) $recipient_summary['queued'] > 0) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns/reprepare_recipients/' . $campaign['id']), ['class' => 'inline-block']); ?>
+                                                    <button type="submit" class="btn btn-info btn-sm"><?= _l('marketing_campaign_reprepare_recipients'); ?></button>
                                                 <?= form_close(); ?>
                                             <?php } ?>
                                             <?php if ($can_send && in_array($campaign['status'], ['draft', 'sending'], true) && (int) $recipient_summary['queued'] > 0) { ?>

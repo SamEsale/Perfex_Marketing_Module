@@ -3321,6 +3321,19 @@ class Marketing_campaigns_model extends App_Model
         return in_array($campaign['status'], ['draft', 'scheduled', 'sending'], true) && $this->list_exists($campaign['list_id']);
     }
 
+    public function can_reprepare_recipients($campaign)
+    {
+        if (is_numeric($campaign)) {
+            $campaign = $this->get($campaign);
+        }
+
+        if (!$campaign || empty($campaign['list_id'])) {
+            return false;
+        }
+
+        return in_array($campaign['status'], ['draft', 'scheduled'], true) && $this->list_exists($campaign['list_id']);
+    }
+
     public function can_schedule($campaign)
     {
         if (is_numeric($campaign)) {
@@ -3440,6 +3453,43 @@ class Marketing_campaigns_model extends App_Model
         }
 
         $summary['success'] = true;
+
+        return $summary;
+    }
+
+    public function sync_newly_eligible_recipients($campaignId)
+    {
+        $campaign = $this->get($campaignId);
+
+        if (!$this->can_reprepare_recipients($campaign)) {
+            return false;
+        }
+
+        $eligibleSnapshot = $this->get_campaign_targeting_snapshot($campaign);
+        $queueSnapshot = $this->get_campaign_queue_targeting_snapshot($campaign);
+        $existingRecipientCount = $this->count_campaign_recipients($campaignId);
+        $summary = $this->prepare_recipients($campaignId);
+
+        if (!is_array($summary)) {
+            return $summary;
+        }
+
+        $summary['eligible_count'] = (int) ($eligibleSnapshot['eligible'] ?? 0);
+        $summary['existing_recipient_count'] = $existingRecipientCount;
+        $summary['added_count'] = (int) ($summary['queued'] ?? 0);
+        $summary['skipped_existing_count'] = max(
+            0,
+            (int) ($queueSnapshot['duplicate'] ?? 0) - (int) ($eligibleSnapshot['duplicate'] ?? 0)
+        );
+        $summary['excluded_count'] = (int) ($summary['invalid'] ?? 0)
+            + (int) ($summary['suppressed'] ?? 0)
+            + (int) ($summary['inactive'] ?? 0)
+            + (int) ($summary['unsubscribed'] ?? 0)
+            + (int) ($summary['missing_phone'] ?? 0)
+            + (int) ($summary['filtered_out'] ?? 0);
+        $summary['status_message'] = $summary['added_count'] > 0
+            ? sprintf(_l('marketing_campaign_reprepare_recipients_success'), (int) $summary['added_count'])
+            : _l('marketing_campaign_reprepare_recipients_none');
 
         return $summary;
     }
