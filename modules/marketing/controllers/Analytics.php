@@ -26,6 +26,8 @@ class Analytics extends AdminController
         $recentEvents = [];
         $retentionDiagnostics = $this->get_default_retention_diagnostics();
         $topClickedLinks = [];
+        $campaignPerformance = $this->get_default_campaign_performance();
+        $providerHealth = $this->get_default_provider_health();
 
         if ($this->input->post('run_retention_cleanup')) {
             if (staff_cant('settings', 'marketing')) {
@@ -143,11 +145,37 @@ class Analytics extends AdminController
             $this->log_analytics_runtime_failure('Marketing analytics top clicked links unavailable: ', $exception);
         }
 
+        try {
+            if (method_exists($this->marketing_dashboard_model, 'get_campaign_performance_summary')) {
+                $rows = $this->marketing_dashboard_model->get_campaign_performance_summary(25);
+                if (is_array($rows)) {
+                    $campaignPerformance = array_replace_recursive($campaignPerformance, $rows);
+                }
+            }
+        } catch (Throwable $exception) {
+            $hasRuntimeWarning = true;
+            $this->log_analytics_runtime_failure('Marketing analytics campaign performance unavailable: ', $exception);
+        }
+
+        try {
+            if (method_exists($this->marketing_dashboard_model, 'get_provider_health_summary')) {
+                $rows = $this->marketing_dashboard_model->get_provider_health_summary(5);
+                if (is_array($rows)) {
+                    $providerHealth = array_replace_recursive($providerHealth, $rows);
+                }
+            }
+        } catch (Throwable $exception) {
+            $hasRuntimeWarning = true;
+            $this->log_analytics_runtime_failure('Marketing analytics provider health unavailable: ', $exception);
+        }
+
         $data = $this->get_default_analytics_view_data();
         $data['title']      = _l('marketing_analytics');
         $data['stats']      = $analyticsSummary;
         $data['recent']     = $recentEvents;
         $data['top_clicked_links'] = $topClickedLinks;
+        $data['campaign_performance'] = $campaignPerformance;
+        $data['provider_health'] = $providerHealth;
         $data['retention_diagnostics'] = $retentionDiagnostics;
         $data['can_run_retention_cleanup'] = staff_can('settings', 'marketing');
         $data['analytics_warning_message'] = $hasRuntimeWarning
@@ -227,6 +255,8 @@ class Analytics extends AdminController
             'stats' => $this->get_default_analytics_summary(),
             'recent' => [],
             'top_clicked_links' => [],
+            'campaign_performance' => $this->get_default_campaign_performance(),
+            'provider_health' => $this->get_default_provider_health(),
             'retention_diagnostics' => $this->get_default_retention_diagnostics(),
             'can_run_retention_cleanup' => false,
             'events_pagination' => [
@@ -237,6 +267,26 @@ class Analytics extends AdminController
             ],
             'analytics_warning_message' => '',
             'analytics_render_failed' => false,
+        ];
+    }
+
+    protected function get_default_campaign_performance()
+    {
+        return [
+            'available' => false,
+            'items' => [],
+        ];
+    }
+
+    protected function get_default_provider_health()
+    {
+        return [
+            'available' => false,
+            'queue_paused' => false,
+            'schema_ready' => false,
+            'recent_recovered_total' => 0,
+            'warning_items' => [],
+            'failure_items' => [],
         ];
     }
 

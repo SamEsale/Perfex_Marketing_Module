@@ -189,6 +189,89 @@ class Marketing_dashboard_model extends App_Model
         ];
     }
 
+    public function get_campaign_performance_summary($limit = 25)
+    {
+        $limit = max(1, min(25, (int) $limit));
+        $summary = [
+            'available' => false,
+            'items' => [],
+        ];
+
+        if (!$this->db->table_exists($this->campaignsTable) || !$this->db->field_exists('id', $this->campaignsTable)) {
+            return $summary;
+        }
+
+        $select = [
+            'id',
+            ($this->db->field_exists('name', $this->campaignsTable) ? 'name' : 'NULL AS name'),
+            ($this->db->field_exists('status', $this->campaignsTable) ? 'status' : 'NULL AS status'),
+            ($this->db->field_exists('send_completed_at', $this->campaignsTable) ? 'send_completed_at' : 'NULL AS send_completed_at'),
+            ($this->db->field_exists('scheduled_at', $this->campaignsTable) ? 'scheduled_at' : 'NULL AS scheduled_at'),
+            ($this->db->field_exists('dateupdated', $this->campaignsTable) ? 'dateupdated' : 'NULL AS dateupdated'),
+            ($this->db->field_exists('datecreated', $this->campaignsTable) ? 'datecreated' : 'NULL AS datecreated'),
+        ];
+
+        $rows = $this->db->select(implode(', ', $select), false)
+            ->from($this->campaignsTable)
+            ->order_by('id', 'DESC')
+            ->limit($limit)
+            ->get()
+            ->result_array();
+
+        $summary['available'] = true;
+        if (empty($rows)) {
+            return $summary;
+        }
+
+        $eventModel = $this->get_events_model();
+        foreach ($rows as $row) {
+            $campaignId = (int) ($row['id'] ?? 0);
+            if ($campaignId <= 0) {
+                continue;
+            }
+
+            try {
+                $eventSummary = is_object($eventModel) && method_exists($eventModel, 'get_normalized_summary')
+                    ? (array) $eventModel->get_normalized_summary($campaignId)
+                    : [];
+            } catch (Throwable $exception) {
+                $eventSummary = [];
+                $this->log_dashboard_runtime_failure('Marketing campaign performance event summary unavailable: ', $exception);
+            }
+
+            $summary['items'][] = [
+                'id' => $campaignId,
+                'name' => trim((string) ($row['name'] ?? '')) !== '' ? trim((string) ($row['name'] ?? '')) : ('#' . $campaignId),
+                'status' => trim((string) ($row['status'] ?? 'draft')),
+                'sent_count' => $this->get_campaign_sent_count($campaignId, $eventSummary),
+                'delivered_count' => (int) ($eventSummary['delivered'] ?? 0),
+                'open_count' => (int) ($eventSummary['open'] ?? 0),
+                'click_count' => $this->get_campaign_click_count($campaignId, $eventSummary),
+                'bounce_count' => (int) ($eventSummary['bounce'] ?? 0),
+                'complaint_count' => (int) ($eventSummary['complaint'] ?? 0),
+                'unsubscribe_count' => (int) ($eventSummary['unsubscribe'] ?? 0),
+                'last_activity_at' => $this->get_campaign_last_activity_at($campaignId, $row),
+            ];
+        }
+
+        return $summary;
+    }
+
+    public function get_provider_health_summary($limit = 5)
+    {
+        $limit = max(1, min(10, (int) $limit));
+        $diagnostics = $this->get_safe_queue_diagnostics();
+
+        return [
+            'available' => true,
+            'queue_paused' => !empty($diagnostics['queue_paused']),
+            'schema_ready' => !empty($diagnostics['schema_ready']),
+            'recent_recovered_total' => max(0, (int) ($diagnostics['recent_recovered_total'] ?? 0)),
+            'warning_items' => $this->normalize_metric_count_items($diagnostics['recent_warning_counts'] ?? [], $limit),
+            'failure_items' => $this->normalize_metric_count_items($diagnostics['recent_failure_metric_counts'] ?? [], $limit),
+        ];
+    }
+
     public function get_recent_campaigns($limit = 5)
     {
         $this->db->select('id, name, subject, status, scheduled_at, send_completed_at');
@@ -688,6 +771,111 @@ class Marketing_dashboard_model extends App_Model
         }
 
         return 0;
+    }
+
+    protected function get_campaign_sent_count($campaignId, array $eventSummary = [])
+    {
+        $campaignId = (int) $campaignId;
+        if ($campaignId <= 0) {
+            return 0;
+        }
+
+        if (
+            $this->db->table_exists($this->recipientsTable)
+            && $this->db->field_exists('campaign_id', $this->recipientsTable)
+            && $this->db->field_exists('status', $this->recipientsTable)
+        ) {
+            return $this->safe_total_rows($this->recipientsTable, [
+                'campaign_id' => $campaignId,
+                'status' => 'sent',
+            ]);
+        }
+
+        return (int) ($eventSummary['accepted_sent'] ?? 0);
+    }
+
+    protected function get_campaign_click_count($campaignId, array $eventSummary = [])
+    {
+        $campaignId = (int) $campaignId;
+        if ($campaignId <= 0) {
+            return 0;
+        }
+
+        if (
+            $this->db->table_exists($this->recipientsTable)
+            && $this->db->field_exists('campaign_id', $this->recipientsTable)
+            && $this->db->field_exists('click_count', $this->recipientsTable)
+        ) {
+            try {
+                $row = $this->db->select('COALESCE(SUM(click_count), 0) AS total_clicks', false)
+                    ->from($this->recipientsTable)
+                    ->where('campaign_id', $campaignId)
+                    ->get()
+                    ->row_array();
+
+                return max(0, (int) ($row['total_clicks'] ?? 0));
+            } catch (Throwable $exception) {
+                $this->log_dashboard_runtime_failure('Marketing campaign click metrics unavailable: ', $exception);
+            }
+        }
+
+        return (int) ($eventSummary['click'] ?? 0);
+    }
+
+    protected function get_campaign_last_activity_at($campaignId, array $campaignRow = [])
+    {
+        $campaignId = (int) $campaignId;
+        if (
+            $campaignId > 0
+            && $this->db->table_exists($this->eventsTable)
+            && $this->db->field_exists('campaign_id', $this->eventsTable)
+            && $this->db->field_exists('event_at', $this->eventsTable)
+        ) {
+            try {
+                $row = $this->db->select('MAX(event_at) AS last_activity_at', false)
+                    ->from($this->eventsTable)
+                    ->where('campaign_id', $campaignId)
+                    ->get()
+                    ->row_array();
+                $eventAt = trim((string) ($row['last_activity_at'] ?? ''));
+                if ($eventAt !== '') {
+                    return $eventAt;
+                }
+            } catch (Throwable $exception) {
+                $this->log_dashboard_runtime_failure('Marketing campaign last-activity lookup unavailable: ', $exception);
+            }
+        }
+
+        foreach (['send_completed_at', 'scheduled_at', 'dateupdated', 'datecreated'] as $field) {
+            $value = trim((string) ($campaignRow[$field] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    protected function normalize_metric_count_items($counts, $limit)
+    {
+        $items = [];
+        if (!is_array($counts)) {
+            return $items;
+        }
+
+        foreach (array_slice($counts, 0, max(1, (int) $limit), true) as $code => $count) {
+            $code = trim((string) $code);
+            if ($code === '') {
+                continue;
+            }
+
+            $items[] = [
+                'code' => $code,
+                'count' => max(0, (int) $count),
+            ];
+        }
+
+        return $items;
     }
 
     protected function apply_normalized_event_type_filter($db, array $eventTypes)

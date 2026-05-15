@@ -1418,6 +1418,36 @@ check_analytics_view_array_guards() {
     "stats=$stats_line | recent=$recent_line | normalized=$normalized_line"
 }
 
+check_analytics_campaign_performance_reporting() {
+  local controller_campaigns controller_health model_campaigns model_health model_limit model_guard model_last_activity view_campaigns view_health view_note destructive_sql forbidden_webhook forbidden_queue forbidden_whatsapp git_diff_mode
+  controller_campaigns="$(first_fixed_match "\$data['campaign_performance'] = \$campaignPerformance;" "$ANALYTICS_CONTROLLER_FILE")"
+  controller_health="$(first_fixed_match "\$data['provider_health'] = \$providerHealth;" "$ANALYTICS_CONTROLLER_FILE")"
+  model_campaigns="$(first_match 'function[[:space:]]+get_campaign_performance_summary' "$DASHBOARD_FILE")"
+  model_health="$(first_match 'function[[:space:]]+get_provider_health_summary' "$DASHBOARD_FILE")"
+  model_limit="$(first_fixed_match 'min(25, (int) $limit)' "$DASHBOARD_FILE")"
+  model_guard="$(first_fixed_match "\$this->db->field_exists('campaign_id', \$this->recipientsTable)" "$DASHBOARD_FILE")"
+  model_last_activity="$(first_fixed_match "MAX(event_at) AS last_activity_at" "$DASHBOARD_FILE")"
+  view_campaigns="$(first_fixed_match "_l('marketing_campaign_performance_reporting')" "$ANALYTICS_VIEW_FILE")"
+  view_health="$(first_fixed_match "_l('marketing_provider_health_summary')" "$ANALYTICS_VIEW_FILE")"
+  view_note="$(first_fixed_match "_l('marketing_provider_health_summary_note')" "$ANALYTICS_VIEW_FILE")"
+  destructive_sql="$(grep -nE -- '\\b(TRUNCATE|DROP|DELETE FROM|empty_table)\\b' "$ANALYTICS_CONTROLLER_FILE" "$DASHBOARD_FILE" "$ANALYTICS_VIEW_FILE" || true)"
+  forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
+  forbidden_queue="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
+  forbidden_whatsapp="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$controller_campaigns" || -z "$controller_health" || -z "$model_campaigns" || -z "$model_health" || -z "$model_limit" || -z "$model_guard" || -z "$model_last_activity" || -z "$view_campaigns" || -z "$view_health" || -z "$view_note" || -n "$destructive_sql" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_whatsapp" ]]; then
+    fail \
+      "analytics page adds bounded campaign performance reporting and read-only provider health summaries" \
+      "expected analytics controller wiring in $ANALYTICS_CONTROLLER_FILE, bounded helper methods plus optional column guards in $DASHBOARD_FILE, reporting sections in $ANALYTICS_VIEW_FILE, no destructive cleanup, and no webhook/queue/WhatsApp runtime file changes; campaigns=${controller_campaigns:-missing}; health=${controller_health:-missing}; model_campaigns=${model_campaigns:-missing}; model_health=${model_health:-missing}; limit=${model_limit:-missing}; guard=${model_guard:-missing}; activity=${model_last_activity:-missing}; view_campaigns=${view_campaigns:-missing}; view_health=${view_health:-missing}; view_note=${view_note:-missing}; destructive=${destructive_sql:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; whatsapp_diff=${forbidden_whatsapp:-none}"
+    return
+  fi
+
+  pass \
+    "analytics page adds bounded campaign performance reporting and read-only provider health summaries" \
+    "controller=$controller_campaigns | model=$model_campaigns | provider=$model_health | git_diff_mode=$git_diff_mode"
+}
+
 check_analytics_runtime_fail_closed_queries() {
   local count_line top_links_call_line top_links_data_line top_links_helper_line campaign_helper_line count_helper_line total_rows_helper_line public_token_guard_line public_url_guard_line public_url_select_line public_url_from_line public_url_token_line public_url_active_line public_url_null_guard_line public_url_group_line public_human_sum_line public_unique_sum_line public_old_alias_from_line public_old_alias_sum_line public_bare_url_select_line public_bare_url_null_line public_bare_url_not_empty_line public_bare_url_group_line campaign_id_guard_line pagination_select_line bootstrap_line warning_data_line dashboard_reset_helper_line dashboard_reset_query_line dashboard_reset_call_line
   count_line="$(first_fixed_match "Marketing analytics event count unavailable:" "$ANALYTICS_CONTROLLER_FILE")"
@@ -2712,6 +2742,7 @@ check_campaign_index_scanability
 check_campaign_preview_review_shell
 check_no_destructive_event_history_clear
 check_analytics_view_array_guards
+check_analytics_campaign_performance_reporting
 check_analytics_runtime_fail_closed_queries
 check_analytics_render_fail_closed
 check_analytics_primary_view_normal_layout
