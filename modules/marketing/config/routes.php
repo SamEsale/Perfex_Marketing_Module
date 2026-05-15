@@ -7,6 +7,7 @@ $route['marketing/webhooks/inbound_email'] = 'webhooks/inbound_email';
 $route['marketing/webhooks/whatsapp'] = 'webhooks/whatsapp';
 $route['marketing/track/c/(:any)'] = 'track/c/$1';
 $route['marketing/unsubscribe/(:any)'] = 'subscriptions/unsubscribe/$1';
+$route['admin/marketing/campaigns/reprepare_recipients/(:num)'] = 'campaigns/reprepare_recipients/$1';
 $route['marketing/campaigns/preview/(:num)'] = 'campaigns/preview/$1';
 $route['marketing/campaigns/reprepare_recipients/(:num)'] = 'campaigns/reprepare_recipients/$1';
 $route['marketing/campaigns/schedule/(:num)'] = 'campaigns/schedule/$1';
