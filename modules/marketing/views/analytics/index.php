@@ -181,11 +181,12 @@
         white-space: nowrap;
     }
     .marketing-analytics-events-table tbody td {
-        padding: 12px 14px;
+        padding: 10px 14px;
         border-top: 1px solid rgba(226, 232, 240, .85);
         vertical-align: middle;
         font-size: 13px;
         color: #0f172a;
+        white-space: nowrap;
     }
     .marketing-analytics-events-table tbody tr:nth-child(even) {
         background: rgba(248, 250, 252, .72);
@@ -211,13 +212,17 @@
         white-space: nowrap;
     }
     .marketing-analytics-click-target {
-        min-width: 240px;
-        max-width: 100%;
-        color: #475569;
-        word-break: break-word;
-        overflow-wrap: anywhere;
+        width: 100%;
         white-space: normal;
-        line-height: 1.5;
+    }
+    .marketing-analytics-click-target-text {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #475569;
+        line-height: 1.4;
     }
     @media (max-width: 1199px) {
         .marketing-analytics-grid {
@@ -234,6 +239,12 @@
         .marketing-analytics-events-table thead th,
         .marketing-analytics-events-table tbody td {
             padding: 10px 12px;
+        }
+        .marketing-analytics-click-target-text {
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+            word-break: break-word;
         }
     }
 </style>
@@ -624,7 +635,11 @@
                                                 <td><span class="label label-<?= html_escape($badgeClass); ?>"><?= html_escape($eventLabel); ?></span></td>
                                                 <td><?= html_escape($event['email'] ?: '-'); ?></td>
                                                 <td><?= html_escape($event['provider']); ?></td>
-                                                <td class="marketing-analytics-click-target"><?= html_escape($event['url'] ?: '-'); ?></td>
+                                                <td class="marketing-analytics-click-target">
+                                                    <span class="marketing-analytics-click-target-text" title="<?= html_escape($event['url'] ?: '-'); ?>">
+                                                        <?= html_escape($event['url'] ?: '-'); ?>
+                                                    </span>
+                                                </td>
                                                 <td><?= html_escape($eventAt); ?></td>
                                             </tr>
                                         <?php } ?>
