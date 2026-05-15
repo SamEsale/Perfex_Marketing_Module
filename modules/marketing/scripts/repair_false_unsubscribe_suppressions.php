@@ -84,9 +84,24 @@ function unsubscribe_repair_define_bootstrap_guards($crmRoot)
     }
 }
 
+function unsubscribe_repair_define_runtime_db_prefix_fallback()
+{
+    if (!function_exists('db_prefix')) {
+        /**
+         * Minimal fallback for loading Perfex database config in this CLI repair tool.
+         * This does not replace the full Perfex runtime bootstrap.
+         */
+        function db_prefix()
+        {
+            return 'tbl';
+        }
+    }
+}
+
 function unsubscribe_repair_connect_db($crmRoot)
 {
     unsubscribe_repair_define_bootstrap_guards($crmRoot);
+    unsubscribe_repair_define_runtime_db_prefix_fallback();
 
     try {
         require $crmRoot . '/application/config/app-config.php';
@@ -196,7 +211,7 @@ if ($crmRoot === null) {
 
 [$mysqli, $databaseName] = unsubscribe_repair_connect_db($crmRoot);
 
-$tableName = 'tblmarketing_suppressions';
+$tableName = db_prefix() . 'marketing_suppressions';
 if (!unsubscribe_repair_table_exists($mysqli, $databaseName, $tableName)) {
     unsubscribe_repair_exit(2, "Suppression table is unavailable.", true);
 }

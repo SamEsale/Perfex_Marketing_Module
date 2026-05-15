@@ -2490,6 +2490,29 @@ check_confirmed_unsubscribe_flow() {
     "get_guard=$get_guard_line | apply=$apply_call_line | repair=$repair_usage_line | git_diff_mode=$git_diff_mode"
 }
 
+check_false_unsubscribe_repair_script_safety() {
+  local cli_only_line dry_run_line apply_gate_line db_prefix_guard_line table_scope_line reason_scope_line source_scope_line active_scope_line
+  cli_only_line="$(first_fixed_match "if (PHP_SAPI !== 'cli') {" "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  dry_run_line="$(first_fixed_match 'Dry run only. Re-run with --apply to deactivate the matching suppressions.' "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  apply_gate_line="$(first_fixed_match "if (!\$applyMode) {" "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  db_prefix_guard_line="$(first_fixed_match 'function unsubscribe_repair_define_runtime_db_prefix_fallback()' "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  table_scope_line="$(first_fixed_match "\$tableName = db_prefix() . 'marketing_suppressions';" "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  reason_scope_line="$(first_fixed_match "reason='unsubscribe'" "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  source_scope_line="$(first_fixed_match "source='marketing_unsubscribe'" "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  active_scope_line="$(first_fixed_match "active=1" "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+
+  if [[ -z "$cli_only_line" || -z "$dry_run_line" || -z "$apply_gate_line" || -z "$db_prefix_guard_line" || -z "$table_scope_line" || -z "$reason_scope_line" || -z "$source_scope_line" || -z "$active_scope_line" ]]; then
+    fail \
+      "false unsubscribe repair script stays CLI-only, dry-run-first, bootstrap-safe, and tightly scoped" \
+      "expected CLI-only guard, dry-run default, --apply gate, db_prefix() fallback helper, tblmarketing_suppressions scope, and unsubscribe-only active marketing_unsubscribe update filter in $FALSE_UNSUBSCRIBE_REPAIR_FILE; cli=${cli_only_line:-missing}; dry_run=${dry_run_line:-missing}; apply=${apply_gate_line:-missing}; db_prefix=${db_prefix_guard_line:-missing}; table=${table_scope_line:-missing}; reason=${reason_scope_line:-missing}; source=${source_scope_line:-missing}; active=${active_scope_line:-missing}"
+    return
+  fi
+
+  pass \
+    "false unsubscribe repair script stays CLI-only, dry-run-first, bootstrap-safe, and tightly scoped" \
+    "cli=$cli_only_line | db_prefix=$db_prefix_guard_line | source=$source_scope_line"
+}
+
 check_required_config_and_public_endpoints() {
   local ses_route inbound_route whatsapp_route tracking_route unsubscribe_route csrf_ses_line csrf_inbound_line csrf_whatsapp_line
   ses_route="$(first_fixed_match "\$route['marketing/webhooks/ses_sns'] = 'webhooks/ses_sns';" "$ROUTES_FILE")"
@@ -3051,6 +3074,7 @@ check_module_metadata_header
 check_module_lifecycle_hooks
 check_required_config_and_public_endpoints
 check_confirmed_unsubscribe_flow
+check_false_unsubscribe_repair_script_safety
 check_option_repair_idempotence
 check_release_forbidden_artifact_detection
 check_release_packaging_docs_hardening
