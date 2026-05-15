@@ -8,6 +8,7 @@ $route['marketing/webhooks/whatsapp'] = 'webhooks/whatsapp';
 $route['marketing/track/c/(:any)'] = 'track/c/$1';
 $route['marketing/unsubscribe/(:any)'] = 'subscriptions/unsubscribe/$1';
 $route['marketing/campaigns/preview/(:num)'] = 'campaigns/preview/$1';
+$route['marketing/campaigns/reprepare_recipients/(:num)'] = 'campaigns/reprepare_recipients/$1';
 $route['marketing/campaigns/schedule/(:num)'] = 'campaigns/schedule/$1';
 $route['marketing/campaigns/upload_media'] = 'campaigns/upload_media';
 $route['marketing/settings'] = 'settings/index';

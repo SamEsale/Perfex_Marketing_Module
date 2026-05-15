@@ -1354,8 +1354,9 @@ check_campaign_send_schedule_guidance() {
 }
 
 check_campaign_reprepare_recipients_workflow() {
-  local controller_action_line permission_line post_guard_line helper_guard_line queued_guard_line operator_action_line model_can_line model_sync_line existing_count_line eligible_snapshot_line queue_snapshot_line prepare_reuse_line skipped_existing_line button_form_line button_label_line send_line schedule_line mailer_diff webhooks_diff whatsapp_diff git_diff_mode
+  local controller_action_line route_line permission_line post_guard_line helper_guard_line queued_guard_line operator_action_line model_can_line model_sync_line existing_count_line eligible_snapshot_line queue_snapshot_line prepare_reuse_line skipped_existing_line button_form_line button_label_line send_line schedule_line mailer_diff webhooks_diff whatsapp_diff git_diff_mode
   controller_action_line="$(first_match 'function[[:space:]]+reprepare_recipients' "$CAMPAIGNS_CONTROLLER_FILE")"
+  route_line="$(first_fixed_match "\$route['marketing/campaigns/reprepare_recipients/(:num)'] = 'campaigns/reprepare_recipients/\$1';" "$ROUTES_FILE")"
   permission_line="$(first_fixed_match "if (staff_cant('send', 'marketing')) {" "$CAMPAIGNS_CONTROLLER_FILE")"
   post_guard_line="$(first_fixed_match "if (!\$this->input->post()) {" "$CAMPAIGNS_CONTROLLER_FILE")"
   helper_guard_line="$(first_fixed_match "if (!\$this->marketing_campaigns_model->can_reprepare_recipients(\$campaign)) {" "$CAMPAIGNS_CONTROLLER_FILE")"
@@ -1377,16 +1378,16 @@ check_campaign_reprepare_recipients_workflow() {
   whatsapp_diff="$(git_changed_path_if_available "$WHATSAPP_FILE")"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_action_line" || -z "$permission_line" || -z "$post_guard_line" || -z "$helper_guard_line" || -z "$queued_guard_line" || -z "$operator_action_line" || -z "$model_can_line" || -z "$model_sync_line" || -z "$existing_count_line" || -z "$eligible_snapshot_line" || -z "$queue_snapshot_line" || -z "$prepare_reuse_line" || -z "$skipped_existing_line" || -z "$button_form_line" || -z "$button_label_line" || -z "$send_line" || -z "$schedule_line" || -n "$mailer_diff" || -n "$webhooks_diff" || -n "$whatsapp_diff" ]]; then
+  if [[ -z "$controller_action_line" || -z "$route_line" || -z "$permission_line" || -z "$post_guard_line" || -z "$helper_guard_line" || -z "$queued_guard_line" || -z "$operator_action_line" || -z "$model_can_line" || -z "$model_sync_line" || -z "$existing_count_line" || -z "$eligible_snapshot_line" || -z "$queue_snapshot_line" || -z "$prepare_reuse_line" || -z "$skipped_existing_line" || -z "$button_form_line" || -z "$button_label_line" || -z "$send_line" || -z "$schedule_line" || -n "$mailer_diff" || -n "$webhooks_diff" || -n "$whatsapp_diff" ]]; then
     fail \
       "campaign recipient re-prepare stays additive, POST-only, and isolated from runtime send/provider flows" \
-      "expected controller action, send permission, POST guard, safe state guard, queued guard, operator audit action, model can/sync helpers, snapshot reuse with existing-recipient exclusion, show-page button/form, and no mailer/webhook/whatsapp diffs; action=${controller_action_line:-missing}; permission=${permission_line:-missing}; post=${post_guard_line:-missing}; helper_guard=${helper_guard_line:-missing}; queued_guard=${queued_guard_line:-missing}; operator=${operator_action_line:-missing}; model_can=${model_can_line:-missing}; model_sync=${model_sync_line:-missing}; existing=${existing_count_line:-missing}; eligible=${eligible_snapshot_line:-missing}; queue=${queue_snapshot_line:-missing}; prepare=${prepare_reuse_line:-missing}; skipped_existing=${skipped_existing_line:-missing}; form=${button_form_line:-missing}; label=${button_label_line:-missing}; send=${send_line:-missing}; schedule=${schedule_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; mailer_diff=${mailer_diff:-none}; webhooks_diff=${webhooks_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}"
+      "expected controller action, explicit route, send permission, POST guard, safe state guard, queued guard, operator audit action, model can/sync helpers, snapshot reuse with existing-recipient exclusion, show-page button/form, and no mailer/webhook/whatsapp diffs; action=${controller_action_line:-missing}; route=${route_line:-missing}; permission=${permission_line:-missing}; post=${post_guard_line:-missing}; helper_guard=${helper_guard_line:-missing}; queued_guard=${queued_guard_line:-missing}; operator=${operator_action_line:-missing}; model_can=${model_can_line:-missing}; model_sync=${model_sync_line:-missing}; existing=${existing_count_line:-missing}; eligible=${eligible_snapshot_line:-missing}; queue=${queue_snapshot_line:-missing}; prepare=${prepare_reuse_line:-missing}; skipped_existing=${skipped_existing_line:-missing}; form=${button_form_line:-missing}; label=${button_label_line:-missing}; send=${send_line:-missing}; schedule=${schedule_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; mailer_diff=${mailer_diff:-none}; webhooks_diff=${webhooks_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}"
     return
   fi
 
   pass \
     "campaign recipient re-prepare stays additive, POST-only, and isolated from runtime send/provider flows" \
-    "action=$controller_action_line | model_sync=$model_sync_line | form=$button_form_line | git_diff_mode=$git_diff_mode"
+    "action=$controller_action_line | route=$route_line | model_sync=$model_sync_line | form=$button_form_line | git_diff_mode=$git_diff_mode"
 }
 
 check_campaign_index_scanability() {
