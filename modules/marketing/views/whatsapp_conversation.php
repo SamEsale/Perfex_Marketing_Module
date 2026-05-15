@@ -10,6 +10,7 @@ $contactLabel = $contactName !== '' ? $contactName : ($contactPhone !== '' ? $co
 $leadConversion = isset($conversation['lead_conversion']) && is_array($conversation['lead_conversion']) ? $conversation['lead_conversion'] : [];
 $conversionLabel = trim((string) ($leadConversion['label'] ?? _l('marketing_dashboard_whatsapp_convert_unavailable')));
 $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'] : '';
+$replyMaxLength = 4096;
 ?>
 <style>
     .marketing-whatsapp-shell {
@@ -161,6 +162,21 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
     }
     .marketing-whatsapp-action-note {
         margin-top: 12px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+    .marketing-whatsapp-reply-panel {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid #eef2f7;
+    }
+    .marketing-whatsapp-reply-panel textarea.form-control {
+        min-height: 120px;
+        resize: vertical;
+    }
+    .marketing-whatsapp-reply-helper {
+        margin: 8px 0 0;
         color: #64748b;
         font-size: 12px;
         line-height: 1.6;
@@ -412,6 +428,28 @@ $leadUrl = !empty($conversation['lead_url']) ? (string) $conversation['lead_url'
                                         <?php } ?>
                                     </div>
                                     <p class="marketing-whatsapp-action-note"><?= _l('marketing_whatsapp_conversation_actions_note'); ?></p>
+
+                                    <div class="marketing-whatsapp-reply-panel">
+                                        <h5 class="no-margin"><?= _l('marketing_whatsapp_reply_panel_title'); ?></h5>
+                                        <p class="marketing-whatsapp-copy"><?= _l('marketing_whatsapp_reply_panel_note'); ?></p>
+                                        <?= form_open(admin_url('marketing/send_whatsapp_conversation_reply')); ?>
+                                            <input type="hidden" name="conversation_id" value="<?= (int) ($conversation['id'] ?? 0); ?>">
+                                            <input type="hidden" name="return_to" value="<?= html_escape($returnTo); ?>">
+                                            <div class="form-group mtop15">
+                                                <label class="control-label" for="marketing-whatsapp-reply-body"><?= _l('marketing_whatsapp_reply_body_label'); ?></label>
+                                                <textarea
+                                                    id="marketing-whatsapp-reply-body"
+                                                    name="reply_body"
+                                                    class="form-control"
+                                                    rows="5"
+                                                    maxlength="<?= (int) $replyMaxLength; ?>"
+                                                    placeholder="<?= html_escape(_l('marketing_whatsapp_reply_body_placeholder')); ?>"
+                                                ></textarea>
+                                                <p class="marketing-whatsapp-reply-helper"><?= sprintf(html_escape(_l('marketing_whatsapp_reply_body_helper')), (int) $replyMaxLength); ?></p>
+                                            </div>
+                                            <button type="submit" class="btn btn-success"><?= _l('marketing_whatsapp_reply_send_button'); ?></button>
+                                        <?= form_close(); ?>
+                                    </div>
                                 </div>
                             </div>
 

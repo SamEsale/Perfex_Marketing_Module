@@ -275,6 +275,77 @@ class Marketing extends AdminController
         redirect($this->get_safe_marketing_redirect());
     }
 
+    public function send_whatsapp_conversation_reply()
+    {
+        if (staff_cant('settings', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $conversationId = (int) $this->input->post('conversation_id', true);
+        $replyBody = trim((string) $this->input->post('reply_body', false));
+        $maxLength = $this->get_whatsapp_reply_max_length();
+
+        if ($conversationId <= 0) {
+            set_alert('danger', _l('marketing_whatsapp_reply_invalid_conversation'));
+            redirect($this->get_safe_marketing_redirect());
+        }
+
+        if ($replyBody === '') {
+            set_alert('danger', _l('marketing_whatsapp_reply_body_required'));
+            redirect($this->get_safe_marketing_redirect('marketing/whatsapp_conversation/' . $conversationId));
+        }
+
+        if (mb_strlen($replyBody) > $maxLength) {
+            set_alert('danger', sprintf(_l('marketing_whatsapp_reply_body_too_long'), $maxLength));
+            redirect($this->get_safe_marketing_redirect('marketing/whatsapp_conversation/' . $conversationId));
+        }
+
+        $conversation = $this->marketing_conversations_model->get_whatsapp_conversation($conversationId);
+        if (empty($conversation)) {
+            set_alert('danger', _l('marketing_whatsapp_reply_invalid_conversation'));
+            redirect($this->get_safe_marketing_redirect());
+        }
+
+        $recipientPhone = trim((string) ($conversation['normalized_phone'] ?? ($conversation['contact_phone'] ?? '')));
+        if ($recipientPhone === '') {
+            set_alert('danger', _l('marketing_whatsapp_reply_contact_unavailable'));
+            redirect($this->get_safe_marketing_redirect('marketing/whatsapp_conversation/' . $conversationId));
+        }
+
+        $this->load->library('marketing/Marketing_whatsapp');
+        $sendResult = $this->marketing_whatsapp->send_text_message($recipientPhone, $replyBody);
+        if (empty($sendResult['success'])) {
+            set_alert('danger', $this->format_whatsapp_reply_error_message($sendResult));
+            redirect($this->get_safe_marketing_redirect('marketing/whatsapp_conversation/' . $conversationId));
+        }
+
+        $persistResult = $this->marketing_conversations_model->record_whatsapp_outbound_reply($conversationId, [
+            'body_text' => $replyBody,
+            'provider_message_id' => trim((string) ($sendResult['provider_message_id'] ?? '')),
+            'provider_thread_id' => trim((string) ($conversation['provider_thread_id'] ?? '')),
+            'provider_status' => 'accepted',
+            'datecreated' => date('Y-m-d H:i:s'),
+            'contact_phone' => trim((string) ($conversation['contact_phone'] ?? '')),
+            'normalized_phone' => trim((string) ($conversation['normalized_phone'] ?? '')),
+        ]);
+
+        if (!empty($persistResult['success'])) {
+            set_alert('success', sprintf(_l('marketing_whatsapp_reply_send_success'), $conversationId));
+        } else {
+            $message = trim((string) ($persistResult['message'] ?? ''));
+            if ($message === '') {
+                $message = _l('marketing_whatsapp_reply_persistence_failure');
+            }
+            set_alert('warning', $message);
+        }
+
+        redirect($this->get_safe_marketing_redirect('marketing/whatsapp_conversation/' . $conversationId));
+    }
+
     protected function get_reports_cleanup_confirmation_phrase($target)
     {
         if ($target === 'activity') {
@@ -443,5 +514,51 @@ class Marketing extends AdminController
             'label' => _l('marketing_dashboard_whatsapp_convert_unavailable'),
             'status' => 'unavailable',
         ];
+    }
+
+    protected function get_whatsapp_reply_max_length()
+    {
+        return 4096;
+    }
+
+    protected function format_whatsapp_reply_error_message(array $result)
+    {
+        $message = _l('marketing_whatsapp_reply_send_failure');
+        $error = trim((string) ($result['error'] ?? ''));
+        if ($error !== '') {
+            $message .= ' ' . $error;
+        }
+
+        $details = [];
+        $statusCode = (int) ($result['status_code'] ?? 0);
+        if ($statusCode > 0) {
+            $details[] = 'HTTP ' . $statusCode;
+        }
+
+        $metaType = trim((string) ($result['meta_error_type'] ?? ''));
+        if ($metaType !== '') {
+            $details[] = 'type: ' . $metaType;
+        }
+
+        $metaCode = trim((string) ($result['meta_error_code'] ?? ''));
+        if ($metaCode !== '') {
+            $details[] = 'code: ' . $metaCode;
+        }
+
+        $metaSubcode = trim((string) ($result['meta_error_subcode'] ?? ''));
+        if ($metaSubcode !== '') {
+            $details[] = 'subcode: ' . $metaSubcode;
+        }
+
+        $fbtraceId = trim((string) ($result['meta_fbtrace_id'] ?? ''));
+        if ($fbtraceId !== '') {
+            $details[] = 'fbtrace_id: ' . $fbtraceId;
+        }
+
+        if (!empty($details)) {
+            $message .= ' (' . implode(', ', $details) . ')';
+        }
+
+        return $message;
     }
 }

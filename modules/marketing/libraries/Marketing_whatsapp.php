@@ -279,6 +279,136 @@ class Marketing_whatsapp
         ];
     }
 
+    public function send_text_message($to, $body, array $settings = [])
+    {
+        $settings = !empty($settings) ? $settings : $this->get_settings();
+        if (empty($settings['enabled'])) {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp Business integration is disabled.',
+            ];
+        }
+
+        $graphVersion = trim((string) ($settings['graph_version'] ?? ''));
+        $graphVersion = $graphVersion !== '' ? $graphVersion : 'v23.0';
+        $phoneNumberId = trim((string) ($settings['phone_number_id'] ?? ''));
+        $accessToken = trim((string) ($settings['access_token'] ?? ''));
+        $recipient = $this->normalizePhone($to);
+        $textBody = trim((string) $body);
+
+        if ($phoneNumberId === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp phone number ID is missing.',
+            ];
+        }
+
+        if ($accessToken === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp access token is missing.',
+            ];
+        }
+
+        if ($recipient === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp recipient is missing or invalid.',
+            ];
+        }
+
+        if ($textBody === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp reply text is missing.',
+            ];
+        }
+
+        if (!function_exists('curl_init')) {
+            return [
+                'success' => false,
+                'error' => 'cURL is required to send WhatsApp messages.',
+            ];
+        }
+
+        $endpoint = 'https://graph.facebook.com/' . rawurlencode($graphVersion) . '/' . rawurlencode($phoneNumberId) . '/messages';
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $recipient,
+            'type' => 'text',
+            'text' => [
+                'preview_url' => false,
+                'body' => $textBody,
+            ],
+        ];
+
+        $curl = curl_init($endpoint);
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $rawResponse = curl_exec($curl);
+        $curlError = curl_error($curl);
+        $statusCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        if ($rawResponse === false || $curlError !== '') {
+            $this->logSafeError('Marketing WhatsApp reply send failed at transport level: ' . $this->sanitizeMessage($curlError));
+
+            return [
+                'success' => false,
+                'error' => 'WhatsApp API request failed.',
+                'status_code' => $statusCode,
+                'meta_error_message' => '',
+                'meta_error_type' => '',
+                'meta_error_code' => '',
+                'meta_error_subcode' => '',
+                'meta_fbtrace_id' => '',
+            ];
+        }
+
+        $decoded = json_decode($rawResponse, true);
+        if ($statusCode >= 200 && $statusCode < 300 && !empty($decoded['messages'][0]['id'])) {
+            log_message('info', 'Marketing WhatsApp text reply accepted: phone_number_id=' . $phoneNumberId . ' status=' . $statusCode);
+
+            return [
+                'success' => true,
+                'status_code' => $statusCode,
+                'provider_message_id' => (string) $decoded['messages'][0]['id'],
+            ];
+        }
+
+        $metaError = $this->extractMetaErrorDetails($decoded, $rawResponse);
+        $apiError = $metaError['meta_error_message'] !== '' ? $metaError['meta_error_message'] : 'WhatsApp API request was not accepted.';
+        $this->logSafeError(
+            'Marketing WhatsApp text reply failed: status=' . $statusCode
+            . ' type=' . $metaError['meta_error_type']
+            . ' code=' . $metaError['meta_error_code']
+            . ' subcode=' . $metaError['meta_error_subcode']
+            . ' fbtrace_id=' . $metaError['meta_fbtrace_id']
+            . ' message=' . $apiError
+        );
+
+        return [
+            'success' => false,
+            'error' => $apiError,
+            'status_code' => $statusCode,
+            'meta_error_message' => $metaError['meta_error_message'],
+            'meta_error_type' => $metaError['meta_error_type'],
+            'meta_error_code' => $metaError['meta_error_code'],
+            'meta_error_subcode' => $metaError['meta_error_subcode'],
+            'meta_fbtrace_id' => $metaError['meta_fbtrace_id'],
+        ];
+    }
+
     public function parse_inbound_webhook_payload($payload)
     {
         if (!is_array($payload)) {

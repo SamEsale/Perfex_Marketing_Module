@@ -2142,6 +2142,52 @@ check_whatsapp_conversation_detail_view() {
     "controller=$controller_method | helper=$model_conversation | view=$view_title | return_to=$view_return_to | git_diff_mode=$git_diff_mode"
 }
 
+check_whatsapp_manual_reply_workflow() {
+  local controller_method controller_permission controller_post_guard controller_conversation controller_body controller_length controller_return_to controller_library model_helper model_channel model_provider model_direction model_type library_method library_endpoint library_bearer view_form view_conversation_id view_return_to view_textarea view_maxlength view_escape view_no_payload_json view_no_media_json view_no_access_token view_no_app_secret destructive_sql forbidden_webhook forbidden_queue forbidden_campaign git_diff_mode
+  controller_method="$(first_match 'function[[:space:]]+send_whatsapp_conversation_reply' "$MARKETING_CONTROLLER_FILE")"
+  controller_permission="$(first_fixed_match "staff_cant('settings', 'marketing')" "$MARKETING_CONTROLLER_FILE")"
+  controller_post_guard="$(first_fixed_match "if (!\$this->input->post()) {" "$MARKETING_CONTROLLER_FILE")"
+  controller_conversation="$(first_fixed_match "\$conversationId = (int) \$this->input->post('conversation_id', true);" "$MARKETING_CONTROLLER_FILE")"
+  controller_body="$(first_fixed_match "\$replyBody = trim((string) \$this->input->post('reply_body', false));" "$MARKETING_CONTROLLER_FILE")"
+  controller_length="$(first_fixed_match "mb_strlen(\$replyBody) > \$maxLength" "$MARKETING_CONTROLLER_FILE")"
+  controller_return_to="$(first_fixed_match "get_safe_marketing_redirect('marketing/whatsapp_conversation/' . \$conversationId)" "$MARKETING_CONTROLLER_FILE")"
+  controller_library="$(first_fixed_match "\$sendResult = \$this->marketing_whatsapp->send_text_message(\$recipientPhone, \$replyBody);" "$MARKETING_CONTROLLER_FILE")"
+  model_helper="$(first_match 'function[[:space:]]+record_whatsapp_outbound_reply' "$CONVERSATIONS_FILE")"
+  model_channel="$(first_fixed_match "'channel' => 'whatsapp'" "$CONVERSATIONS_FILE")"
+  model_provider="$(first_fixed_match "'provider' => 'whatsapp_cloud'" "$CONVERSATIONS_FILE")"
+  model_direction="$(first_fixed_match "'direction' => 'outbound'" "$CONVERSATIONS_FILE")"
+  model_type="$(first_fixed_match "'message_type' => 'text'" "$CONVERSATIONS_FILE")"
+  library_method="$(first_match 'function[[:space:]]+send_text_message' "$WHATSAPP_FILE")"
+  library_endpoint="$(first_fixed_match "/messages';" "$WHATSAPP_FILE")"
+  library_bearer="$(first_fixed_match "'Authorization: Bearer ' . \$accessToken" "$WHATSAPP_FILE")"
+  view_form="$(first_fixed_match "form_open(admin_url('marketing/send_whatsapp_conversation_reply'))" "modules/marketing/views/whatsapp_conversation.php")"
+  view_conversation_id="$(first_fixed_match "name=\"conversation_id\" value=\"<?= (int) (\$conversation['" "modules/marketing/views/whatsapp_conversation.php")"
+  view_return_to="$(first_fixed_match 'name="return_to" value="<?= html_escape($returnTo); ?>"' "modules/marketing/views/whatsapp_conversation.php")"
+  view_textarea="$(first_fixed_match 'name="reply_body"' "modules/marketing/views/whatsapp_conversation.php")"
+  view_maxlength="$(first_fixed_match 'maxlength="<?= (int) $replyMaxLength; ?>"' "modules/marketing/views/whatsapp_conversation.php")"
+  view_escape="$(first_fixed_match "<?= sprintf(html_escape(_l('marketing_whatsapp_reply_body_helper')), (int) \$replyMaxLength); ?>" "modules/marketing/views/whatsapp_conversation.php")"
+  view_no_payload_json="$(grep -nF 'payload_json' "modules/marketing/views/whatsapp_conversation.php" || true)"
+  view_no_media_json="$(grep -nF 'media_meta_json' "modules/marketing/views/whatsapp_conversation.php" || true)"
+  view_no_access_token="$(grep -nF 'access_token' "modules/marketing/views/whatsapp_conversation.php" || true)"
+  view_no_app_secret="$(grep -nF 'app_secret' "modules/marketing/views/whatsapp_conversation.php" || true)"
+  destructive_sql="$(grep -nE -- '\\b(TRUNCATE|DROP|DELETE FROM|empty_table)\\b' "$MARKETING_CONTROLLER_FILE" "$CONVERSATIONS_FILE" "$WHATSAPP_FILE" "modules/marketing/views/whatsapp_conversation.php" || true)"
+  forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
+  forbidden_queue="$(git_changed_path_if_available modules/marketing/models/Marketing_campaigns_model.php)"
+  forbidden_campaign="$(git_changed_path_if_available modules/marketing/controllers/Campaigns.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$controller_method" || -z "$controller_permission" || -z "$controller_post_guard" || -z "$controller_conversation" || -z "$controller_body" || -z "$controller_length" || -z "$controller_return_to" || -z "$controller_library" || -z "$model_helper" || -z "$model_channel" || -z "$model_provider" || -z "$model_direction" || -z "$model_type" || -z "$library_method" || -z "$library_endpoint" || -z "$library_bearer" || -z "$view_form" || -z "$view_conversation_id" || -z "$view_return_to" || -z "$view_textarea" || -z "$view_maxlength" || -z "$view_escape" || -n "$view_no_payload_json" || -n "$view_no_media_json" || -n "$view_no_access_token" || -n "$view_no_app_secret" || -n "$destructive_sql" || -n "$forbidden_webhook" || -n "$forbidden_queue" || -n "$forbidden_campaign" ]]; then
+    fail \
+      "manual WhatsApp reply stays POST-only, bounded, persisted, and isolated from webhook or queue behavior" \
+      "expected POST-only controller action, permission guard, body validation, safe return_to redirect, outbound WhatsApp persistence in $CONVERSATIONS_FILE, sanitized library send helper in $WHATSAPP_FILE, bounded reply form in modules/marketing/views/whatsapp_conversation.php, no raw payload/media JSON or secrets rendered, no destructive cleanup, and no webhook/queue/campaign-send file changes; method=${controller_method:-missing}; permission=${controller_permission:-missing}; post=${controller_post_guard:-missing}; conversation=${controller_conversation:-missing}; body=${controller_body:-missing}; length=${controller_length:-missing}; return_to=${controller_return_to:-missing}; library_call=${controller_library:-missing}; model=${model_helper:-missing}; channel=${model_channel:-missing}; provider=${model_provider:-missing}; direction=${model_direction:-missing}; type=${model_type:-missing}; library=${library_method:-missing}; endpoint=${library_endpoint:-missing}; bearer=${library_bearer:-missing}; form=${view_form:-missing}; conversation_id=${view_conversation_id:-missing}; return_field=${view_return_to:-missing}; textarea=${view_textarea:-missing}; maxlength=${view_maxlength:-missing}; escape=${view_escape:-missing}; payload_json=${view_no_payload_json:-none}; media_json=${view_no_media_json:-none}; access_token=${view_no_access_token:-none}; app_secret=${view_no_app_secret:-none}; destructive=${destructive_sql:-none}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${forbidden_webhook:-none}; queue_diff=${forbidden_queue:-none}; campaign_diff=${forbidden_campaign:-none}"
+    return
+  fi
+
+  pass \
+    "manual WhatsApp reply stays POST-only, bounded, persisted, and isolated from webhook or queue behavior" \
+    "controller=$controller_method | model=$model_helper | library=$library_method | form=$view_form | git_diff_mode=$git_diff_mode"
+}
+
 check_whatsapp_manual_lead_conversion() {
   local controller_method controller_permission controller_post_guard controller_call model_convert model_readiness model_existing_link model_create_link model_context model_phone_match dashboard_form dashboard_escape dashboard_deferred destructive_sql
   controller_method="$(first_match 'function[[:space:]]+convert_whatsapp_conversation' "$MARKETING_CONTROLLER_FILE")"
@@ -2692,6 +2738,7 @@ check_whatsapp_inbound_conversation_metadata
 check_whatsapp_lead_conversion_deferred
 check_whatsapp_dashboard_visibility
 check_whatsapp_conversation_detail_view
+check_whatsapp_manual_reply_workflow
 check_whatsapp_manual_lead_conversion
 check_whatsapp_mark_read_control
 check_no_facebook_linkedin_active_ui_or_release_docs

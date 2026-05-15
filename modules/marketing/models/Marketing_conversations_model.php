@@ -793,6 +793,86 @@ class Marketing_conversations_model extends App_Model
         ];
     }
 
+    public function record_whatsapp_outbound_reply($conversationId, array $data)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0 || !$this->tables_available()) {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp outbound reply persistence is unavailable.',
+            ];
+        }
+
+        $conversation = $this->get_whatsapp_conversation($conversationId);
+        if (empty($conversation)) {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp conversation could not be found for outbound reply persistence.',
+            ];
+        }
+
+        $bodyText = trim((string) ($data['body_text'] ?? ($data['message'] ?? '')));
+        if ($bodyText === '') {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp outbound reply text is missing.',
+            ];
+        }
+
+        $providerMessageId = trim((string) ($data['provider_message_id'] ?? ''));
+        $dateCreated = trim((string) ($data['datecreated'] ?? ''));
+        if ($dateCreated === '') {
+            $dateCreated = date('Y-m-d H:i:s');
+        }
+
+        $dedupeKey = $providerMessageId !== ''
+            ? 'whatsapp_cloud:outbound:' . $providerMessageId
+            : 'whatsapp_cloud:outbound:' . sha1($conversationId . '|' . $dateCreated . '|' . $bodyText);
+
+        $result = $this->add_message_idempotent([
+            'conversation_id' => $conversationId,
+            'campaign_id' => $conversation['campaign_id'] ?? null,
+            'marketing_contact_id' => $conversation['marketing_contact_id'] ?? null,
+            'direction' => 'outbound',
+            'channel' => 'whatsapp',
+            'provider' => 'whatsapp_cloud',
+            'message_type' => 'text',
+            'provider_thread_id' => trim((string) ($data['provider_thread_id'] ?? ($conversation['provider_thread_id'] ?? ''))),
+            'provider_status' => trim((string) ($data['provider_status'] ?? 'accepted')),
+            'message' => $bodyText,
+            'body_text' => $bodyText,
+            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+            'dedupe_key' => $dedupeKey,
+            'datecreated' => $dateCreated,
+            'contact_phone' => trim((string) ($data['contact_phone'] ?? ($conversation['contact_phone'] ?? ''))),
+            'normalized_phone' => trim((string) ($data['normalized_phone'] ?? ($conversation['normalized_phone'] ?? ''))),
+        ]);
+
+        if (!empty($result['success'])) {
+            return [
+                'success' => true,
+                'inserted' => !empty($result['inserted']),
+                'duplicate' => !empty($result['duplicate']),
+                'conversation_id' => $conversationId,
+                'message_id' => (int) ($result['id'] ?? 0),
+                'provider_message_id' => $providerMessageId,
+                'message' => !empty($result['duplicate'])
+                    ? 'WhatsApp outbound reply was already recorded.'
+                    : 'WhatsApp outbound reply recorded successfully.',
+            ];
+        }
+
+        return [
+            'success' => false,
+            'conversation_id' => $conversationId,
+            'provider_message_id' => $providerMessageId,
+            'message' => 'WhatsApp reply was sent but could not be recorded in conversation history.',
+        ];
+    }
+
     private function touch_conversation($conversationId, array $data = [])
     {
         if (!$this->db->table_exists($this->conversationsTable)) {
