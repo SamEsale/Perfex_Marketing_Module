@@ -2353,28 +2353,31 @@ check_whatsapp_mark_read_control() {
 }
 
 check_no_facebook_linkedin_active_ui_or_release_docs() {
-  local settings_fb settings_li dashboard_fb dashboard_li readme_fb readme_li install_fb install_li ops_fb ops_li
+  local settings_fb settings_li dashboard_fb dashboard_li readme_facebook readme_linkedin install_facebook install_linkedin ops_facebook ops_linkedin readme_deferred install_deferred ops_deferred
   settings_fb="$(first_match 'Facebook|facebook' "$SETTINGS_VIEW_FILE")"
   settings_li="$(first_match 'LinkedIn|linkedin' "$SETTINGS_VIEW_FILE")"
   dashboard_fb="$(first_match 'Facebook|facebook' "$DASHBOARD_VIEW_FILE")"
   dashboard_li="$(first_match 'LinkedIn|linkedin' "$DASHBOARD_VIEW_FILE")"
-  readme_fb="$(first_match 'Facebook|facebook' "$README_FILE")"
-  readme_li="$(first_match 'LinkedIn|linkedin' "$README_FILE")"
-  install_fb="$(first_match 'Facebook|facebook' "$INSTALLATION_FILE")"
-  install_li="$(first_match 'LinkedIn|linkedin' "$INSTALLATION_FILE")"
-  ops_fb="$(first_match 'Facebook|facebook' "$OPERATIONS_FILE")"
-  ops_li="$(first_match 'LinkedIn|linkedin' "$OPERATIONS_FILE")"
+  readme_facebook="$(first_match 'Facebook|facebook' "$README_FILE")"
+  readme_linkedin="$(first_match 'LinkedIn|linkedin' "$README_FILE")"
+  install_facebook="$(first_match 'Facebook|facebook' "$INSTALLATION_FILE")"
+  install_linkedin="$(first_match 'LinkedIn|linkedin' "$INSTALLATION_FILE")"
+  ops_facebook="$(first_match 'Facebook|facebook' "$OPERATIONS_FILE")"
+  ops_linkedin="$(first_match 'LinkedIn|linkedin' "$OPERATIONS_FILE")"
+  readme_deferred="$(first_match 'deferred|not active' "$README_FILE")"
+  install_deferred="$(first_match 'deferred|not active' "$INSTALLATION_FILE")"
+  ops_deferred="$(first_match 'deferred|Meta approval|not active' "$OPERATIONS_FILE")"
 
-  if [[ -n "$settings_fb" || -n "$settings_li" || -n "$dashboard_fb" || -n "$dashboard_li" || -n "$readme_fb" || -n "$readme_li" || -n "$install_fb" || -n "$install_li" || -n "$ops_fb" || -n "$ops_li" ]]; then
+  if [[ -n "$settings_fb" || -n "$settings_li" || -n "$dashboard_fb" || -n "$dashboard_li" || ( -n "$readme_facebook" && -z "$readme_deferred" ) || ( -n "$readme_linkedin" && -z "$readme_deferred" ) || ( -n "$install_facebook" && -z "$install_deferred" ) || ( -n "$install_linkedin" && -z "$install_deferred" ) || ( -n "$ops_facebook" && -z "$ops_deferred" ) || ( -n "$ops_linkedin" && -z "$ops_deferred" ) ]]; then
     fail \
-      "Facebook and LinkedIn do not appear in active settings/dashboard UI or release-facing docs" \
-      "expected no Facebook/LinkedIn references in settings, dashboard, README, INSTALLATION, or OPERATIONS; settings_fb=${settings_fb:-none}; settings_li=${settings_li:-none}; dashboard_fb=${dashboard_fb:-none}; dashboard_li=${dashboard_li:-none}; readme_fb=${readme_fb:-none}; readme_li=${readme_li:-none}; install_fb=${install_fb:-none}; install_li=${install_li:-none}; ops_fb=${ops_fb:-none}; ops_li=${ops_li:-none}"
+      "Facebook and LinkedIn stay out of active UI and only appear in docs as deferred or inactive channels" \
+      "expected no Facebook/LinkedIn references in settings/dashboard, and any release-doc references must explicitly frame those channels as deferred/inactive; settings_fb=${settings_fb:-none}; settings_li=${settings_li:-none}; dashboard_fb=${dashboard_fb:-none}; dashboard_li=${dashboard_li:-none}; readme_fb=${readme_facebook:-none}; readme_li=${readme_linkedin:-none}; readme_deferred=${readme_deferred:-missing}; install_fb=${install_facebook:-none}; install_li=${install_linkedin:-none}; install_deferred=${install_deferred:-missing}; ops_fb=${ops_facebook:-none}; ops_li=${ops_linkedin:-none}; ops_deferred=${ops_deferred:-missing}"
     return
   fi
 
   pass \
-    "Facebook and LinkedIn do not appear in active settings/dashboard UI or release-facing docs" \
-    "settings/dashboard/release docs are WhatsApp-only"
+    "Facebook and LinkedIn stay out of active UI and only appear in docs as deferred or inactive channels" \
+    "settings/dashboard remain WhatsApp-only while release docs can describe deferred channels safely"
 }
 
 check_release_validator_exists() {
@@ -2619,6 +2622,52 @@ check_release_forbidden_artifact_detection() {
     "source=$source_check_line | zip=$zip_check_line | readme=$readme_line"
 }
 
+check_release_packaging_docs_hardening() {
+  local zip_root_line nested_root_line docs_required_line integrity_script_line vendor_forbidden_line source_forbidden_line readme_zip_root readme_install_path readme_nested_root readme_provider_panel readme_release_panel readme_integrity readme_meta install_zip_root install_install_path install_nested_root install_panels install_integrity install_meta ops_preflight ops_release_validator ops_provider_panel ops_release_panel ops_integrity ops_rollback ops_meta forbidden_controller forbidden_model forbidden_view forbidden_library git_diff_mode
+  zip_root_line="$(first_fixed_match 'all archive entries must live under marketing/' "$RELEASE_VALIDATOR_FILE")"
+  nested_root_line="$(first_fixed_match 'archive must not contain marketing/modules/marketing/' "$RELEASE_VALIDATOR_FILE")"
+  docs_required_line="$(first_fixed_match 'required documentation missing from release zip' "$RELEASE_VALIDATOR_FILE")"
+  integrity_script_line="$(first_fixed_match 'marketing/scripts/verify_phase4_integrity_runtime.php' "$RELEASE_VALIDATOR_FILE")"
+  vendor_forbidden_line="$(first_fixed_match '^marketing/vendor/' "$RELEASE_VALIDATOR_FILE")"
+  source_forbidden_line="$(first_fixed_match "no git metadata, marketplace clutter, env, vendor, cache, temp, log, or backup artifacts detected" "$RELEASE_VALIDATOR_FILE")"
+  readme_zip_root="$(first_fixed_match 'marketing/' "$README_FILE")"
+  readme_install_path="$(first_fixed_match 'modules/marketing/marketing.php' "$README_FILE")"
+  readme_nested_root="$(first_fixed_match 'marketing/modules/marketing/marketing.php' "$README_FILE")"
+  readme_provider_panel="$(first_fixed_match 'Provider Readiness' "$README_FILE")"
+  readme_release_panel="$(first_fixed_match 'Release Readiness' "$README_FILE")"
+  readme_integrity="$(first_fixed_match 'php modules/marketing/scripts/verify_phase4_integrity_runtime.php' "$README_FILE")"
+  readme_meta="$(first_fixed_match 'Meta approval' "$README_FILE")"
+  install_zip_root="$(first_fixed_match 'marketing/' "$INSTALLATION_FILE")"
+  install_install_path="$(first_fixed_match 'modules/marketing/marketing.php' "$INSTALLATION_FILE")"
+  install_nested_root="$(first_fixed_match 'modules/marketing/modules/marketing/marketing.php' "$INSTALLATION_FILE")"
+  install_panels="$(first_fixed_match 'Provider Readiness' "$INSTALLATION_FILE")"
+  install_integrity="$(first_fixed_match 'php modules/marketing/scripts/verify_phase4_integrity_runtime.php' "$INSTALLATION_FILE")"
+  install_meta="$(first_fixed_match 'Meta' "$INSTALLATION_FILE")"
+  ops_preflight="$(first_fixed_match '## Pre-Release Validation' "$OPERATIONS_FILE")"
+  ops_release_validator="$(first_fixed_match 'bash scripts/verify_release_package.sh' "$OPERATIONS_FILE")"
+  ops_provider_panel="$(first_fixed_match 'Provider Readiness' "$OPERATIONS_FILE")"
+  ops_release_panel="$(first_fixed_match 'Release Readiness' "$OPERATIONS_FILE")"
+  ops_integrity="$(first_fixed_match 'php modules/marketing/scripts/verify_phase4_integrity_runtime.php' "$OPERATIONS_FILE")"
+  ops_rollback="$(first_fixed_match '## Rollback Note' "$OPERATIONS_FILE")"
+  ops_meta="$(first_fixed_match 'Meta approval' "$OPERATIONS_FILE")"
+  forbidden_controller="$(git_changed_path_if_available modules/marketing/controllers/Settings.php)"
+  forbidden_model="$(git_changed_path_if_available modules/marketing/models/Marketing_dashboard_model.php)"
+  forbidden_view="$(git_changed_path_if_available modules/marketing/views/settings/index.php)"
+  forbidden_library="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$zip_root_line" || -z "$nested_root_line" || -z "$docs_required_line" || -z "$integrity_script_line" || -z "$vendor_forbidden_line" || -z "$source_forbidden_line" || -z "$readme_zip_root" || -z "$readme_install_path" || -z "$readme_nested_root" || -z "$readme_provider_panel" || -z "$readme_release_panel" || -z "$readme_integrity" || -z "$readme_meta" || -z "$install_zip_root" || -z "$install_install_path" || -z "$install_nested_root" || -z "$install_panels" || -z "$install_integrity" || -z "$install_meta" || -z "$ops_preflight" || -z "$ops_release_validator" || -z "$ops_provider_panel" || -z "$ops_release_panel" || -z "$ops_integrity" || -z "$ops_rollback" || -z "$ops_meta" || -n "$forbidden_controller" || -n "$forbidden_model" || -n "$forbidden_view" || -n "$forbidden_library" ]]; then
+    fail \
+      "release validator and handoff docs enforce commercial packaging expectations without runtime PHP changes" \
+      "expected hardened zip-root/nested-root/docs/script checks in $RELEASE_VALIDATOR_FILE, release-facing docs that mention marketing/ root, modules/marketing/marketing.php install path, provider readiness, release readiness, runtime integrity diagnostics, rollback, and Meta approval caveat, and no runtime PHP file diffs; zip_root=${zip_root_line:-missing}; nested_root=${nested_root_line:-missing}; docs_required=${docs_required_line:-missing}; integrity_script=${integrity_script_line:-missing}; vendor=${vendor_forbidden_line:-missing}; source=${source_forbidden_line:-missing}; readme_zip=${readme_zip_root:-missing}; readme_install=${readme_install_path:-missing}; readme_nested=${readme_nested_root:-missing}; readme_provider=${readme_provider_panel:-missing}; readme_release=${readme_release_panel:-missing}; readme_integrity=${readme_integrity:-missing}; readme_meta=${readme_meta:-missing}; install_zip=${install_zip_root:-missing}; install_install=${install_install_path:-missing}; install_nested=${install_nested_root:-missing}; install_panels=${install_panels:-missing}; install_integrity=${install_integrity:-missing}; install_meta=${install_meta:-missing}; ops_preflight=${ops_preflight:-missing}; ops_release_validator=${ops_release_validator:-missing}; ops_provider=${ops_provider_panel:-missing}; ops_release=${ops_release_panel:-missing}; ops_integrity=${ops_integrity:-missing}; ops_rollback=${ops_rollback:-missing}; ops_meta=${ops_meta:-missing}; git_diff_mode=${git_diff_mode:-unknown}; controller_diff=${forbidden_controller:-none}; model_diff=${forbidden_model:-none}; view_diff=${forbidden_view:-none}; library_diff=${forbidden_library:-none}"
+    return
+  fi
+
+  pass \
+    "release validator and handoff docs enforce commercial packaging expectations without runtime PHP changes" \
+    "validator=$zip_root_line | docs=$ops_preflight | git_diff_mode=$git_diff_mode"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_helper ensure_window ensure_skew
   install_helper="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
@@ -2861,6 +2910,7 @@ check_module_lifecycle_hooks
 check_required_config_and_public_endpoints
 check_option_repair_idempotence
 check_release_forbidden_artifact_detection
+check_release_packaging_docs_hardening
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks

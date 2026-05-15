@@ -24,6 +24,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - Module unsubscribe handling requires the public route `marketing/unsubscribe/{token}` to be reachable from recipient devices
 - WhatsApp Business is the only built-in social channel integration in this package.
 - WhatsApp sending requires a Meta-approved WhatsApp Business app, an active Phone Number ID, a valid non-expired access token, and approved templates
+- Meta approval and business-asset access remain external prerequisites. This module does not bypass Meta review, token issuance, or asset permission checks.
 
 ## Safe Installation Flow
 
@@ -53,7 +54,35 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - From the standalone module root, run `bash scripts/verify_phase2_regressions.sh` before building a release ZIP and again before deploying to production.
 - From that same standalone module root, run `bash scripts/verify_release_package.sh` before shipping any commercial ZIP.
 - The script is intended to run on a standard Ubuntu host without `rg` / `ripgrep`.
-- Expected success result is `OK phase2-regressions 85 checks passed`.
+- Expected success result should match the current bounded regression count reported on the release branch.
+
+## Pre-Release Validation
+
+- Build the commercial package from the standalone module root with `bash scripts/build_release.sh`
+- Validate the package from that same root with:
+  - `bash scripts/verify_phase2_regressions.sh`
+  - `bash scripts/verify_release_package.sh`
+- Confirm the ZIP archive root is exactly `marketing/`
+- Confirm the installed module path will become `modules/marketing/marketing.php`
+- Reject any package that would expand to `modules/marketing/modules/marketing/marketing.php`
+- Review `Marketing -> Settings -> Provider Readiness`
+- Review `Marketing -> Settings -> Release Readiness`
+- Run runtime integrity diagnostics from the deployed CRM root with:
+  - `php modules/marketing/scripts/verify_phase4_integrity_runtime.php`
+
+## Deployment Sanity Checks
+
+- Confirm `Marketing -> Settings -> Provider Readiness` reflects the expected saved provider state
+- Confirm `Marketing -> Settings -> Release Readiness` is available for packaging and support handoff
+- Confirm `Marketing -> Dashboard -> Integrity Health` remains visible and read-only
+- Confirm rendered webhook URLs match the deployed base URL
+- Confirm cron is active before resuming campaign send or schedule operations
+
+## Rollback Note
+
+- Keep the previous known-good module ZIP and a database backup before replacing the deployed package
+- Roll back by restoring the prior module ZIP and matching database backup together when a release must be reversed
+- Do not treat telemetry cleanup or report cleanup as a substitute for rollback
 
 ## Uninstall Notes
 

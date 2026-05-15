@@ -40,6 +40,8 @@ REQUIRED_FILES=(
   "config/csrf_exclude_uris.php"
   "libraries/Marketing_schema.php"
   "scripts/verify_phase2_regressions.sh"
+  "scripts/verify_phase4_integrity_runtime.php"
+  "scripts/verify_release_package.sh"
   "README.md"
   "INSTALLATION.md"
   "docs/OPERATIONS.md"
@@ -129,11 +131,11 @@ pass "zip root expectations documented" "docs mention marketing/ zip root, modul
 
 source_artifacts="$(find "$MODULE_DIR" \
   \( -path "$MODULE_DIR/release" -o -path "$MODULE_DIR/.git" \) -prune -o \
-  \( -name '.DS_Store' -o -name '*.bak' -o -name '*~' -o -name '.env' -o -name '.env.*' -o -path '*/node_modules/*' -o -path '*/.idea/*' -o -path '*/.vscode/*' -o -path '*/tests/*' -o -path '*/tmp/*' -o -path '*/cache/*' \) -print)"
+  \( -name '.DS_Store' -o -name '*.bak' -o -name '*.tmp' -o -name '*~' -o -name '.env' -o -name '.env.*' -o -path '*/.github/*' -o -path '*/__MACOSX/*' -o -path '*/node_modules/*' -o -path '*/vendor/*' -o -path '*/.idea/*' -o -path '*/.vscode/*' -o -path '*/tests/*' -o -path '*/tmp/*' -o -path '*/temp/*' -o -path '*/cache/*' -o -path '*/logs/*' \) -print)"
 if [[ -n "$source_artifacts" ]]; then
   fail "forbidden release artifacts detected in source tree" "${source_artifacts%%$'\n'*}"
 fi
-pass "source tree is free of forbidden release artifacts" "no node_modules, IDE, env, cache, temp, or backup artifacts detected"
+pass "source tree is free of forbidden release artifacts" "no git metadata, marketplace clutter, env, vendor, cache, temp, log, or backup artifacts detected"
 
 if [[ "$ZIP_PATH" == "--source-only" ]]; then
   pass "release zip inspection skipped" "validated source tree only"
@@ -163,6 +165,9 @@ fi
 if printf '%s\n' "$zip_entries" | grep -Evq '^marketing/'; then
   fail "release zip root is invalid" "all archive entries must live under marketing/"
 fi
+if printf '%s\n' "$zip_entries" | grep -Eq '^marketing/modules/marketing/'; then
+  fail "release zip root is nested incorrectly" "archive must not contain marketing/modules/marketing/"
+fi
 
 for zip_required in \
   "marketing/marketing.php" \
@@ -171,28 +176,44 @@ for zip_required in \
   "marketing/config/routes.php" \
   "marketing/config/csrf_exclude_uris.php" \
   "marketing/scripts/verify_phase2_regressions.sh" \
+  "marketing/scripts/verify_phase4_integrity_runtime.php" \
   "marketing/scripts/verify_release_package.sh"; do
   if ! printf '%s\n' "$zip_entries" | grep -qxF "$zip_required"; then
     fail "required file missing from release zip" "$zip_required"
   fi
 done
+for zip_doc in \
+  "marketing/README.md" \
+  "marketing/INSTALLATION.md" \
+  "marketing/docs/OPERATIONS.md"; do
+  if ! printf '%s\n' "$zip_entries" | grep -qxF "$zip_doc"; then
+    fail "required documentation missing from release zip" "$zip_doc"
+  fi
+done
 
 for forbidden_pattern in \
   '^\.git/' \
+  '^marketing/\.git/' \
+  '^\.github/' \
+  '^marketing/\.github/' \
   '^__MACOSX/' \
   '^marketing/__MACOSX/' \
   '^marketing/node_modules/' \
+  '^marketing/vendor/' \
   '^marketing/\.idea/' \
   '^marketing/\.vscode/' \
   '^marketing/tests/' \
   '^marketing/tmp/' \
+  '^marketing/temp/' \
   '^marketing/cache/' \
+  '^marketing/logs/' \
   '^marketing/release/' \
   '^marketing/.*\.zip$' \
   '^marketing/\.DS_Store$' \
   '^marketing/.*\/\.DS_Store$' \
   '^marketing/\.env(\..*)?$' \
   '^marketing/.*\.bak$' \
+  '^marketing/.*\.tmp$' \
   '^marketing/.*~$'; do
   if printf '%s\n' "$zip_entries" | grep -Eq "$forbidden_pattern"; then
     fail "forbidden artifact present in release zip" "$forbidden_pattern"

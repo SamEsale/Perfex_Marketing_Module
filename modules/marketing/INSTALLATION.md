@@ -20,6 +20,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 
 1. Upload the `marketing` module ZIP through `Setup -> Modules`.
    The ZIP archive root must be `marketing/`, and the installed module path must resolve to `modules/marketing/marketing.php`.
+   Do not upload a package that expands to `modules/marketing/modules/marketing/marketing.php`; that indicates a nested module root and is invalid.
 2. Activate the module.
 3. Open `Marketing -> Settings`.
 4. Review `Schema Health`.
@@ -32,6 +33,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 9. Before shipping a commercial ZIP, validate it from the standalone module root with:
    `bash scripts/verify_phase2_regressions.sh`
    `bash scripts/verify_release_package.sh`
+10. Review `Provider Readiness` and `Release Readiness` on the Settings page before final handoff to operators or support staff.
 
 ## Upgrade
 
@@ -60,6 +62,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 - If `Schema Health` reports legacy duplicate tables, review them manually on staging before making any database cleanup changes
 - If email delivery fails, verify SMTP / SES credentials and provider connectivity
 - If WhatsApp sending fails, verify Meta approval, Phone Number ID, token validity, and approved templates
+- WhatsApp provider approval/configuration remains externally gated by Meta. A valid-looking saved token may still fail until the Meta app, business asset, and phone-number permissions are fully approved.
 - Production licensing uses `https://license.spitol.com/api` by default; only define `MARKETING_LICENSE_API_BASE_URL` or set `marketing_license_api_base_url` if you need to override it
 - If licensing shows `unconfigured`, check for an explicit empty override in `MARKETING_LICENSE_API_BASE_URL` or `marketing_license_api_base_url`
 - If licensing shows `grace`, restore connectivity to the licensing server before the grace deadline
@@ -70,3 +73,4 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 - No destructive schema operations are performed
 - Secrets are not intentionally rendered back in full after save
 - Public tracking and unsubscribe URLs use opaque module tokens and do not expose raw recipient IDs in the URL
+- Runtime integrity diagnostics are available from the deployed CRM root with `php modules/marketing/scripts/verify_phase4_integrity_runtime.php`

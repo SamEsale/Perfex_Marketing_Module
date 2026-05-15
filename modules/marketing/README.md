@@ -23,6 +23,20 @@ This project is a module for **Perfex CRM**. It is not standalone software and m
 - WhatsApp Business settings, webhook verification, test template send, and campaign foundation
 - Schema Health and non-destructive repair tools
 - Commercial licensing panel for marketplace distribution
+- Read-only Provider Readiness and Release Readiness panels for operator handoff
+
+## Active Integrations
+
+- Email campaigns through module-managed SMTP / Amazon SES configuration
+- SES / SNS delivery and engagement telemetry
+- Inbound marketing reply webhook with Reply-to-Lead support
+- WhatsApp Business configuration, webhook verification, inbound conversation handling, manual operator reply surface, and campaign foundation
+
+## Deferred Integrations
+
+- Facebook is not active in this commercial package
+- LinkedIn is not active in this commercial package
+- WhatsApp provider approval and token lifecycle still depend on external Meta approval and asset access outside this module
 
 ## Operational Guarantees
 
@@ -49,6 +63,7 @@ This project is a module for **Perfex CRM**. It is not standalone software and m
 
 1. Build or obtain a ZIP whose archive root is `marketing/`.
    After upload, the module must install to `modules/marketing/marketing.php` inside the Perfex CRM working tree.
+   The ZIP must not contain a nested path such as `marketing/modules/marketing/marketing.php`.
 2. In Perfex CRM, open `Setup -> Modules`.
 3. Upload the ZIP and activate `Marketing`.
 4. Open `Marketing -> Settings`.
@@ -100,6 +115,26 @@ Validate the package before shipping:
 bash scripts/verify_phase2_regressions.sh
 bash scripts/verify_release_package.sh
 ```
+
+The release validator confirms:
+
+- ZIP root is exactly `marketing/`
+- installed module path resolves to `modules/marketing/marketing.php`
+- nested `marketing/modules/marketing/` roots are rejected
+- release docs and operator scripts are present
+- release artifacts such as `.git`, `.github`, `node_modules`, `vendor`, `.env`, logs, temp files, and nested ZIPs are excluded
+
+## Operator Handoff
+
+- Review `Marketing -> Settings -> Provider Readiness` before testing provider flows
+- Review `Marketing -> Settings -> Release Readiness` before packaging or support handoff
+- Run runtime integrity diagnostics from the deployed CRM root with:
+
+```bash
+php modules/marketing/scripts/verify_phase4_integrity_runtime.php
+```
+
+- Treat WhatsApp send/auth failures during this phase as external Meta approval or asset-access issues unless the saved settings are clearly incomplete
 
 ## Documentation
 
