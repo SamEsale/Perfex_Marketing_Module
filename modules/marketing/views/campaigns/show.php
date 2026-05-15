@@ -196,7 +196,8 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                                 <?= form_close(); ?>
                                             <?php } ?>
                                             <?php if ($can_reprepare_recipients && (int) $recipient_summary['queued'] > 0) { ?>
-                                                <?= form_open(admin_url('marketing/campaigns/reprepare_recipients/' . $campaign['id']), ['class' => 'inline-block']); ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="reprepare_campaign_id" value="<?= (int) $campaign['id']; ?>">
                                                     <button type="submit" class="btn btn-info btn-sm"><?= _l('marketing_campaign_reprepare_recipients'); ?></button>
                                                 <?= form_close(); ?>
                                             <?php } ?>
