@@ -20,6 +20,7 @@ INSTALL_FILE="modules/marketing/install.php"
 UNINSTALL_FILE="modules/marketing/uninstall.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
 WHATSAPP_FILE="modules/marketing/libraries/Marketing_whatsapp.php"
+SUBSCRIPTIONS_CONTROLLER_FILE="modules/marketing/controllers/Subscriptions.php"
 DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
 REPORTS_VIEW_FILE="modules/marketing/views/reports.php"
 MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
@@ -45,6 +46,9 @@ BUILDER_JS_ASSET_FILE="modules/marketing/assets/js/marketing-builder.js"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
+UNSUBSCRIBE_VIEW_FILE="modules/marketing/views/subscriptions/unsubscribe_result.php"
+LANGUAGE_FILE="modules/marketing/language/english/marketing_lang.php"
+FALSE_UNSUBSCRIBE_REPAIR_FILE="modules/marketing/scripts/repair_false_unsubscribe_suppressions.php"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -2451,6 +2455,41 @@ check_module_lifecycle_hooks() {
     "activation=$activation_line | cron=$cron_line | csrf=$csrf_line"
 }
 
+check_confirmed_unsubscribe_flow() {
+  local route_line get_guard_line confirm_line apply_call_line helper_line suppression_line event_line view_form_line view_checkbox_line view_note_line lang_confirm_line lang_pending_line import_skip_line repair_usage_line repair_apply_line webhooks_diff mailer_diff ses_diff whatsapp_diff git_diff_mode
+  route_line="$(first_fixed_match "\$route['marketing/unsubscribe/(:any)'] = 'subscriptions/unsubscribe/\$1';" "$ROUTES_FILE")"
+  get_guard_line="$(first_fixed_match "if (\$requestMethod !== 'POST') {" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
+  confirm_line="$(first_fixed_match "unsubscribe_confirmation" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
+  apply_call_line="$(first_fixed_match "\$result = \$this->apply_confirmed_unsubscribe(\$payload, \$context);" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
+  helper_line="$(first_match 'function[[:space:]]+apply_confirmed_unsubscribe' "$SUBSCRIPTIONS_CONTROLLER_FILE")"
+  suppression_line="$(first_fixed_match "'marketing_unsubscribe'" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
+  event_line="$(first_fixed_match "'provider' => 'marketing_unsubscribe'" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
+  view_form_line="$(first_fixed_match 'class="marketing-unsubscribe-form"' "$UNSUBSCRIBE_VIEW_FILE")"
+  view_checkbox_line="$(first_fixed_match 'name="unsubscribe_confirmation" value="confirm" required' "$UNSUBSCRIBE_VIEW_FILE")"
+  view_note_line="$(first_fixed_match "marketing_unsubscribe_confirm_note" "$UNSUBSCRIBE_VIEW_FILE")"
+  lang_confirm_line="$(first_fixed_match "\$lang['marketing_unsubscribe_confirm_title']" "$LANGUAGE_FILE")"
+  lang_pending_line="$(first_fixed_match "\$lang['marketing_unsubscribe_status_pending']" "$LANGUAGE_FILE")"
+  import_skip_line="$(first_fixed_match "if (\$this->marketing_audiences_model->is_contact_suppressed(\$normalizedEmail)) {" "modules/marketing/controllers/Imports.php")"
+  repair_usage_line="$(first_fixed_match 'repair_false_unsubscribe_suppressions.php --email=user@example.com' "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  repair_apply_line="$(first_fixed_match '--apply' "$FALSE_UNSUBSCRIBE_REPAIR_FILE")"
+  webhooks_diff="$(git_changed_path_if_available "$WEBHOOKS_FILE")"
+  mailer_diff="$(git_changed_path_if_available "$MAILER_FILE")"
+  ses_diff="$(git_changed_path_if_available "$SES_SNS_FILE")"
+  whatsapp_diff="$(git_changed_path_if_available "$WHATSAPP_FILE")"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$route_line" || -z "$get_guard_line" || -z "$confirm_line" || -z "$apply_call_line" || -z "$helper_line" || -z "$suppression_line" || -z "$event_line" || -z "$view_form_line" || -z "$view_checkbox_line" || -z "$view_note_line" || -z "$lang_confirm_line" || -z "$lang_pending_line" || -z "$import_skip_line" || -z "$repair_usage_line" || -z "$repair_apply_line" || -n "$webhooks_diff" || -n "$mailer_diff" || -n "$ses_diff" || -n "$whatsapp_diff" ]]; then
+    fail \
+      "public unsubscribe requires confirmed POST while GET stays non-mutating and active unsubscribe suppressions remain authoritative for import skips" \
+      "expected public unsubscribe route, non-POST guard, confirmed apply helper, marketing_unsubscribe creation only in confirmed flow, POST confirmation form, language strings, import suppression skip, repair script, and no webhook/mailer/provider diffs; route=${route_line:-missing}; get_guard=${get_guard_line:-missing}; confirm=${confirm_line:-missing}; apply=${apply_call_line:-missing}; helper=${helper_line:-missing}; suppression=${suppression_line:-missing}; event=${event_line:-missing}; form=${view_form_line:-missing}; checkbox=${view_checkbox_line:-missing}; note=${view_note_line:-missing}; lang_confirm=${lang_confirm_line:-missing}; lang_pending=${lang_pending_line:-missing}; import_skip=${import_skip_line:-missing}; repair_usage=${repair_usage_line:-missing}; repair_apply=${repair_apply_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; webhooks_diff=${webhooks_diff:-none}; mailer_diff=${mailer_diff:-none}; ses_diff=${ses_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}"
+    return
+  fi
+
+  pass \
+    "public unsubscribe requires confirmed POST while GET stays non-mutating and active unsubscribe suppressions remain authoritative for import skips" \
+    "get_guard=$get_guard_line | apply=$apply_call_line | repair=$repair_usage_line | git_diff_mode=$git_diff_mode"
+}
+
 check_required_config_and_public_endpoints() {
   local ses_route inbound_route whatsapp_route tracking_route unsubscribe_route csrf_ses_line csrf_inbound_line csrf_whatsapp_line
   ses_route="$(first_fixed_match "\$route['marketing/webhooks/ses_sns'] = 'webhooks/ses_sns';" "$ROUTES_FILE")"
@@ -3011,6 +3050,7 @@ check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks
 check_required_config_and_public_endpoints
+check_confirmed_unsubscribe_flow
 check_option_repair_idempotence
 check_release_forbidden_artifact_detection
 check_release_packaging_docs_hardening

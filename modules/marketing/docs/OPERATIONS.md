@@ -137,7 +137,8 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - If queue processing warns `outbound_attempt_replay_blocked`, the module detected a prior uncertain outbound attempt for that recipient and intentionally blocked automatic resend. Use failed-recipient retry only after confirming the earlier attempt outcome.
 - If campaign send warnings include `provider_throttle_detected` or `transient_delivery_failure`, treat the current batch as paused by the provider. The module marks the affected recipient with a `temporary_provider_*` failure reason and stops the rest of that batch instead of hammering SES/SMTP.
 - If campaign clicks are not appearing, confirm delivered links were rewritten to `marketing/track/c/{token}` and that the redirect endpoint returns `302`
-- If unsubscribe actions are not taking effect, confirm the recipient hit the module unsubscribe URL and that a suppression row was created or refreshed
+- A plain GET visit to the module unsubscribe URL must only show the confirmation page. Active `marketing_unsubscribe` suppressions should be created only after a confirmed POST unsubscribe action.
+- If a known false unsubscribe suppression must be reversed, use `php modules/marketing/scripts/repair_false_unsubscribe_suppressions.php --email=user@example.com` first as a dry run, then repeat with `--apply` only for explicitly approved addresses.
 - If SES / SNS events do not appear, confirm the webhook URL, provider-side subscription configuration, and that production deliveries are signed by AWS SNS.
 - If SES / SNS signature verification fails, confirm the signed webhook message `TopicArn` matches the configured topic when you use a dedicated topic, and confirm the configured SES region matches the SNS certificate and subscribe URLs.
 - Signed SES / SNS messages must also arrive within the configured replay window. Production defaults are `900` seconds max age and `300` seconds future skew tolerance.

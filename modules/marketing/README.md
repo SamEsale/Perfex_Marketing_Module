@@ -77,7 +77,7 @@ This project is a module for **Perfex CRM**. It is not standalone software and m
 
 - When `Track Link Clicks` is enabled for an email campaign, normal `http` and `https` links are rewritten to module-owned redirect URLs under `marketing/track/c/{token}`.
 - The redirect endpoint records a `click` event with `provider=module`, updates the recipient click counters, and then redirects with HTTP `302` to the stored original URL.
-- `{{unsubscribe_url}}` is replaced with a tokenized module unsubscribe URL and creates or refreshes a global marketing suppression on use.
+- `{{unsubscribe_url}}` is replaced with a tokenized module unsubscribe URL. A page visit alone does not unsubscribe the recipient; an explicit confirmed unsubscribe form submission creates or refreshes the global marketing suppression.
 - SES configuration sets remain supported for provider telemetry such as delivered, bounced, complained, opened, and optional SES click events.
 
 Detailed install, upgrade, uninstall, and troubleshooting steps are in [INSTALLATION.md](INSTALLATION.md).

@@ -842,8 +842,17 @@ $lang['marketing_campaign_whatsapp_missing_phone_warning'] = '%1$s contacts were
 $lang['marketing_unsubscribe_title']            = 'Email Preferences Updated';
 $lang['marketing_unsubscribe_success']          = 'You have been unsubscribed.';
 $lang['marketing_unsubscribe_invalid']          = 'This unsubscribe link is invalid or unavailable.';
+$lang['marketing_unsubscribe_confirm_title']    = 'Confirm Unsubscribe';
+$lang['marketing_unsubscribe_confirm_message']  = 'Confirm this request to stop receiving future marketing emails for this recipient.';
+$lang['marketing_unsubscribe_confirm_required'] = 'Confirm the unsubscribe request before continuing.';
+$lang['marketing_unsubscribe_confirm_checkbox'] = 'I confirm that I want to unsubscribe this email address from future marketing emails.';
+$lang['marketing_unsubscribe_confirm_button']   = 'Confirm Unsubscribe';
+$lang['marketing_unsubscribe_confirm_note']     = 'A page visit alone will not unsubscribe this recipient. A confirmed form submission is required.';
 $lang['marketing_unsubscribe_status_success']   = 'Unsubscribed';
 $lang['marketing_unsubscribe_status_error']     = 'Unavailable';
+$lang['marketing_unsubscribe_status_pending']   = 'Confirmation Required';
+$lang['marketing_unsubscribe_email_label']      = 'Email Address';
+$lang['marketing_unsubscribe_campaign_label']   = 'Campaign';
 
 $lang['marketing_contact_removed_from_audience'] = 'Contact removed from audience.';
 $lang['marketing_contact_remove_failed'] = 'Unable to remove contact from audience.';
