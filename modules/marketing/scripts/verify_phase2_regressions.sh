@@ -36,6 +36,7 @@ PRODUCTION_CHECKLIST_FILE="modules/marketing/docs/PRODUCTION_CHECKLIST.md"
 RELEASE_MANIFEST_DOC_FILE="modules/marketing/docs/RELEASE_MANIFEST.md"
 RELEASE_MANIFEST_JSON_FILE="modules/marketing/release/manifest.json"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
+RELEASE_BUILDER_FILE="modules/marketing/scripts/build_release_package.sh"
 CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
 CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
 CAMPAIGN_INDEX_VIEW_FILE="modules/marketing/views/campaigns/index.php"
@@ -2726,6 +2727,47 @@ check_release_handoff_manifest_assets() {
     "checklist=$checklist_exists | manifest=$manifest_doc_exists | manifest_json=$manifest_json_exists | git_diff_mode=$git_diff_mode"
 }
 
+check_release_build_script_hardening() {
+  local builder_exists builder_shebang builder_strict builder_zip_name builder_package_root builder_manifest_copy builder_validator_source builder_validator_zip builder_exclude_release builder_exclude_vendor builder_exclude_node builder_exclude_env builder_exclude_tmp
+  local readme_build installation_build operations_build checklist_build manifest_build
+  local forbidden_controller forbidden_model forbidden_library forbidden_view git_diff_mode
+
+  builder_exists="$(first_match '^#!/usr/bin/env bash' "$RELEASE_BUILDER_FILE")"
+  builder_shebang="$builder_exists"
+  builder_strict="$(first_fixed_match 'set -euo pipefail' "$RELEASE_BUILDER_FILE")"
+  builder_zip_name="$(first_fixed_match 'RELEASE_ZIP="$RELEASE_DIR/${PACKAGE_ROOT}_v${VERSION}.zip"' "$RELEASE_BUILDER_FILE")"
+  builder_package_root="$(first_fixed_match 'PACKAGE_ROOT="marketing"' "$RELEASE_BUILDER_FILE")"
+  builder_manifest_copy="$(first_fixed_match 'cp "$MANIFEST_FILE" "$STAGE_DIR/release/manifest.json"' "$RELEASE_BUILDER_FILE")"
+  builder_validator_source="$(first_fixed_match 'bash "$VALIDATOR_SCRIPT" --source-only' "$RELEASE_BUILDER_FILE")"
+  builder_validator_zip="$(first_fixed_match 'bash "$VALIDATOR_SCRIPT" "$RELEASE_ZIP"' "$RELEASE_BUILDER_FILE")"
+  builder_exclude_release="$(first_fixed_match '--exclude "release"' "$RELEASE_BUILDER_FILE")"
+  builder_exclude_vendor="$(first_fixed_match '--exclude "vendor"' "$RELEASE_BUILDER_FILE")"
+  builder_exclude_node="$(first_fixed_match '--exclude "node_modules"' "$RELEASE_BUILDER_FILE")"
+  builder_exclude_env="$(first_fixed_match '--exclude ".env"' "$RELEASE_BUILDER_FILE")"
+  builder_exclude_tmp="$(first_fixed_match '--exclude "*.tmp"' "$RELEASE_BUILDER_FILE")"
+  readme_build="$(first_fixed_match 'bash scripts/build_release_package.sh' "$README_FILE")"
+  installation_build="$(first_fixed_match 'bash scripts/build_release_package.sh' "$INSTALLATION_FILE")"
+  operations_build="$(first_fixed_match 'bash scripts/build_release_package.sh' "$OPERATIONS_FILE")"
+  checklist_build="$(first_fixed_match 'bash scripts/build_release_package.sh' "$PRODUCTION_CHECKLIST_FILE")"
+  manifest_build="$(first_fixed_match 'bash scripts/build_release_package.sh' "$RELEASE_MANIFEST_DOC_FILE")"
+  forbidden_controller="$(git_changed_path_if_available modules/marketing/controllers/Settings.php)"
+  forbidden_model="$(git_changed_path_if_available modules/marketing/models/Marketing_dashboard_model.php)"
+  forbidden_library="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
+  forbidden_view="$(git_changed_path_if_available modules/marketing/views/settings/index.php)"
+  git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
+
+  if [[ -z "$builder_exists" || -z "$builder_shebang" || -z "$builder_strict" || -z "$builder_zip_name" || -z "$builder_package_root" || -z "$builder_manifest_copy" || -z "$builder_validator_source" || -z "$builder_validator_zip" || -z "$builder_exclude_release" || -z "$builder_exclude_vendor" || -z "$builder_exclude_node" || -z "$builder_exclude_env" || -z "$builder_exclude_tmp" || -z "$readme_build" || -z "$installation_build" || -z "$operations_build" || -z "$checklist_build" || -z "$manifest_build" || -n "$forbidden_controller" || -n "$forbidden_model" || -n "$forbidden_library" || -n "$forbidden_view" ]]; then
+    fail \
+      "release build script creates auditable marketing zip packages without runtime PHP changes" \
+      "expected strict bash release builder, marketing_v1.1.0 zip path, marketing package root, staged release manifest, source and zip validation, forbidden artifact exclusions, docs build-command references, and no runtime PHP diffs; builder=${builder_exists:-missing}; strict=${builder_strict:-missing}; zip_name=${builder_zip_name:-missing}; root=${builder_package_root:-missing}; manifest_copy=${builder_manifest_copy:-missing}; source_validate=${builder_validator_source:-missing}; zip_validate=${builder_validator_zip:-missing}; exclude_release=${builder_exclude_release:-missing}; exclude_vendor=${builder_exclude_vendor:-missing}; exclude_node=${builder_exclude_node:-missing}; exclude_env=${builder_exclude_env:-missing}; exclude_tmp=${builder_exclude_tmp:-missing}; readme=${readme_build:-missing}; installation=${installation_build:-missing}; operations=${operations_build:-missing}; checklist=${checklist_build:-missing}; manifest=${manifest_build:-missing}; git_diff_mode=${git_diff_mode:-unknown}; controller_diff=${forbidden_controller:-none}; model_diff=${forbidden_model:-none}; library_diff=${forbidden_library:-none}; view_diff=${forbidden_view:-none}"
+    return
+  fi
+
+  pass \
+    "release build script creates auditable marketing zip packages without runtime PHP changes" \
+    "builder=$builder_exists | strict=$builder_strict | zip=$builder_zip_name | git_diff_mode=$git_diff_mode"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_helper ensure_window ensure_skew
   install_helper="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
@@ -2970,6 +3012,7 @@ check_option_repair_idempotence
 check_release_forbidden_artifact_detection
 check_release_packaging_docs_hardening
 check_release_handoff_manifest_assets
+check_release_build_script_hardening
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks

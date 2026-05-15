@@ -64,6 +64,7 @@
 
 ## Operational Diagnostics
 
+- release build via `bash scripts/build_release_package.sh`
 - release package validation via `bash scripts/verify_release_package.sh`
 - regression validation via `bash scripts/verify_phase2_regressions.sh`
 - runtime integrity diagnostics via `php modules/marketing/scripts/verify_phase4_integrity_runtime.php`

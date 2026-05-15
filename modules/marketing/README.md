@@ -103,10 +103,11 @@ Configuration order:
 Use the module-local packaging script:
 
 ```bash
-bash scripts/build_release.sh
+bash scripts/build_release_package.sh
 ```
 
-The script lint-checks PHP and JS, scans for common debug artifacts, and creates `release/marketing_vX.Y.Z.zip` without including the full Perfex root.
+The canonical release builder creates `release/marketing_vX.Y.Z.zip` without including the full Perfex root and preserves the archive root as `marketing/`.
+`bash scripts/build_release.sh` remains available as a compatibility wrapper for the same package build flow.
 The release ZIP root remains `marketing/`, so the uploaded package resolves to `modules/marketing/marketing.php` after installation.
 
 Validate the package before shipping:

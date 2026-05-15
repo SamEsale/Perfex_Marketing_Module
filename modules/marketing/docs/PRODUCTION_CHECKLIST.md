@@ -10,6 +10,7 @@ This checklist is for commercial packaging, deployment review, and operator hand
 - Confirm backups exist for the database and the previous module ZIP
 - Confirm the target Perfex CRM version matches the supported baseline
 - Run from the standalone module root:
+  - `bash scripts/build_release_package.sh`
   - `bash scripts/verify_phase2_regressions.sh`
   - `bash scripts/verify_release_package.sh`
 

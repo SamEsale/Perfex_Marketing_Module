@@ -31,6 +31,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 7. Confirm the module click redirect URL base `marketing/track/c/{token}` resolves publicly if email click tracking is enabled.
 8. Confirm the public unsubscribe URL base `marketing/unsubscribe/{token}` resolves publicly.
 9. Before shipping a commercial ZIP, validate it from the standalone module root with:
+   `bash scripts/build_release_package.sh`
    `bash scripts/verify_phase2_regressions.sh`
    `bash scripts/verify_release_package.sh`
 10. Review `Provider Readiness` and `Release Readiness` on the Settings page before final handoff to operators or support staff.

@@ -30,6 +30,7 @@ pass() {
 
 require_command bash
 require_command grep
+require_command php
 require_command sed
 
 REQUIRED_FILES=(
@@ -42,6 +43,7 @@ REQUIRED_FILES=(
   "scripts/verify_phase2_regressions.sh"
   "scripts/verify_phase4_integrity_runtime.php"
   "scripts/verify_release_package.sh"
+  "scripts/build_release_package.sh"
   "README.md"
   "INSTALLATION.md"
   "docs/OPERATIONS.md"
@@ -56,6 +58,12 @@ for relative_path in "${REQUIRED_FILES[@]}"; do
   fi
 done
 pass "required module files exist" "validated ${#REQUIRED_FILES[@]} required files"
+
+MANIFEST_FILE="$MODULE_DIR/release/manifest.json"
+if ! php -r '$path = $argv[1]; $json = file_get_contents($path); if ($json === false) {fwrite(STDERR, "read_failed"); exit(1);} json_decode($json, true); if (json_last_error() !== JSON_ERROR_NONE) {fwrite(STDERR, json_last_error_msg()); exit(1);} ' "$MANIFEST_FILE" >/dev/null 2>&1; then
+  fail "manifest JSON invalid" "$MANIFEST_FILE"
+fi
+pass "manifest JSON valid" "release/manifest.json parses cleanly"
 
 if ! grep -q 'Module Name:[[:space:]]*Marketing' "$MODULE_DIR/marketing.php"; then
   fail "module metadata header missing" "expected Module Name header in marketing.php"
@@ -129,6 +137,11 @@ done
 if ! grep -qF 'bash scripts/verify_release_package.sh' "$MODULE_DIR/README.md"; then
   fail "release validation command missing from README" "expected bash scripts/verify_release_package.sh in README.md"
 fi
+for doc_file in "$MODULE_DIR/README.md" "$MODULE_DIR/INSTALLATION.md" "$MODULE_DIR/docs/OPERATIONS.md" "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md" "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; do
+  if ! grep -qF 'bash scripts/build_release_package.sh' "$doc_file"; then
+    fail "release build command missing from docs" "expected bash scripts/build_release_package.sh in $(basename "$doc_file")"
+  fi
+done
 if ! grep -qF 'bash scripts/verify_phase2_regressions.sh' "$MODULE_DIR/docs/OPERATIONS.md"; then
   fail "regression validation command missing from operations guide" "expected bash scripts/verify_phase2_regressions.sh in docs/OPERATIONS.md"
 fi
@@ -171,7 +184,6 @@ if ! grep -qF 'Meta approval' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
 fi
 pass "zip root expectations documented" "docs mention marketing/ zip root, modules/marketing/marketing.php install path, and validation commands"
 
-MANIFEST_FILE="$MODULE_DIR/release/manifest.json"
 for manifest_key in \
   '"module_name"' \
   '"version"' \
@@ -235,7 +247,8 @@ for zip_required in \
   "marketing/config/csrf_exclude_uris.php" \
   "marketing/scripts/verify_phase2_regressions.sh" \
   "marketing/scripts/verify_phase4_integrity_runtime.php" \
-  "marketing/scripts/verify_release_package.sh"; do
+  "marketing/scripts/verify_release_package.sh" \
+  "marketing/scripts/build_release_package.sh"; do
   if ! printf '%s\n' "$zip_entries" | grep -qxF "$zip_required"; then
     fail "required file missing from release zip" "$zip_required"
   fi

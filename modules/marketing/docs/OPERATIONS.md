@@ -58,7 +58,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 
 ## Pre-Release Validation
 
-- Build the commercial package from the standalone module root with `bash scripts/build_release.sh`
+- Build the commercial package from the standalone module root with `bash scripts/build_release_package.sh`
 - Validate the package from that same root with:
   - `bash scripts/verify_phase2_regressions.sh`
   - `bash scripts/verify_release_package.sh`
