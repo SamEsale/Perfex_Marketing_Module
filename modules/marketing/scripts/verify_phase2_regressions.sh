@@ -2499,7 +2499,7 @@ check_module_lifecycle_hooks() {
 }
 
 check_confirmed_unsubscribe_flow() {
-  local route_line get_guard_line confirm_line apply_call_line helper_line render_helper_line render_call_line suppression_line event_line view_form_line view_checkbox_line view_note_line view_csrf_line public_layout_line csrf_exclude_line lang_confirm_line lang_pending_line import_skip_line click_skip_line click_event_line unsubscribe_count_line repair_usage_line repair_apply_line webhooks_diff mailer_diff ses_diff whatsapp_diff git_diff_mode
+  local route_line get_guard_line confirm_line apply_call_line helper_line render_helper_line render_call_line lang_loader_line suppression_line event_line view_form_line view_checkbox_line view_note_line view_csrf_line public_layout_line page_class_line card_class_line status_class_line details_class_line button_class_line email_label_call_line campaign_label_call_line raw_uppercase_line csrf_exclude_line lang_title_line lang_confirm_line lang_message_line lang_required_line lang_checkbox_line lang_button_line lang_note_line lang_email_line lang_campaign_line lang_invalid_line lang_success_line lang_pending_line lang_status_success_line lang_status_error_line import_skip_line click_skip_line click_event_line unsubscribe_count_line repair_usage_line repair_apply_line webhooks_diff mailer_diff ses_diff whatsapp_diff git_diff_mode
   route_line="$(first_fixed_match "\$route['marketing/unsubscribe/(:any)'] = 'subscriptions/unsubscribe/\$1';" "$ROUTES_FILE")"
   get_guard_line="$(first_fixed_match "if (\$requestMethod !== 'POST') {" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
   confirm_line="$(first_fixed_match "unsubscribe_confirmation" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
@@ -2507,6 +2507,7 @@ check_confirmed_unsubscribe_flow() {
   helper_line="$(first_match 'function[[:space:]]+apply_confirmed_unsubscribe' "$SUBSCRIPTIONS_CONTROLLER_FILE")"
   render_helper_line="$(first_match 'function[[:space:]]+render_public_unsubscribe_view' "$SUBSCRIPTIONS_CONTROLLER_FILE")"
   render_call_line="$(first_fixed_match "\$this->render_public_unsubscribe_view(\$data);" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
+  lang_loader_line="$(first_match 'function[[:space:]]+ensure_public_language_loaded' "$SUBSCRIPTIONS_CONTROLLER_FILE")"
   suppression_line="$(first_fixed_match "'marketing_unsubscribe'" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
   event_line="$(first_fixed_match "'provider' => 'marketing_unsubscribe'" "$SUBSCRIPTIONS_CONTROLLER_FILE")"
   view_form_line="$(first_fixed_match 'class="marketing-unsubscribe-form"' "$UNSUBSCRIBE_VIEW_FILE")"
@@ -2514,9 +2515,29 @@ check_confirmed_unsubscribe_flow() {
   view_note_line="$(first_fixed_match "marketing_unsubscribe_confirm_note" "$UNSUBSCRIBE_VIEW_FILE")"
   view_csrf_line="$(first_fixed_match 'csrf_' "$UNSUBSCRIBE_VIEW_FILE")"
   public_layout_line="$(first_fixed_match '<!DOCTYPE html>' "$UNSUBSCRIBE_VIEW_FILE")"
+  page_class_line="$(first_fixed_match 'marketing-unsubscribe-page' "$UNSUBSCRIBE_VIEW_FILE")"
+  card_class_line="$(first_fixed_match 'marketing-unsubscribe-card' "$UNSUBSCRIBE_VIEW_FILE")"
+  status_class_line="$(first_fixed_match 'marketing-unsubscribe-status' "$UNSUBSCRIBE_VIEW_FILE")"
+  details_class_line="$(first_fixed_match 'marketing-unsubscribe-details' "$UNSUBSCRIBE_VIEW_FILE")"
+  button_class_line="$(first_fixed_match 'marketing-unsubscribe-button' "$UNSUBSCRIBE_VIEW_FILE")"
+  email_label_call_line="$(first_fixed_match "_l('marketing_unsubscribe_email_label')" "$UNSUBSCRIBE_VIEW_FILE")"
+  campaign_label_call_line="$(first_fixed_match "_l('marketing_unsubscribe_campaign_label')" "$UNSUBSCRIBE_VIEW_FILE")"
+  raw_uppercase_line="$(first_match 'MARKETING_UNSUBSCRIBE_[A-Z_]+' "$UNSUBSCRIBE_VIEW_FILE")"
   csrf_exclude_line="$(first_fixed_match "'marketing/unsubscribe/.*'" "$CSRF_FILE")"
+  lang_title_line="$(first_fixed_match "\$lang['marketing_unsubscribe_title']" "$LANGUAGE_FILE")"
   lang_confirm_line="$(first_fixed_match "\$lang['marketing_unsubscribe_confirm_title']" "$LANGUAGE_FILE")"
+  lang_message_line="$(first_fixed_match "\$lang['marketing_unsubscribe_confirm_message']" "$LANGUAGE_FILE")"
+  lang_required_line="$(first_fixed_match "\$lang['marketing_unsubscribe_confirm_required']" "$LANGUAGE_FILE")"
+  lang_checkbox_line="$(first_fixed_match "\$lang['marketing_unsubscribe_confirm_checkbox']" "$LANGUAGE_FILE")"
+  lang_button_line="$(first_fixed_match "\$lang['marketing_unsubscribe_confirm_button']" "$LANGUAGE_FILE")"
+  lang_note_line="$(first_fixed_match "\$lang['marketing_unsubscribe_confirm_note']" "$LANGUAGE_FILE")"
+  lang_email_line="$(first_fixed_match "\$lang['marketing_unsubscribe_email_label']" "$LANGUAGE_FILE")"
+  lang_campaign_line="$(first_fixed_match "\$lang['marketing_unsubscribe_campaign_label']" "$LANGUAGE_FILE")"
+  lang_invalid_line="$(first_fixed_match "\$lang['marketing_unsubscribe_invalid']" "$LANGUAGE_FILE")"
+  lang_success_line="$(first_fixed_match "\$lang['marketing_unsubscribe_success']" "$LANGUAGE_FILE")"
   lang_pending_line="$(first_fixed_match "\$lang['marketing_unsubscribe_status_pending']" "$LANGUAGE_FILE")"
+  lang_status_success_line="$(first_fixed_match "\$lang['marketing_unsubscribe_status_success']" "$LANGUAGE_FILE")"
+  lang_status_error_line="$(first_fixed_match "\$lang['marketing_unsubscribe_status_error']" "$LANGUAGE_FILE")"
   import_skip_line="$(first_fixed_match "if (\$this->marketing_audiences_model->is_contact_suppressed(\$normalizedEmail)) {" "modules/marketing/controllers/Imports.php")"
   click_skip_line="$(first_fixed_match "|| strpos(\$path, '/marketing/unsubscribe/') !== false" "$MAILER_FILE")"
   click_event_line="$(first_fixed_match "'event_type' => 'click'" "$TRACK_FILE")"
@@ -2529,16 +2550,16 @@ check_confirmed_unsubscribe_flow() {
   whatsapp_diff="$(git_changed_path_if_available "$WHATSAPP_FILE")"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$route_line" || -z "$get_guard_line" || -z "$confirm_line" || -z "$apply_call_line" || -z "$helper_line" || -z "$render_helper_line" || -z "$render_call_line" || -z "$suppression_line" || -z "$event_line" || -z "$view_form_line" || -z "$view_checkbox_line" || -z "$view_note_line" || -n "$view_csrf_line" || -z "$public_layout_line" || -z "$csrf_exclude_line" || -z "$lang_confirm_line" || -z "$lang_pending_line" || -z "$import_skip_line" || -z "$click_skip_line" || -z "$click_event_line" || -z "$unsubscribe_count_line" || -z "$repair_usage_line" || -z "$repair_apply_line" || -n "$webhooks_diff" || -n "$mailer_diff" || -n "$ses_diff" || -n "$whatsapp_diff" ]]; then
+  if [[ -z "$route_line" || -z "$get_guard_line" || -z "$confirm_line" || -z "$apply_call_line" || -z "$helper_line" || -z "$render_helper_line" || -z "$render_call_line" || -z "$lang_loader_line" || -z "$suppression_line" || -z "$event_line" || -z "$view_form_line" || -z "$view_checkbox_line" || -z "$view_note_line" || -n "$view_csrf_line" || -z "$public_layout_line" || -z "$page_class_line" || -z "$card_class_line" || -z "$status_class_line" || -z "$details_class_line" || -z "$button_class_line" || -z "$email_label_call_line" || -z "$campaign_label_call_line" || -n "$raw_uppercase_line" || -z "$csrf_exclude_line" || -z "$lang_title_line" || -z "$lang_confirm_line" || -z "$lang_message_line" || -z "$lang_required_line" || -z "$lang_checkbox_line" || -z "$lang_button_line" || -z "$lang_note_line" || -z "$lang_email_line" || -z "$lang_campaign_line" || -z "$lang_invalid_line" || -z "$lang_success_line" || -z "$lang_pending_line" || -z "$lang_status_success_line" || -z "$lang_status_error_line" || -z "$import_skip_line" || -z "$click_skip_line" || -z "$click_event_line" || -z "$unsubscribe_count_line" || -z "$repair_usage_line" || -z "$repair_apply_line" || -n "$webhooks_diff" || -n "$mailer_diff" || -n "$ses_diff" || -n "$whatsapp_diff" ]]; then
     fail \
       "public unsubscribe GET stays non-mutating, renders a standalone public confirmation page, and unsubscribe analytics stay distinct from click telemetry" \
-      "expected public unsubscribe route, non-POST guard, confirmed apply helper, standalone render helper, marketing_unsubscribe creation only in confirmed flow, POST confirmation form without public csrf dependency, csrf exclusion for token-confirmed POST, unsubscribe URL click-skip in mailer, click telemetry staying click-only, unsubscribe analytics counting unsubscribe events only, import suppression skip, repair script, and no webhook/mailer/provider diffs; route=${route_line:-missing}; get_guard=${get_guard_line:-missing}; confirm=${confirm_line:-missing}; apply=${apply_call_line:-missing}; helper=${helper_line:-missing}; render_helper=${render_helper_line:-missing}; render_call=${render_call_line:-missing}; suppression=${suppression_line:-missing}; event=${event_line:-missing}; form=${view_form_line:-missing}; checkbox=${view_checkbox_line:-missing}; note=${view_note_line:-missing}; csrf_view=${view_csrf_line:-none}; public_layout=${public_layout_line:-missing}; csrf_exclude=${csrf_exclude_line:-missing}; click_skip=${click_skip_line:-missing}; click_event=${click_event_line:-missing}; unsubscribe_count=${unsubscribe_count_line:-missing}; lang_confirm=${lang_confirm_line:-missing}; lang_pending=${lang_pending_line:-missing}; import_skip=${import_skip_line:-missing}; repair_usage=${repair_usage_line:-missing}; repair_apply=${repair_apply_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; webhooks_diff=${webhooks_diff:-none}; mailer_diff=${mailer_diff:-none}; ses_diff=${ses_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}"
+      "expected public unsubscribe route, non-POST guard, confirmed apply helper, standalone render helper, public language loader, marketing_unsubscribe creation only in confirmed flow, POST confirmation form without public csrf dependency, polished standalone layout markers, translated email/campaign labels, no raw uppercase key text, csrf exclusion for token-confirmed POST, unsubscribe URL click-skip in mailer, click telemetry staying click-only, unsubscribe analytics counting unsubscribe events only, import suppression skip, repair script, and no webhook/mailer/provider diffs; route=${route_line:-missing}; get_guard=${get_guard_line:-missing}; confirm=${confirm_line:-missing}; apply=${apply_call_line:-missing}; helper=${helper_line:-missing}; render_helper=${render_helper_line:-missing}; render_call=${render_call_line:-missing}; lang_loader=${lang_loader_line:-missing}; suppression=${suppression_line:-missing}; event=${event_line:-missing}; form=${view_form_line:-missing}; checkbox=${view_checkbox_line:-missing}; note=${view_note_line:-missing}; csrf_view=${view_csrf_line:-none}; page=${page_class_line:-missing}; card=${card_class_line:-missing}; status=${status_class_line:-missing}; details=${details_class_line:-missing}; button=${button_class_line:-missing}; email_call=${email_label_call_line:-missing}; campaign_call=${campaign_label_call_line:-missing}; raw_upper=${raw_uppercase_line:-none}; csrf_exclude=${csrf_exclude_line:-missing}; lang_title=${lang_title_line:-missing}; lang_confirm=${lang_confirm_line:-missing}; lang_message=${lang_message_line:-missing}; lang_required=${lang_required_line:-missing}; lang_checkbox=${lang_checkbox_line:-missing}; lang_button=${lang_button_line:-missing}; lang_note=${lang_note_line:-missing}; lang_email=${lang_email_line:-missing}; lang_campaign=${lang_campaign_line:-missing}; lang_invalid=${lang_invalid_line:-missing}; lang_success=${lang_success_line:-missing}; lang_pending=${lang_pending_line:-missing}; lang_success_status=${lang_status_success_line:-missing}; lang_error_status=${lang_status_error_line:-missing}; click_skip=${click_skip_line:-missing}; click_event=${click_event_line:-missing}; unsubscribe_count=${unsubscribe_count_line:-missing}; import_skip=${import_skip_line:-missing}; repair_usage=${repair_usage_line:-missing}; repair_apply=${repair_apply_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; webhooks_diff=${webhooks_diff:-none}; mailer_diff=${mailer_diff:-none}; ses_diff=${ses_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}"
     return
   fi
 
   pass \
     "public unsubscribe GET stays non-mutating, renders a standalone public confirmation page, and unsubscribe analytics stay distinct from click telemetry" \
-    "get_guard=$get_guard_line | render=$render_helper_line | click_skip=$click_skip_line | unsubscribe_count=$unsubscribe_count_line | git_diff_mode=$git_diff_mode"
+    "get_guard=$get_guard_line | render=$render_helper_line | lang_loader=$lang_loader_line | page=$page_class_line | click_skip=$click_skip_line | unsubscribe_count=$unsubscribe_count_line | git_diff_mode=$git_diff_mode"
 }
 
 check_false_unsubscribe_repair_script_safety() {

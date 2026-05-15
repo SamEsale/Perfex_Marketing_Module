@@ -20,6 +20,7 @@ class Subscriptions extends CI_Controller
         $this->load->model('marketing/Marketing_events_model', 'marketing_events_model');
         $this->load->model('marketing/Marketing_public_links_model', 'marketing_public_links_model');
         $this->load->library('marketing/Marketing_unsubscribe');
+        $this->ensure_public_language_loaded();
     }
 
     public function unsubscribe($token = null)
@@ -207,5 +208,31 @@ class Subscriptions extends CI_Controller
         $this->output
             ->set_content_type('text/html', 'utf-8')
             ->set_output($html);
+    }
+
+    protected function ensure_public_language_loaded()
+    {
+        $languageFile = dirname(__DIR__) . '/language/english/marketing_lang.php';
+
+        if (!is_file($languageFile)) {
+            return;
+        }
+
+        $lang = [];
+        include $languageFile;
+
+        if (!is_array($lang) || empty($lang)) {
+            return;
+        }
+
+        if (!isset($this->lang) || !is_object($this->lang)) {
+            return;
+        }
+
+        if (!isset($this->lang->language) || !is_array($this->lang->language)) {
+            $this->lang->language = [];
+        }
+
+        $this->lang->language = array_merge($lang, $this->lang->language);
     }
 }
