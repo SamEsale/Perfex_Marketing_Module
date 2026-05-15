@@ -38,12 +38,10 @@ class Subscriptions extends CI_Controller
             'token' => (string) $token,
             'email' => $context['normalized_email'] ?? '',
             'campaign_name' => $context['campaign']['name'] ?? '',
-            'csrf_name' => $this->security->get_csrf_token_name(),
-            'csrf_hash' => $this->security->get_csrf_hash(),
         ];
 
         if ($payload === null || $context === null) {
-            $this->load->view('marketing/subscriptions/unsubscribe_result', $data);
+            $this->render_public_unsubscribe_view($data);
             return;
         }
 
@@ -52,7 +50,7 @@ class Subscriptions extends CI_Controller
             $data['message'] = _l('marketing_unsubscribe_confirm_message');
             $data['status_label'] = _l('marketing_unsubscribe_status_pending');
             $data['title'] = _l('marketing_unsubscribe_confirm_title');
-            $this->load->view('marketing/subscriptions/unsubscribe_result', $data);
+            $this->render_public_unsubscribe_view($data);
             return;
         }
 
@@ -62,7 +60,7 @@ class Subscriptions extends CI_Controller
             $data['title'] = _l('marketing_unsubscribe_confirm_title');
             $data['message'] = _l('marketing_unsubscribe_confirm_required');
             $data['status_label'] = _l('marketing_unsubscribe_status_pending');
-            $this->load->view('marketing/subscriptions/unsubscribe_result', $data);
+            $this->render_public_unsubscribe_view($data);
             return;
         }
 
@@ -71,7 +69,7 @@ class Subscriptions extends CI_Controller
         $data['status_label'] = !empty($result['success']) ? _l('marketing_unsubscribe_status_success') : _l('marketing_unsubscribe_status_error');
         $data['success'] = !empty($result['success']);
 
-        $this->load->view('marketing/subscriptions/unsubscribe_result', $data);
+        $this->render_public_unsubscribe_view($data);
     }
 
     protected function build_unsubscribe_context(array $payload)
@@ -188,5 +186,26 @@ class Subscriptions extends CI_Controller
         }
 
         return ['success' => true];
+    }
+
+    protected function render_public_unsubscribe_view(array $data)
+    {
+        $viewPath = dirname(__DIR__) . '/views/subscriptions/unsubscribe_result.php';
+
+        if (!is_file($viewPath)) {
+            show_error('Marketing unsubscribe confirmation view is unavailable.', 500);
+
+            return;
+        }
+
+        extract($data, EXTR_SKIP);
+
+        ob_start();
+        include $viewPath;
+        $html = ob_get_clean();
+
+        $this->output
+            ->set_content_type('text/html', 'utf-8')
+            ->set_output($html);
     }
 }

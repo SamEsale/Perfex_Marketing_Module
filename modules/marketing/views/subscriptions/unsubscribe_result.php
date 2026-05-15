@@ -144,7 +144,6 @@
                     </div>
                 <?php endif; ?>
                 <form method="post" action="<?= html_escape($unsubscribe_url); ?>" class="marketing-unsubscribe-form">
-                    <input type="hidden" name="<?= html_escape($csrf_name); ?>" value="<?= html_escape($csrf_hash); ?>">
                     <label class="marketing-unsubscribe-checkbox">
                         <input type="checkbox" name="unsubscribe_confirmation" value="confirm" required>
                         <span><?= html_escape(_l('marketing_unsubscribe_confirm_checkbox')); ?></span>

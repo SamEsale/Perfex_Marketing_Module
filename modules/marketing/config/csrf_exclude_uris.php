@@ -6,4 +6,5 @@ return [
     'marketing/webhooks/ses_sns',
     'marketing/webhooks/inbound_email',
     'marketing/webhooks/whatsapp',
+    'marketing/unsubscribe/.*',
 ];
