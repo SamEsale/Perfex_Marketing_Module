@@ -573,34 +573,6 @@ foreach ($errorMessages as $errorMessage) {
 	                            </div>
 	                            <div class="marketing-campaign-builder-workspace">
 	                                <div class="marketing-builder-shell">
-                            <div class="marketing-builder-topbar">
-                                <div class="marketing-builder-topbar-group">
-                                    <button type="button" class="btn btn-default" id="marketing-builder-start-design"><?= _l('marketing_builder_start_design'); ?></button>
-                                    <button type="button" class="btn btn-default" id="marketing-builder-preview-desktop"><?= _l('marketing_builder_preview_desktop'); ?></button>
-                                    <button type="button" class="btn btn-default" id="marketing-builder-preview-mobile"><?= _l('marketing_builder_preview_mobile'); ?></button>
-                                    <button type="button" class="btn btn-info" id="marketing-builder-insert-unsubscribe"><?= _l('marketing_builder_insert_unsubscribe'); ?></button>
-                                </div>
-                                <div class="marketing-builder-topbar-group">
-                                    <span id="marketing-builder-unsubscribe-status" class="marketing-builder-status-chip marketing-builder-status-chip--missing"><?= _l('marketing_builder_unsubscribe_missing'); ?></span>
-                                    <select id="marketing-builder-merge-tag-select" class="form-control marketing-builder-inline-select">
-                                        <option value=""><?= _l('marketing_builder_merge_tags'); ?></option>
-                                        <?php foreach ($builderMergeTags as $mergeTag) { ?>
-                                            <option value="<?= html_escape($mergeTag['token'] ?? ''); ?>"><?= html_escape(($mergeTag['label'] ?? '') . ' - ' . ($mergeTag['token'] ?? '')); ?></option>
-                                        <?php } ?>
-                                    </select>
-                                    <button type="button" class="btn btn-default" id="marketing-builder-insert-merge-tag"><?= _l('marketing_builder_insert_merge_tag'); ?></button>
-                                    <select id="marketing-builder-preset-select" class="form-control marketing-builder-inline-select">
-                                        <option value="default"><?= _l('marketing_builder_default_template_name'); ?></option>
-                                        <option value="newsletter"><?= _l('marketing_builder_preset_newsletter'); ?></option>
-                                        <option value="promotion"><?= _l('marketing_builder_preset_promotion'); ?></option>
-                                        <option value="real_estate"><?= _l('marketing_builder_preset_real_estate'); ?></option>
-                                        <option value="product"><?= _l('marketing_builder_preset_product'); ?></option>
-                                        <option value="simple_text"><?= _l('marketing_builder_preset_simple_text'); ?></option>
-                                        <option value="conference_event"><?= _l('marketing_builder_preset_conference_event'); ?></option>
-                                    </select>
-                                    <button type="button" class="btn btn-primary" id="marketing-builder-apply-preset"><?= _l('marketing_builder_apply_preset'); ?></button>
-                                </div>
-                            </div>
                             <div class="marketing-builder-layout">
                                 <aside class="marketing-builder-palette">
                                     <div class="marketing-builder-panel-heading" id="marketing-builder-library-header">
@@ -882,6 +854,10 @@ foreach ($errorMessages as $errorMessage) {
             replaceConfirm: <?= json_encode(_l('marketing_builder_replace_confirm')); ?>,
             mergeTags: <?= json_encode(_l('marketing_builder_merge_tags')); ?>,
             insertMergeTag: <?= json_encode(_l('marketing_builder_insert_merge_tag')); ?>,
+            applyPreset: <?= json_encode(_l('marketing_builder_apply_preset')); ?>,
+            previewDesktop: <?= json_encode(_l('marketing_builder_preview_desktop')); ?>,
+            previewMobile: <?= json_encode(_l('marketing_builder_preview_mobile')); ?>,
+            insertUnsubscribe: <?= json_encode(_l('marketing_builder_insert_unsubscribe')); ?>,
             mergeTagApplied: <?= json_encode(_l('marketing_builder_merge_tag_applied')); ?>,
             mergeTagSelectPrompt: <?= json_encode(_l('marketing_builder_merge_tag_select_prompt')); ?>,
             personalizeHelp: <?= json_encode(_l('marketing_builder_personalization_help')); ?>,

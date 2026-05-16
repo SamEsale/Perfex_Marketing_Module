@@ -143,13 +143,10 @@
         var textField = document.getElementById('text_content');
         var previewShell = document.getElementById('marketing-builder-preview-shell');
         var previewFrame = document.getElementById('marketing-builder-preview-frame');
-        var unsubscribeStatus = document.getElementById('marketing-builder-unsubscribe-status');
         var fileInput = document.getElementById('marketing-builder-image-input');
         var paletteSearch = document.getElementById('marketing-builder-search');
         var libraryHeader = document.getElementById('marketing-builder-library-header');
         var insertNowButton = document.getElementById('marketing-builder-insert-unsubscribe-now');
-        var mergeTagSelect = document.getElementById('marketing-builder-merge-tag-select');
-        var mergeTagInsertButton = document.getElementById('marketing-builder-insert-merge-tag');
         var previewModal = window.jQuery ? window.jQuery('#marketingBuilderPreviewModal') : null;
         var imageModal = window.jQuery ? window.jQuery('#marketingBuilderImageModal') : null;
         var qrModal = window.jQuery ? window.jQuery('#marketingBuilderQrModal') : null;
@@ -267,11 +264,7 @@
             {
                 id: 'compliance',
                 title: strings.compliance || 'Compliance',
-                blocks: [
-                    { type: 'unsubscribe', label: strings.unsubscribe || 'Unsubscribe Link', hint: 'Required', icon: 'unsubscribe' },
-                    { type: 'company_address', label: strings.companyAddressBlock || 'Company Address', hint: 'Address', icon: 'address' },
-                    { type: 'email_footer', label: strings.emailFooterBlock || 'Email Footer', hint: 'Footer', icon: 'footer' }
-                ]
+                blocks: []
             }
         ];
 
@@ -326,6 +319,8 @@
                 EM: true,
                 I: true,
                 U: true,
+                S: true,
+                BLOCKQUOTE: true,
                 A: true,
                 H1: true,
                 H2: true,
@@ -334,6 +329,72 @@
                 DIV: true,
                 SPAN: true
             };
+            var allowedInlineStyles = {
+                color: true,
+                'background-color': true,
+                'text-align': true,
+                'padding-left': true
+            };
+
+            function cleanInlineStyle(styleValue) {
+                var safeStyles = [];
+
+                String(styleValue || '').split(';').forEach(function (declaration) {
+                    var parts = declaration.split(':');
+                    var property;
+                    var value;
+
+                    if (parts.length < 2) {
+                        return;
+                    }
+
+                    property = String(parts.shift() || '').trim().toLowerCase();
+                    value = String(parts.join(':') || '').trim();
+
+                    if (!allowedInlineStyles[property] || value === '') {
+                        return;
+                    }
+
+                    if (property === 'padding-left' && !/^\d+(px|em|rem|%)$/.test(value)) {
+                        return;
+                    }
+
+                    if ((property === 'color' || property === 'background-color') && /expression|url\s*\(|javascript:/i.test(value)) {
+                        return;
+                    }
+
+                    if (property === 'text-align' && ['left', 'center', 'right', 'justify'].indexOf(value.toLowerCase()) === -1) {
+                        return;
+                    }
+
+                    safeStyles.push(property + ':' + value);
+                });
+
+                return safeStyles.join(';');
+            }
+
+            function extractQuillAlignment(node) {
+                var className = String(node.getAttribute('class') || '');
+                var alignMatch = className.match(/ql-align-(center|right|justify)/);
+
+                if (alignMatch) {
+                    return alignMatch[1];
+                }
+
+                return '';
+            }
+
+            function extractQuillIndent(node) {
+                var className = String(node.getAttribute('class') || '');
+                var indentMatch = className.match(/ql-indent-(\d+)/);
+                var depth = indentMatch ? parseInt(indentMatch[1], 10) : 0;
+
+                if (!depth || depth < 1) {
+                    return '';
+                }
+
+                return String(depth * 24) + 'px';
+            }
 
             function sanitizeNode(node) {
                 if (!node) {
@@ -372,6 +433,25 @@
                     }
                     cleanNode.setAttribute('target', '_blank');
                     cleanNode.setAttribute('rel', 'noopener noreferrer');
+                }
+
+                var inlineStyles = cleanInlineStyle(node.getAttribute('style') || '');
+                var quillAlign = extractQuillAlignment(node);
+                var quillIndent = extractQuillIndent(node);
+                var mergedStyles = [];
+
+                if (inlineStyles) {
+                    mergedStyles.push(inlineStyles);
+                }
+                if (quillAlign && inlineStyles.toLowerCase().indexOf('text-align:') === -1) {
+                    mergedStyles.push('text-align:' + quillAlign);
+                }
+                if (quillIndent && inlineStyles.toLowerCase().indexOf('padding-left:') === -1) {
+                    mergedStyles.push('padding-left:' + quillIndent);
+                }
+
+                if (mergedStyles.length && safeTagName !== 'A') {
+                    cleanNode.setAttribute('style', mergedStyles.join(';'));
                 }
 
                 Array.prototype.forEach.call(node.childNodes || [], function (childNode) {
@@ -553,6 +633,10 @@
             syncFields();
         }
 
+        function getCurrentUnsubscribeStatusNode() {
+            return document.getElementById('marketing-builder-unsubscribe-status');
+        }
+
         function syncSidebarEditorFromBlock() {
             var editorState = state.sidebarEditor;
             var sourceHtml;
@@ -622,6 +706,13 @@
                         ]
                     }
                 });
+
+                var quillToolbar = editorHost.parentNode.querySelector('.ql-toolbar');
+                if (quillToolbar) {
+                    Array.prototype.forEach.call(quillToolbar.querySelectorAll('button'), function (buttonNode) {
+                        buttonNode.setAttribute('type', 'button');
+                    });
+                }
 
                 fallbackShell.classList.add('hide');
                 editorHost.parentNode.classList.remove('hide');
@@ -826,6 +917,58 @@
             renderProperties();
         }
 
+        function findExistingFooterBlock() {
+            return canvas.querySelector('.mb-block[data-builder-block="footer"], .mb-block[data-builder-block="email_footer"]');
+        }
+
+        function insertOrFocusCompanyAddressBlock() {
+            var block = state.activeBlock;
+            var existingBlock;
+            var targetBlock;
+
+            if (!companyAddressConfig.configured) {
+                return;
+            }
+
+            if (block && block.dataset.builderBlock === 'company_address') {
+                applySavedCompanyAddress(block);
+                setActiveBlock(block);
+                return;
+            }
+
+            existingBlock = canvas.querySelector('.mb-block[data-builder-block="company_address"]');
+            targetBlock = existingBlock || createCompanyAddressBlock();
+
+            if (!existingBlock) {
+                insertBlockAtPlacement(targetBlock, {
+                    container: canvas,
+                    beforeNode: findExistingFooterBlock() || findExistingUnsubscribeBlock() || null
+                });
+            }
+
+            applySavedCompanyAddress(targetBlock);
+            setActiveBlock(targetBlock);
+        }
+
+        function insertOrFocusEmailFooterBlock() {
+            var existingFooter = findExistingFooterBlock();
+            var footerBlock = existingFooter || createFooterBlock();
+
+            if (!existingFooter) {
+                insertBlockAtPlacement(footerBlock, {
+                    container: canvas,
+                    beforeNode: findExistingUnsubscribeBlock() || null
+                });
+            }
+
+            if (companyAddressConfig.configured) {
+                applySavedCompanyAddress(footerBlock);
+            } else {
+                syncFields();
+            }
+            setActiveBlock(footerBlock);
+        }
+
         function renderMergeTagButtons() {
             if (!mergeTags.length) {
                 return '';
@@ -836,6 +979,95 @@
                     return '<button type="button" class="marketing-builder-merge-tag-chip" data-merge-tag-token="' + escapeHtml(tag.token || '') + '">' + escapeHtml(tag.label || tag.token || '') + '</button>';
                 }).join('')
                 + '</div>';
+        }
+
+        function renderTemplateOptions() {
+            return ''
+                + '<option value="default">' + escapeHtml(strings.defaultTemplateName || 'Start Email Design') + '</option>'
+                + '<option value="newsletter">' + escapeHtml(strings.presetNewsletter || 'Newsletter') + '</option>'
+                + '<option value="promotion">' + escapeHtml(strings.presetPromotion || 'Promotion / Offer') + '</option>'
+                + '<option value="real_estate">' + escapeHtml(strings.presetRealEstate || 'Real Estate Listing') + '</option>'
+                + '<option value="product">' + escapeHtml(strings.presetProduct || 'Product Announcement') + '</option>'
+                + '<option value="simple_text">' + escapeHtml(strings.presetSimpleText || 'Simple Text Email') + '</option>'
+                + '<option value="conference_event">' + escapeHtml(strings.presetConferenceEvent || 'Conference / Event Invitation') + '</option>';
+        }
+
+        function renderStaticPaletteSection(title, bodyHtml, extraClass) {
+            return '<div class="marketing-builder-palette-group marketing-builder-palette-group--static is-open' + (extraClass ? ' ' + extraClass : '') + '">'
+                + '<div class="marketing-builder-palette-group-title marketing-builder-palette-group-title--static">' + escapeHtml(title) + '</div>'
+                + '<div class="marketing-builder-palette-static-body">' + bodyHtml + '</div>'
+                + '</div>';
+        }
+
+        function renderSidebarActionCard(options) {
+            var classes = 'marketing-builder-sidebar-action-card';
+
+            if (options.primary) {
+                classes += ' marketing-builder-sidebar-action-card--primary';
+            }
+            if (options.disabled) {
+                classes += ' is-disabled';
+            }
+
+            return '<button type="button" class="' + classes + '" data-sidebar-action="' + escapeHtml(options.action) + '"' + (options.disabled ? ' disabled' : '') + '>'
+                + '<span class="marketing-builder-sidebar-action-card-label">' + escapeHtml(options.label) + '</span>'
+                + (options.note ? '<span class="marketing-builder-sidebar-action-card-note">' + escapeHtml(options.note) + '</span>' : '')
+                + '</button>';
+        }
+
+        function renderSidebarLoadTemplateSection() {
+            return renderStaticPaletteSection(
+                strings.applyPreset || 'Load Template',
+                '<div class="form-group no-margin">'
+                    + '<select id="marketing-builder-preset-select" class="form-control marketing-builder-sidebar-select">'
+                    + renderTemplateOptions()
+                    + '</select>'
+                + '</div>'
+                + '<button type="button" class="btn btn-primary btn-block mtop10" id="marketing-builder-apply-preset" data-sidebar-action="load-template">' + escapeHtml(strings.applyPreset || 'Load Template') + '</button>',
+                'marketing-builder-palette-group--actions'
+            );
+        }
+
+        function renderSidebarComplianceSection() {
+            var statusText = companyAddressConfig.configured
+                ? (strings.companyAddressSavedConfigured || 'Saved company address settings are ready to insert into this block.')
+                : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet. Update them in Marketing Settings first.');
+
+            return renderStaticPaletteSection(
+                strings.compliance || 'Compliance',
+                '<span id="marketing-builder-unsubscribe-status" class="marketing-builder-status-chip marketing-builder-status-chip--missing">' + escapeHtml(strings.unsubscribeMissing || 'Missing unsubscribe link') + '</span>'
+                + '<div class="marketing-builder-sidebar-action-list">'
+                + renderSidebarActionCard({ action: 'insert-unsubscribe', label: strings.insertUnsubscribe || 'Insert Unsubscribe Link', note: strings.unsubscribe || 'Required', primary: true })
+                + renderSidebarActionCard({ action: 'insert-company-address', label: strings.companyAddressBlock || 'Company Address', note: companyAddressConfig.configured ? (strings.companyAddressUseSaved || 'Use Saved Company Address') : (strings.companyAddressSavedMissing || 'Saved settings not configured yet.'), disabled: !companyAddressConfig.configured })
+                + renderSidebarActionCard({ action: 'insert-email-footer', label: strings.emailFooterBlock || 'Email Footer', note: strings.footer || 'Footer' })
+                + '</div>'
+                + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(statusText) + '</p>',
+                'marketing-builder-palette-group--actions'
+            );
+        }
+
+        function renderSidebarMergeTagsSection() {
+            return renderStaticPaletteSection(
+                strings.insertMergeTag || 'Insert Merge Tags',
+                '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.personalizeHelp || 'Insert personalization placeholders at the current cursor position inside the selected block.') + '</p>'
+                + renderMergeTagButtons(),
+                'marketing-builder-palette-group--actions'
+            );
+        }
+
+        function renderSidebarPreviewSection(mode) {
+            var buttonId = mode === 'mobile' ? 'marketing-builder-preview-mobile' : 'marketing-builder-preview-desktop';
+            var label = mode === 'mobile'
+                ? (strings.previewMobile || 'Preview Mobile')
+                : (strings.previewDesktop || 'Preview Desktop');
+
+            return renderStaticPaletteSection(
+                label,
+                '<button type="button" class="marketing-builder-sidebar-action-card marketing-builder-sidebar-action-card--primary" id="' + escapeHtml(buttonId) + '" data-sidebar-action="' + escapeHtml(mode === 'mobile' ? 'preview-mobile' : 'preview-desktop') + '">'
+                + '<span class="marketing-builder-sidebar-action-card-label">' + escapeHtml(label) + '</span>'
+                + '</button>',
+                'marketing-builder-palette-group--actions'
+            );
         }
 
         function renderRichTextToolbar(block) {
@@ -1799,6 +2031,12 @@
             var html = renderEmailHtml();
             var builderMarkup = builderStateField ? builderStateField.value : serializeBuilderState();
             var hasToken = hasUnsubscribeToken(html) || hasUnsubscribeToken(builderMarkup);
+            var unsubscribeStatus = getCurrentUnsubscribeStatusNode();
+
+            if (!unsubscribeStatus) {
+                return;
+            }
+
             unsubscribeStatus.textContent = hasToken ? (strings.unsubscribePresent || 'Unsubscribe link included') : (strings.unsubscribeMissing || 'Missing unsubscribe link');
             unsubscribeStatus.className = 'marketing-builder-status-chip ' + (hasToken ? 'marketing-builder-status-chip--ok' : 'marketing-builder-status-chip--missing');
         }
@@ -1954,8 +2192,10 @@
         }
 
         function renderPalette() {
-            palette.innerHTML = '';
             var hasSearch = !!state.paletteSearch;
+
+            palette.innerHTML = '';
+            palette.appendChild(createElement(renderSidebarLoadTemplateSection()));
 
             paletteGroups.forEach(function (group) {
                 var filteredBlocks = group.blocks.filter(function (blockDef) {
@@ -2004,6 +2244,11 @@
                 groupNode.appendChild(grid);
                 palette.appendChild(groupNode);
             });
+
+            palette.appendChild(createElement(renderSidebarComplianceSection()));
+            palette.appendChild(createElement(renderSidebarMergeTagsSection()));
+            palette.appendChild(createElement(renderSidebarPreviewSection('desktop')));
+            palette.appendChild(createElement(renderSidebarPreviewSection('mobile')));
         }
 
         function duplicateActiveBlock() {
@@ -3098,6 +3343,23 @@
             insertBlockAtPlacement(createUnsubscribeBlock(), getPreferredUnsubscribePlacement());
         }
 
+        function openPreview(mode) {
+            state.previewMode = mode === 'mobile' ? 'mobile' : 'desktop';
+            previewShell.className = 'marketing-builder-preview-shell marketing-builder-preview-shell--' + state.previewMode;
+            previewFrame.srcdoc = renderEmailHtml();
+
+            if (canvasFrame) {
+                canvasFrame.className = 'marketing-builder-canvas-frame marketing-builder-canvas-frame--' + state.previewMode;
+                canvasModeLabel.textContent = state.previewMode === 'mobile'
+                    ? (strings.mobileCanvas || 'Mobile preview')
+                    : (strings.desktopCanvas || 'Desktop preview');
+            }
+
+            if (previewModal) {
+                previewModal.modal('show');
+            }
+        }
+
         properties.addEventListener('click', function (event) {
             var tabNode = event.target.closest('[data-inspector-tab]');
             if (tabNode) {
@@ -3185,7 +3447,35 @@
         });
 
         palette.addEventListener('click', function (event) {
+            var sidebarAction = event.target.closest('[data-sidebar-action]');
+            var mergeTagNode = event.target.closest('[data-merge-tag-token]');
             var toggle = event.target.closest('[data-category-toggle]');
+
+            if (mergeTagNode) {
+                insertMergeTag(mergeTagNode.getAttribute('data-merge-tag-token') || '');
+                return;
+            }
+
+            if (sidebarAction) {
+                var action = sidebarAction.getAttribute('data-sidebar-action') || '';
+
+                if (action === 'load-template') {
+                    var presetSelect = document.getElementById('marketing-builder-preset-select');
+                    loadTemplate(presetSelect ? presetSelect.value : 'default');
+                } else if (action === 'insert-unsubscribe') {
+                    insertUnsubscribeBlock();
+                } else if (action === 'insert-company-address') {
+                    insertOrFocusCompanyAddressBlock();
+                } else if (action === 'insert-email-footer') {
+                    insertOrFocusEmailFooterBlock();
+                } else if (action === 'preview-desktop') {
+                    openPreview('desktop');
+                } else if (action === 'preview-mobile') {
+                    openPreview('mobile');
+                }
+                return;
+            }
+
             if (!toggle || state.paletteSearch) {
                 return;
             }
@@ -3354,60 +3644,14 @@
             qrModalFields.applyButton.addEventListener('click', applyQrModalChanges);
         }
 
-        document.getElementById('marketing-builder-start-design').addEventListener('click', function () {
-            loadTemplate('default');
-        });
-
-        document.getElementById('marketing-builder-apply-preset').addEventListener('click', function () {
-            var select = document.getElementById('marketing-builder-preset-select');
-            loadTemplate(select ? select.value : 'default');
-        });
-
-        document.getElementById('marketing-builder-insert-unsubscribe').addEventListener('click', insertUnsubscribeBlock);
-
         if (insertNowButton) {
             insertNowButton.addEventListener('click', insertUnsubscribeBlock);
-        }
-
-        if (mergeTagInsertButton) {
-            mergeTagInsertButton.addEventListener('click', function () {
-                insertMergeTag(mergeTagSelect ? mergeTagSelect.value : '');
-            });
         }
 
         if (paletteSearch) {
             paletteSearch.addEventListener('input', function () {
                 state.paletteSearch = String(paletteSearch.value || '').trim().toLowerCase();
                 renderPalette();
-            });
-        }
-
-        document.getElementById('marketing-builder-preview-desktop').addEventListener('click', function () {
-            state.previewMode = 'desktop';
-            previewShell.className = 'marketing-builder-preview-shell marketing-builder-preview-shell--desktop';
-            previewFrame.srcdoc = renderEmailHtml();
-            if (previewModal) {
-                previewModal.modal('show');
-            }
-        });
-
-        document.getElementById('marketing-builder-preview-mobile').addEventListener('click', function () {
-            state.previewMode = 'mobile';
-            previewShell.className = 'marketing-builder-preview-shell marketing-builder-preview-shell--mobile';
-            previewFrame.srcdoc = renderEmailHtml();
-            if (previewModal) {
-                previewModal.modal('show');
-            }
-        });
-
-        if (canvasFrame) {
-            document.getElementById('marketing-builder-preview-desktop').addEventListener('click', function () {
-                canvasFrame.className = 'marketing-builder-canvas-frame marketing-builder-canvas-frame--desktop';
-                canvasModeLabel.textContent = strings.desktopCanvas || 'Desktop preview';
-            });
-            document.getElementById('marketing-builder-preview-mobile').addEventListener('click', function () {
-                canvasFrame.className = 'marketing-builder-canvas-frame marketing-builder-canvas-frame--mobile';
-                canvasModeLabel.textContent = strings.mobileCanvas || 'Mobile preview';
             });
         }
 

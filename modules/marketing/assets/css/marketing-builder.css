@@ -891,6 +891,11 @@
     color: #b91c1c;
 }
 
+.marketing-builder-palette-static-body .marketing-builder-status-chip {
+    align-self: flex-start;
+    margin-bottom: 4px;
+}
+
 .marketing-builder-layout {
     display: grid;
     grid-template-columns: minmax(560px, 620px) minmax(0, 1fr);
@@ -1071,6 +1076,14 @@
     content: '−';
 }
 
+.marketing-builder-palette-group--static .marketing-builder-palette-group-title:after {
+    content: '';
+}
+
+.marketing-builder-palette-group-title--static {
+    cursor: default;
+}
+
 .marketing-builder-palette-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1079,6 +1092,72 @@
 
 .marketing-builder-palette-group:not(.is-open) .marketing-builder-palette-grid {
     display: none;
+}
+
+.marketing-builder-palette-static-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.marketing-builder-sidebar-select {
+    min-height: 42px;
+    border-radius: 12px;
+}
+
+.marketing-builder-sidebar-action-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.marketing-builder-sidebar-action-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-height: 74px;
+    padding: 14px 16px;
+    border: 1px solid var(--mb-border);
+    border-radius: 16px;
+    background: #ffffff;
+    color: var(--mb-text);
+    text-align: left;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.marketing-builder-sidebar-action-card:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: #93c5fd;
+    background: #fbfdff;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+}
+
+.marketing-builder-sidebar-action-card--primary {
+    background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+    border-color: #bfdbfe;
+}
+
+.marketing-builder-sidebar-action-card.is-disabled,
+.marketing-builder-sidebar-action-card:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+.marketing-builder-sidebar-action-card-label {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .02em;
+}
+
+.marketing-builder-sidebar-action-card-note {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--mb-muted);
 }
 
 .marketing-builder-palette-item {
