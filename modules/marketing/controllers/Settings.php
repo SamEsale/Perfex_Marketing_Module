@@ -41,14 +41,6 @@ class Settings extends AdminController
             'marketing_default_from_name'       => get_option('marketing_default_from_name'),
             'marketing_default_from_email'      => get_option('marketing_default_from_email'),
             'marketing_default_reply_to_email'  => get_option('marketing_default_reply_to_email'),
-            'marketing_company_name'            => get_option('marketing_company_name'),
-            'marketing_company_address_line_1'  => get_option('marketing_company_address_line_1'),
-            'marketing_company_address_line_2'  => get_option('marketing_company_address_line_2'),
-            'marketing_company_city'            => get_option('marketing_company_city'),
-            'marketing_company_state_region'    => get_option('marketing_company_state_region'),
-            'marketing_company_postal_code'     => get_option('marketing_company_postal_code'),
-            'marketing_company_country'         => get_option('marketing_company_country'),
-            'marketing_company_website'         => get_option('marketing_company_website'),
             'marketing_track_opens'             => get_option('marketing_track_opens'),
             'marketing_track_clicks'            => get_option('marketing_track_clicks'),
             'marketing_ses_verify_signature'    => get_option('marketing_ses_verify_signature'),
@@ -470,14 +462,6 @@ class Settings extends AdminController
             'marketing_default_from_name' => (string) $getValue('marketing_default_from_name'),
             'marketing_default_from_email' => (string) $getValue('marketing_default_from_email'),
             'marketing_default_reply_to_email' => (string) $getValue('marketing_default_reply_to_email'),
-            'marketing_company_name' => (string) $getValue('marketing_company_name'),
-            'marketing_company_address_line_1' => (string) $getValue('marketing_company_address_line_1'),
-            'marketing_company_address_line_2' => (string) $getValue('marketing_company_address_line_2'),
-            'marketing_company_city' => (string) $getValue('marketing_company_city'),
-            'marketing_company_state_region' => (string) $getValue('marketing_company_state_region'),
-            'marketing_company_postal_code' => (string) $getValue('marketing_company_postal_code'),
-            'marketing_company_country' => (string) $getValue('marketing_company_country'),
-            'marketing_company_website' => (string) $getValue('marketing_company_website'),
             'marketing_track_opens' => (string) ($getValue('marketing_track_opens') === '1' ? '1' : '0'),
             'marketing_track_clicks' => (string) ($getValue('marketing_track_clicks') === '1' ? '1' : '0'),
             'marketing_ses_verify_signature' => (string) ($getValue('marketing_ses_verify_signature') === '1' ? '1' : '0'),
@@ -517,14 +501,6 @@ class Settings extends AdminController
             'marketing_default_from_name' => $posted['marketing_default_from_name'],
             'marketing_default_from_email' => $posted['marketing_default_from_email'],
             'marketing_default_reply_to_email' => $posted['marketing_default_reply_to_email'],
-            'marketing_company_name' => $posted['marketing_company_name'],
-            'marketing_company_address_line_1' => $posted['marketing_company_address_line_1'],
-            'marketing_company_address_line_2' => $posted['marketing_company_address_line_2'],
-            'marketing_company_city' => $posted['marketing_company_city'],
-            'marketing_company_state_region' => $posted['marketing_company_state_region'],
-            'marketing_company_postal_code' => $posted['marketing_company_postal_code'],
-            'marketing_company_country' => $posted['marketing_company_country'],
-            'marketing_company_website' => $posted['marketing_company_website'],
             'marketing_track_opens' => $posted['marketing_track_opens'],
             'marketing_track_clicks' => $posted['marketing_track_clicks'],
             'marketing_ses_verify_signature' => $posted['marketing_ses_verify_signature'],
@@ -564,14 +540,7 @@ class Settings extends AdminController
         $this->form_validation->set_rules('marketing_default_from_name', _l('marketing_default_from_name'), 'trim');
         $this->form_validation->set_rules('marketing_default_from_email', _l('marketing_default_from_email'), 'trim|valid_email');
         $this->form_validation->set_rules('marketing_default_reply_to_email', _l('marketing_default_reply_to_email'), 'trim|valid_email');
-        $this->form_validation->set_rules('marketing_company_name', _l('marketing_company_name'), 'trim|max_length[191]');
-        $this->form_validation->set_rules('marketing_company_address_line_1', _l('marketing_company_address_line_1'), 'trim|max_length[191]');
-        $this->form_validation->set_rules('marketing_company_address_line_2', _l('marketing_company_address_line_2'), 'trim|max_length[191]');
-        $this->form_validation->set_rules('marketing_company_city', _l('marketing_company_city'), 'trim|max_length[100]');
-        $this->form_validation->set_rules('marketing_company_state_region', _l('marketing_company_state_region'), 'trim|max_length[100]');
-        $this->form_validation->set_rules('marketing_company_postal_code', _l('marketing_company_postal_code'), 'trim|max_length[32]');
-        $this->form_validation->set_rules('marketing_company_country', _l('marketing_company_country'), 'trim|max_length[100]');
-        $this->form_validation->set_rules('marketing_company_website', _l('marketing_company_website'), 'trim|max_length[191]');
+        // Marketing-specific company address fields removed: use Perfex global Company Information instead.
         $this->form_validation->set_rules('marketing_ses_verify_signature', _l('marketing_ses_verify_signature'), 'in_list[0,1]');
 
         if ($this->form_validation->run() === false) {
@@ -604,14 +573,6 @@ class Settings extends AdminController
             'marketing_default_from_name'      => $posted['marketing_default_from_name'],
             'marketing_default_from_email'     => $posted['marketing_default_from_email'],
             'marketing_default_reply_to_email' => $posted['marketing_default_reply_to_email'],
-            'marketing_company_name'           => $posted['marketing_company_name'],
-            'marketing_company_address_line_1' => $posted['marketing_company_address_line_1'],
-            'marketing_company_address_line_2' => $posted['marketing_company_address_line_2'],
-            'marketing_company_city'           => $posted['marketing_company_city'],
-            'marketing_company_state_region'   => $posted['marketing_company_state_region'],
-            'marketing_company_postal_code'    => $posted['marketing_company_postal_code'],
-            'marketing_company_country'        => $posted['marketing_company_country'],
-            'marketing_company_website'        => $posted['marketing_company_website'],
             'marketing_track_opens'            => $posted['marketing_track_opens'],
             'marketing_track_clicks'           => $posted['marketing_track_clicks'],
             'marketing_ses_verify_signature'   => $posted['marketing_ses_verify_signature'],

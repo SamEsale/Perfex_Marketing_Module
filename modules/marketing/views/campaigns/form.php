@@ -855,7 +855,8 @@ if ($hasUnsubscribeSaveError) {
         companyAddress: {
             html: <?= json_encode((string) $builderCompanyAddress['html']); ?>,
             text: <?= json_encode((string) $builderCompanyAddress['text']); ?>,
-            configured: <?= !empty($builderCompanyAddress['configured']) ? 'true' : 'false'; ?>
+            configured: <?= !empty($builderCompanyAddress['configured']) ? 'true' : 'false'; ?>,
+            source: <?= json_encode(!empty($builderCompanyAddress['source']) ? $builderCompanyAddress['source'] : 'marketing_module_fallback'); ?>
         },
         mergeTags: <?= json_encode(array_values($builderMergeTags)); ?>,
         strings: {

@@ -1447,38 +1447,57 @@ class Campaigns extends AdminController
 
     private function get_builder_company_address_config()
     {
+        // Build company address config strictly from Perfex global company options.
         $lines = [];
-        $companyName = trim((string) get_option('marketing_company_name'));
-        $line1 = trim((string) get_option('marketing_company_address_line_1'));
-        $line2 = trim((string) get_option('marketing_company_address_line_2'));
-        $city = trim((string) get_option('marketing_company_city'));
-        $stateRegion = trim((string) get_option('marketing_company_state_region'));
-        $postalCode = trim((string) get_option('marketing_company_postal_code'));
-        $country = trim((string) get_option('marketing_company_country'));
-        $website = trim((string) get_option('marketing_company_website'));
 
-        if ($companyName !== '') {
-            $lines[] = $companyName;
-        }
-        if ($line1 !== '') {
-            $lines[] = $line1;
-        }
-        if ($line2 !== '') {
-            $lines[] = $line2;
+        $perfexCompanyName = trim((string) get_option('companyname'));
+        $perfexCompanyAddress = trim((string) get_option('company_address'));
+        $perfexCity = trim((string) get_option('company_city'));
+        $perfexState = trim((string) get_option('company_state'));
+        $perfexZip = trim((string) get_option('company_zip'));
+        $perfexCountry = trim((string) get_option('company_country_code')) ?: trim((string) get_option('company_country'));
+        $perfexPhone = trim((string) get_option('company_phonenumber'));
+        $perfexVat = trim((string) get_option('company_vat'));
+
+        if ($perfexCompanyName !== '') {
+            $lines[] = $perfexCompanyName;
         }
 
-        $localityParts = array_values(array_filter([$city, $stateRegion, $postalCode], static function ($value) {
+        if ($perfexCompanyAddress !== '') {
+            $addrParts = preg_split('/\r?\n/', $perfexCompanyAddress);
+            foreach ($addrParts as $part) {
+                $part = trim((string) $part);
+                if ($part !== '') {
+                    $lines[] = $part;
+                }
+            }
+        }
+
+        $localityParts = array_values(array_filter([
+            $perfexCity,
+            $perfexState,
+            $perfexZip,
+        ], static function ($value) {
             return trim((string) $value) !== '';
         }));
+
         if (!empty($localityParts)) {
             $lines[] = implode(', ', $localityParts);
         }
-        if ($country !== '') {
-            $lines[] = $country;
+
+        if ($perfexCountry !== '') {
+            $lines[] = $perfexCountry;
         }
-        if ($website !== '') {
-            $lines[] = $website;
+
+        if ($perfexPhone !== '') {
+            $lines[] = $perfexPhone;
         }
+
+        if ($perfexVat !== '') {
+            $lines[] = $perfexVat;
+        }
+
+        $configured = ($perfexCompanyName !== '' || $perfexCompanyAddress !== '' || $perfexCity !== '' || $perfexState !== '' || $perfexZip !== '' || $perfexCountry !== '' || $perfexPhone !== '' || $perfexVat !== '');
 
         if (empty($lines)) {
             $lines = ['Your Company', '123 Market Street', 'City, State'];
@@ -1489,7 +1508,8 @@ class Campaigns extends AdminController
         return [
             'html' => implode('<br>', $escapedLines),
             'text' => implode("\n", $lines),
-            'configured' => $companyName !== '' || $line1 !== '' || $city !== '' || $country !== '',
+            'configured' => (bool) $configured,
+            'source' => 'perfex_company_settings',
         ];
     }
 

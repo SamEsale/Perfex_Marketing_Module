@@ -1330,9 +1330,9 @@ check_campaign_duplicate_builder_personalization_features() {
   controller_unsubscribe_builder="$(first_fixed_match "!\$this->campaign_has_unsubscribe_token(\$builderState)" "$CAMPAIGNS_CONTROLLER_FILE")"
   controller_unsubscribe_unicode="$(first_fixed_match "\\\\u007b\\\\u007bunsubscribe_url\\\\u007d\\\\u007d" "$CAMPAIGNS_CONTROLLER_FILE")"
   settings_heading="$(first_fixed_match 'marketing_company_address_settings_heading' "$SETTINGS_VIEW_FILE")"
-  settings_company_name="$(first_fixed_match 'id="marketing_company_name"' "$SETTINGS_VIEW_FILE")"
-  settings_address_line="$(first_fixed_match 'id="marketing_company_address_line_1"' "$SETTINGS_VIEW_FILE")"
-  settings_country="$(first_fixed_match 'id="marketing_company_country"' "$SETTINGS_VIEW_FILE")"
+  settings_company_name="$(first_fixed_match 'marketing_company_address_managed_in_perfex' "$SETTINGS_VIEW_FILE")"
+  settings_address_line="$(first_fixed_match "admin_url('settings?group=company')" "$SETTINGS_VIEW_FILE")"
+  settings_country="$(first_fixed_match 'marketing_company_address_manage_in_perfex' "$SETTINGS_VIEW_FILE")"
   bootstrap_company_name="$(first_fixed_match "'marketing_company_name' => ''" "$BOOTSTRAP_FILE")"
   bootstrap_company_country="$(first_fixed_match "'marketing_company_country' => ''" "$BOOTSTRAP_FILE")"
   [[ -f "$ROOT_DIR/$QUILL_JS_ASSET_FILE" ]] && quill_js_exists="$QUILL_JS_ASSET_FILE" || quill_js_exists=''
