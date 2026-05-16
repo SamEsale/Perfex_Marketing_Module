@@ -1211,6 +1211,7 @@
                 + '<div class="marketing-builder-sidebar-action-list marketing-builder-sidebar-action-list--grid">'
                 + renderSidebarActionCard({ action: 'insert-unsubscribe', label: strings.insertUnsubscribe || 'Insert Unsubscribe Link', note: strings.unsubscribe || 'Required', primary: true, icon: 'unsubscribe' })
                 + renderSidebarActionCard({ action: 'insert-company-address', label: strings.companyAddressBlock || 'Company Address', note: hasConfiguredCompanyAddress() ? (strings.companyAddressUseSaved || 'Use Saved Company Address') : (strings.companyAddressSavedMissing || 'Saved settings not configured yet.'), icon: 'address' })
+                + renderSidebarActionCard({ action: 'use-saved-company-address', label: strings.companyAddressUseSaved || 'Use Saved Company Address', note: hasConfiguredCompanyAddress() ? (strings.companyAddressSavedConfigured || 'Saved company address settings are ready to insert into this block.') : (strings.companyAddressSavedMissing || 'Saved settings not configured yet.'), icon: 'address' })
                 + renderSidebarActionCard({ action: 'insert-email-footer', label: strings.emailFooterBlock || 'Email Footer', note: strings.footer || 'Footer', icon: 'footer' })
                 + '</div>'
                 + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(statusText) + '</p>',
@@ -3670,6 +3671,33 @@
                     insertUnsubscribeBlock();
                 } else if (action === 'insert-company-address') {
                     insertOrFocusCompanyAddressBlock();
+                } else if (action === 'use-saved-company-address') {
+                    // Ensure the company address block exists / is focused, then explicitly
+                    // apply the saved company address data if the applier helper exists.
+                    insertOrFocusCompanyAddressBlock();
+                    try {
+                        var targetBlock = null;
+                        if (state.activeBlock && state.activeBlock.dataset && state.activeBlock.dataset.builderBlock === 'company_address') {
+                            targetBlock = state.activeBlock;
+                        } else {
+                            targetBlock = canvas.querySelector('.mb-block[data-builder-block="company_address"]');
+                        }
+
+                        if (typeof applySavedCompanyAddress === 'function' && targetBlock) {
+                            // Only apply saved settings when configuration indicates they exist.
+                            if (typeof companyAddressConfig !== 'undefined' && companyAddressConfig && companyAddressConfig.configured) {
+                                applySavedCompanyAddress(targetBlock);
+                                setActiveBlock(targetBlock);
+                                syncFields();
+                            } else {
+                                // Fallback: still ensure the block is focused so user can edit it.
+                                setActiveBlock(targetBlock);
+                            }
+                        }
+                    } catch (err) {
+                        // Defensive: don't let unexpected errors break the palette.
+                        console.error('use-saved-company-address handler failed:', err);
+                    }
                 } else if (action === 'insert-email-footer') {
                     insertOrFocusEmailFooterBlock();
                 } else if (action === 'preview-desktop') {

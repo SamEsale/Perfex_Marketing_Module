@@ -47,7 +47,6 @@ $trackClicksEnabled = !empty($campaign['track_clicks']);
 $audienceModeLabel = $targetingMode === 'filtered'
     ? _l('marketing_campaign_targeting_filtered_segment')
     : _l('marketing_campaign_targeting_full_audience');
-$audienceSummaryLabel = $audienceReady ? $audienceName : _l('marketing_campaign_audience_summary_none');
 
 foreach ($audiences as $audience) {
     if ((int) ($audience['id'] ?? 0) === $audienceId) {
@@ -63,6 +62,7 @@ if ($scheduledAtValue !== '') {
 
 $basicsReady = $campaignNameValue !== '' && ($isWhatsappCampaign || $subjectValue !== '');
 $audienceReady = $audienceId > 0;
+$audienceSummaryLabel = $audienceReady ? $audienceName : _l('marketing_campaign_audience_summary_none');
 $senderReady = $isWhatsappCampaign || ($fromNameValue !== '' && $fromEmailValue !== '');
 $hasBuilderContent = $builderStateValue !== '' || $htmlContentValue !== '';
 $contentReady = $isWhatsappCampaign
@@ -134,9 +134,20 @@ foreach ($setupChecklist as $setupChecklistItem) {
 }
 
 foreach ($errorMessages as $errorMessage) {
-    if (trim((string) $errorMessage) === _l('marketing_campaign_unsubscribe_save_required')) {
+    $msg = strip_tags(trim((string) $errorMessage));
+    if (strpos($msg, _l('marketing_campaign_unsubscribe_save_required')) !== false) {
         $hasUnsubscribeSaveError = true;
         break;
+    }
+}
+
+// If the builder/html content already contains an unsubscribe token in any common encoding,
+// don't show the unsubscribe save warning even if the server returned that error.
+if ($hasUnsubscribeSaveError) {
+    $combined = strtolower(trim((string) ($htmlContentValue . ' ' . $builderStateValue)));
+    $decoded = strtolower(html_entity_decode(urldecode($combined)));
+    if (strpos($decoded, '{{unsubscribe_url}}') !== false || strpos($decoded, '%7b%7bunsubscribe_url%7d%7d') !== false || strpos($decoded, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false) {
+        $hasUnsubscribeSaveError = false;
     }
 }
 ?>
