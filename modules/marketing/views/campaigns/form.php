@@ -570,6 +570,10 @@ foreach ($errorMessages as $errorMessage) {
 	                            <div class="marketing-campaign-builder-next-step">
 	                                <span class="marketing-campaign-builder-next-step-label"><?= _l('marketing_campaign_setup_next_step'); ?></span>
 	                                <span class="marketing-campaign-builder-next-step-copy"><?= _l('marketing_campaign_builder_next_step_helper'); ?></span>
+                                    <div class="marketing-campaign-builder-next-step-actions">
+                                        <button type="button" class="btn btn-default" id="marketing-builder-preview-desktop"><?= _l('marketing_builder_preview_desktop'); ?></button>
+                                        <button type="button" class="btn btn-default" id="marketing-builder-preview-mobile"><?= _l('marketing_builder_preview_mobile'); ?></button>
+                                    </div>
 	                            </div>
 	                            <div class="marketing-campaign-builder-workspace">
 	                                <div class="marketing-builder-shell">

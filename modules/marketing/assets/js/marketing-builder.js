@@ -181,7 +181,8 @@
                 textColor: '#0f172a',
                 linkColor: '#2563eb'
             },
-            sidebarEditor: null
+            sidebarEditor: null,
+            suppressAutoSelect: false
         };
 
         var dropIndicator = createElement('<div class="marketing-builder-drop-indicator" aria-hidden="true"></div>');
@@ -619,6 +620,10 @@
                 state.sidebarEditor.quill.off('text-change', state.sidebarEditor.onTextChange);
             }
 
+            if (state.sidebarEditor && state.sidebarEditor.quill && state.sidebarEditor.onSelectionChange) {
+                state.sidebarEditor.quill.off('selection-change', state.sidebarEditor.onSelectionChange);
+            }
+
             state.sidebarEditor = null;
         }
 
@@ -635,6 +640,80 @@
 
         function getCurrentUnsubscribeStatusNode() {
             return document.getElementById('marketing-builder-unsubscribe-status');
+        }
+
+        function getSidebarEditorSelection(quill) {
+            var editorState = state.sidebarEditor;
+            var range;
+
+            if (!quill) {
+                return null;
+            }
+
+            range = quill.getSelection();
+            if (range) {
+                return range;
+            }
+
+            if (editorState && editorState.quill === quill && editorState.savedRange) {
+                return {
+                    index: editorState.savedRange.index,
+                    length: editorState.savedRange.length
+                };
+            }
+
+            return null;
+        }
+
+        function restoreSidebarEditorSelection(quill) {
+            var range = getSidebarEditorSelection(quill);
+
+            if (!quill || !range) {
+                return null;
+            }
+
+            quill.focus();
+            quill.setSelection(range.index, range.length, 'silent');
+            return range;
+        }
+
+        function applySidebarQuillFormat(quill, format, value) {
+            var range = restoreSidebarEditorSelection(quill);
+            var currentFormat;
+            var nextValue;
+            var currentLink;
+            var requestedLink;
+
+            if (!quill || !range) {
+                return;
+            }
+
+            if (format === 'clean') {
+                quill.removeFormat(range.index, range.length, 'user');
+                return;
+            }
+
+            if (format === 'link') {
+                currentLink = (quill.getFormat(range) || {}).link || 'https://';
+                requestedLink = window.prompt(strings.linkUrl || 'Link URL', currentLink);
+
+                if (requestedLink === null) {
+                    return;
+                }
+
+                requestedLink = String(requestedLink || '').trim();
+                if (requestedLink !== '' && !isValidLink(requestedLink)) {
+                    window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
+                    return;
+                }
+
+                quill.format(format, requestedLink === '' ? false : requestedLink, 'user');
+                return;
+            }
+
+            currentFormat = quill.getFormat(range) || {};
+            nextValue = typeof value !== 'undefined' ? value : !currentFormat[format];
+            quill.format(format, nextValue, 'user');
         }
 
         function syncSidebarEditorFromBlock() {
@@ -708,9 +787,14 @@
                 });
 
                 var quillToolbar = editorHost.parentNode.querySelector('.ql-toolbar');
+                var toolbarModule = quill.getModule('toolbar');
                 if (quillToolbar) {
                     Array.prototype.forEach.call(quillToolbar.querySelectorAll('button'), function (buttonNode) {
                         buttonNode.setAttribute('type', 'button');
+                        buttonNode.addEventListener('mousedown', function (event) {
+                            event.preventDefault();
+                            restoreSidebarEditorSelection(quill);
+                        });
                     });
                 }
 
@@ -725,7 +809,9 @@
                     fallbackShell: fallbackShell,
                     textarea: fallbackTextarea,
                     syncing: true,
-                    onTextChange: null
+                    onTextChange: null,
+                    onSelectionChange: null,
+                    savedRange: null
                 };
 
                 quill.clipboard.dangerouslyPasteHTML(initialHtml || '<p><br></p>');
@@ -741,7 +827,35 @@
 
                 state.sidebarEditor.onTextChange = textChangeHandler;
                 quill.on('text-change', textChangeHandler);
+
+                state.sidebarEditor.onSelectionChange = function (range) {
+                    if (!state.sidebarEditor || state.sidebarEditor.block !== block || !range) {
+                        return;
+                    }
+
+                    state.sidebarEditor.savedRange = {
+                        index: range.index,
+                        length: range.length
+                    };
+                };
+                quill.on('selection-change', state.sidebarEditor.onSelectionChange);
+
+                if (toolbarModule) {
+                    ['bold', 'italic', 'underline', 'strike'].forEach(function (format) {
+                        toolbarModule.addHandler(format, function (value) {
+                            applySidebarQuillFormat(quill, format, value);
+                        });
+                    });
+                    toolbarModule.addHandler('link', function (value) {
+                        applySidebarQuillFormat(quill, 'link', value);
+                    });
+                    toolbarModule.addHandler('clean', function () {
+                        applySidebarQuillFormat(quill, 'clean');
+                    });
+                }
+
                 quill.focus();
+                state.sidebarEditor.savedRange = quill.getSelection() || { index: Math.max(0, quill.getLength() - 1), length: 0 };
                 return;
             }
 
@@ -1851,7 +1965,11 @@
             }
 
             refreshCanvasState();
-            setActiveBlock(block);
+            if (state.suppressAutoSelect) {
+                setActiveBlock(null);
+            } else {
+                setActiveBlock(block);
+            }
             syncFields();
         }
 
@@ -2247,8 +2365,6 @@
 
             palette.appendChild(createElement(renderSidebarComplianceSection()));
             palette.appendChild(createElement(renderSidebarMergeTagsSection()));
-            palette.appendChild(createElement(renderSidebarPreviewSection('desktop')));
-            palette.appendChild(createElement(renderSidebarPreviewSection('mobile')));
         }
 
         function duplicateActiveBlock() {
@@ -2565,7 +2681,7 @@
             var advancedTab = '';
 
             html += '<div class="marketing-builder-settings-header">'
-                + '<button type="button" class="btn btn-default btn-sm" data-action="back-to-elements">' + escapeHtml(strings.backToElements || '← Elements') + '</button>'
+                + '<button type="button" class="btn btn-default marketing-builder-back-button" data-action="back-to-elements">' + escapeHtml(strings.backToElements || '← Elements') + '</button>'
                 + '<h4 class="marketing-builder-settings-title">' + escapeHtml((strings.editBlock || 'Edit %s').replace('%s', getInspectorLabel(block))) + '</h4>'
                 + '<div class="marketing-builder-settings-subtitle">' + escapeHtml(getBlockLabel(block)) + '</div>'
                 + '</div>';
@@ -3659,17 +3775,42 @@
             syncFields();
         });
 
+        var previewDesktopButton = document.getElementById('marketing-builder-preview-desktop');
+        var previewMobileButton = document.getElementById('marketing-builder-preview-mobile');
+
+        if (previewDesktopButton) {
+            previewDesktopButton.addEventListener('click', function () {
+                openPreview('desktop');
+            });
+        }
+
+        if (previewMobileButton) {
+            previewMobileButton.addEventListener('click', function () {
+                openPreview('mobile');
+            });
+        }
+
         renderPalette();
 
         if (config.initialBuilderState && String(config.initialBuilderState).trim() !== '') {
+            state.suppressAutoSelect = true;
             canvas.innerHTML = String(config.initialBuilderState);
             refreshCanvasState();
-            setActiveBlock(canvas.querySelector('.mb-block'));
+            setActiveBlock(null);
             syncFields();
+            state.suppressAutoSelect = false;
         } else if (config.initialHtml && String(config.initialHtml).trim() !== '') {
+            state.suppressAutoSelect = true;
             insertBlockAtPlacement(createLegacyBlock(config.initialHtml), { container: canvas, beforeNode: null });
+            setActiveBlock(null);
+            renderProperties();
+            state.suppressAutoSelect = false;
         } else if (config.isNewCampaign) {
+            state.suppressAutoSelect = true;
             applyPreset('default', false);
+            setActiveBlock(null);
+            renderProperties();
+            state.suppressAutoSelect = false;
         } else {
             ensureCanvasPlaceholder();
             renderProperties();

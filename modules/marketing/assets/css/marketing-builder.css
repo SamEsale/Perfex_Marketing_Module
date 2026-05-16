@@ -424,6 +424,19 @@
     line-height: 1.5;
 }
 
+.marketing-campaign-builder-next-step-actions {
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.marketing-campaign-builder-next-step-actions .btn {
+    min-height: 38px;
+    padding: 8px 14px;
+    border-radius: 12px;
+}
+
 .marketing-campaign-builder-workspace {
     border: 1px solid #dbe6f3;
     border-radius: 24px;
@@ -1212,6 +1225,24 @@
 .marketing-builder-settings-header .btn {
     align-self: flex-start;
     margin-bottom: 4px;
+}
+
+.marketing-builder-back-button {
+    min-height: 42px;
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #ecfdf3;
+    border-color: #86efac;
+    color: #166534;
+}
+
+.marketing-builder-back-button:hover,
+.marketing-builder-back-button:focus {
+    background: #dcfce7;
+    border-color: #4ade80;
+    color: #14532d;
 }
 
 .marketing-builder-settings-title {

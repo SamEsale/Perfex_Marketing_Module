@@ -1058,7 +1058,10 @@ class Campaigns extends AdminController
             }
         }
 
-        if ($deliveryChannel === 'email' && !$this->campaign_has_unsubscribe_token($htmlContent)) {
+        if ($deliveryChannel === 'email'
+            && !$this->campaign_has_unsubscribe_token($htmlContent)
+            && !$this->campaign_has_unsubscribe_token($builderState)
+        ) {
             $validationMessages[] = _l('marketing_campaign_unsubscribe_save_required');
         }
 
