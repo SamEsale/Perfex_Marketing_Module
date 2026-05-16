@@ -893,7 +893,7 @@
 
 .marketing-builder-layout {
     display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-columns: minmax(560px, 620px) minmax(0, 1fr);
     min-height: 920px;
     height: clamp(640px, calc(100vh - 220px), 1200px);
     max-width: 100%;
@@ -902,7 +902,7 @@
 
 .marketing-builder-palette {
     background: var(--mb-panel);
-    padding: 18px;
+    padding: 20px 22px;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -1023,6 +1023,7 @@
 .marketing-builder-sidebar-view {
     flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 4px;
@@ -1477,17 +1478,18 @@
     border-bottom: 0;
     border-radius: 12px 12px 0 0;
     background: #ffffff;
+    padding: 10px 12px;
 }
 
 .marketing-builder-sidebar-editor-shell .ql-container.ql-snow {
     border: 1px solid #dbe6f3;
     border-radius: 0 0 12px 12px;
     background: #ffffff;
-    min-height: 220px;
+    min-height: 280px;
 }
 
 .marketing-builder-sidebar-editor-shell .ql-editor {
-    min-height: 220px;
+    min-height: 280px;
     font-size: 14px;
     line-height: 1.7;
     color: #0f172a;
@@ -1525,6 +1527,11 @@
 
 .marketing-builder-sidebar-editor-shell .ql-snow .ql-fill {
     fill: #334155;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-toolbar.ql-snow .ql-formats {
+    margin-right: 14px;
+    margin-bottom: 8px;
 }
 
 .marketing-builder-rich-text-toolbar {
@@ -1634,7 +1641,7 @@
 
 @media (max-width: 1439px) {
     .marketing-builder-layout {
-        grid-template-columns: 300px minmax(0, 1fr);
+        grid-template-columns: minmax(460px, 520px) minmax(0, 1fr);
     }
 }
 

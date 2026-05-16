@@ -1418,7 +1418,6 @@ class Campaigns extends AdminController
             ['token' => '{{full_name}}', 'label' => _l('marketing_full_name')],
             ['token' => '{{email}}', 'label' => _l('marketing_email_address')],
             ['token' => '{{company}}', 'label' => _l('marketing_company')],
-            ['token' => '{{unsubscribe_url}}', 'label' => _l('marketing_builder_merge_tag_unsubscribe_url')],
         ];
     }
 

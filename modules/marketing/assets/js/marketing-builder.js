@@ -612,10 +612,12 @@
                     theme: 'snow',
                     modules: {
                         toolbar: [
-                            [{ header: [false, 2, 3] }],
-                            ['bold', 'italic', 'underline'],
-                            [{ list: 'ordered' }, { list: 'bullet' }],
-                            ['link'],
+                            [{ header: [false, 1, 2, 3] }],
+                            ['bold', 'italic', 'underline', 'strike'],
+                            [{ color: [] }, { background: [] }],
+                            [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+                            [{ align: [] }],
+                            ['link', 'blockquote'],
                             ['clean']
                         ]
                     }
