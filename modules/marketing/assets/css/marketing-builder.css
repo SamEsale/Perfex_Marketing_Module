@@ -1228,10 +1228,10 @@
 }
 
 .marketing-builder-back-button {
-    min-height: 42px;
-    padding: 10px 16px;
+    min-height: 48px;
+    padding: 12px 20px;
     border-radius: 999px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     background: #ecfdf3;
     border-color: #86efac;
@@ -1603,6 +1603,25 @@
     font-size: 14px;
     line-height: 1.7;
     color: #0f172a;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor strong,
+.marketing-builder-sidebar-editor-shell .ql-editor b {
+    font-weight: 700;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor em,
+.marketing-builder-sidebar-editor-shell .ql-editor i {
+    font-style: italic;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor u {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor s {
+    text-decoration: line-through;
 }
 
 .marketing-builder-sidebar-editor-shell .ql-editor p,

@@ -683,18 +683,29 @@
             var nextValue;
             var currentLink;
             var requestedLink;
+            var targetLength;
 
             if (!quill || !range) {
                 return;
             }
 
+            targetLength = range.length > 0 ? range.length : 0;
+
             if (format === 'clean') {
-                quill.removeFormat(range.index, range.length, 'user');
+                if (targetLength > 0) {
+                    quill.removeFormat(range.index, targetLength, 'user');
+                    quill.setSelection(range.index, targetLength, 'silent');
+                }
+                quill.focus();
+                state.sidebarEditor.savedRange = {
+                    index: range.index,
+                    length: targetLength
+                };
                 return;
             }
 
             if (format === 'link') {
-                currentLink = (quill.getFormat(range) || {}).link || 'https://';
+                currentLink = (quill.getFormat(range.index, Math.max(targetLength, 1)) || {}).link || 'https://';
                 requestedLink = window.prompt(strings.linkUrl || 'Link URL', currentLink);
 
                 if (requestedLink === null) {
@@ -707,13 +718,37 @@
                     return;
                 }
 
-                quill.format(format, requestedLink === '' ? false : requestedLink, 'user');
+                if (targetLength > 0) {
+                    quill.formatText(range.index, targetLength, format, requestedLink === '' ? false : requestedLink, 'user');
+                    quill.setSelection(range.index, targetLength, 'silent');
+                } else {
+                    quill.format(format, requestedLink === '' ? false : requestedLink, 'user');
+                    quill.setSelection(range.index, 0, 'silent');
+                }
+                quill.focus();
+                state.sidebarEditor.savedRange = {
+                    index: range.index,
+                    length: targetLength
+                };
                 return;
             }
 
-            currentFormat = quill.getFormat(range) || {};
+            currentFormat = quill.getFormat(range.index, Math.max(targetLength, 1)) || {};
             nextValue = typeof value !== 'undefined' ? value : !currentFormat[format];
-            quill.format(format, nextValue, 'user');
+
+            if (targetLength > 0) {
+                quill.formatText(range.index, targetLength, format, nextValue, 'user');
+                quill.setSelection(range.index, targetLength, 'silent');
+            } else {
+                quill.format(format, nextValue, 'user');
+                quill.setSelection(range.index, 0, 'silent');
+            }
+
+            quill.focus();
+            state.sidebarEditor.savedRange = {
+                index: range.index,
+                length: targetLength
+            };
         }
 
         function syncSidebarEditorFromBlock() {
@@ -793,6 +828,9 @@
                         buttonNode.setAttribute('type', 'button');
                         buttonNode.addEventListener('mousedown', function (event) {
                             event.preventDefault();
+                            restoreSidebarEditorSelection(quill);
+                        });
+                        buttonNode.addEventListener('click', function () {
                             restoreSidebarEditorSelection(quill);
                         });
                     });
