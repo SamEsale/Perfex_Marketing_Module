@@ -1166,11 +1166,32 @@ class Campaigns extends AdminController
     private function campaign_has_unsubscribe_token($htmlContent)
     {
         $htmlContent = (string) $htmlContent;
+        $candidates = [$htmlContent];
+        $decoded = rawurldecode($htmlContent);
 
-        return strpos($htmlContent, '{{unsubscribe_url}}') !== false
-            || stripos($htmlContent, '%7B%7Bunsubscribe_url%7D%7D') !== false
-            || strpos($htmlContent, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
-            || strpos($htmlContent, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false;
+        if ($decoded !== $htmlContent) {
+            $candidates[] = $decoded;
+        }
+
+        $entityDecoded = html_entity_decode($htmlContent, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($entityDecoded !== $htmlContent) {
+            $candidates[] = $entityDecoded;
+        }
+
+        foreach ($candidates as $candidate) {
+            $haystack = strtolower((string) $candidate);
+
+            if (strpos($haystack, '{{unsubscribe_url}}') !== false
+                || strpos($haystack, '%7b%7bunsubscribe_url%7d%7d') !== false
+                || strpos($haystack, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
+                || strpos($haystack, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false
+                || strpos($haystack, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function get_default_campaign()

@@ -65,11 +65,30 @@
 
     function hasUnsubscribeToken(value) {
         var normalized = String(value || '');
-        return normalized.indexOf('{{unsubscribe_url}}') !== -1
-            || normalized.indexOf('%7B%7Bunsubscribe_url%7D%7D') !== -1
-            || normalized.indexOf('%7b%7bunsubscribe_url%7d%7d') !== -1
-            || normalized.indexOf('&#123;&#123;unsubscribe_url&#125;&#125;') !== -1
-            || normalized.indexOf('&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== -1;
+        var candidates = [normalized];
+        var decoder = document.createElement('textarea');
+        var patterns = [
+            '{{unsubscribe_url}}',
+            '%7b%7bunsubscribe_url%7d%7d',
+            '&#123;&#123;unsubscribe_url&#125;&#125;',
+            '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
+            '\\u007b\\u007bunsubscribe_url\\u007d\\u007d'
+        ];
+
+        try {
+            candidates.push(decodeURIComponent(normalized));
+        } catch (error) {
+        }
+
+        decoder.innerHTML = normalized;
+        candidates.push(decoder.value || '');
+
+        return candidates.some(function (candidate) {
+            var haystack = String(candidate || '').toLowerCase();
+            return patterns.some(function (pattern) {
+                return haystack.indexOf(pattern) !== -1;
+            });
+        });
     }
 
     function normalizePlainTextValue(value) {
@@ -291,6 +310,10 @@
 
         function getSavedCompanyAddressText() {
             return String(companyAddressConfig.text || 'Your Company\n123 Market Street\nCity, State');
+        }
+
+        function hasConfiguredCompanyAddress() {
+            return !!companyAddressConfig.configured;
         }
 
         function getMergeTagTokenByKey(key) {
@@ -1078,10 +1101,6 @@
             var existingBlock;
             var targetBlock;
 
-            if (!companyAddressConfig.configured) {
-                return;
-            }
-
             if (block && block.dataset.builderBlock === 'company_address') {
                 applySavedCompanyAddress(block);
                 setActiveBlock(block);
@@ -1153,17 +1172,18 @@
 
         function renderSidebarActionCard(options) {
             var classes = 'marketing-builder-sidebar-action-card';
+            var iconHtml = getPaletteIcon(options.icon || 'text');
 
             if (options.primary) {
                 classes += ' marketing-builder-sidebar-action-card--primary';
             }
-            if (options.disabled) {
-                classes += ' is-disabled';
-            }
 
-            return '<button type="button" class="' + classes + '" data-sidebar-action="' + escapeHtml(options.action) + '"' + (options.disabled ? ' disabled' : '') + '>'
+            return '<button type="button" class="' + classes + '" data-sidebar-action="' + escapeHtml(options.action) + '">'
+                + '<span class="marketing-builder-sidebar-action-card-icon">' + iconHtml + '</span>'
+                + '<span class="marketing-builder-sidebar-action-card-copy">'
                 + '<span class="marketing-builder-sidebar-action-card-label">' + escapeHtml(options.label) + '</span>'
                 + (options.note ? '<span class="marketing-builder-sidebar-action-card-note">' + escapeHtml(options.note) + '</span>' : '')
+                + '</span>'
                 + '</button>';
         }
 
@@ -1181,17 +1201,17 @@
         }
 
         function renderSidebarComplianceSection() {
-            var statusText = companyAddressConfig.configured
+            var statusText = hasConfiguredCompanyAddress()
                 ? (strings.companyAddressSavedConfigured || 'Saved company address settings are ready to insert into this block.')
                 : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet. Update them in Marketing Settings first.');
 
             return renderStaticPaletteSection(
                 strings.compliance || 'Compliance',
                 '<span id="marketing-builder-unsubscribe-status" class="marketing-builder-status-chip marketing-builder-status-chip--missing">' + escapeHtml(strings.unsubscribeMissing || 'Missing unsubscribe link') + '</span>'
-                + '<div class="marketing-builder-sidebar-action-list">'
-                + renderSidebarActionCard({ action: 'insert-unsubscribe', label: strings.insertUnsubscribe || 'Insert Unsubscribe Link', note: strings.unsubscribe || 'Required', primary: true })
-                + renderSidebarActionCard({ action: 'insert-company-address', label: strings.companyAddressBlock || 'Company Address', note: companyAddressConfig.configured ? (strings.companyAddressUseSaved || 'Use Saved Company Address') : (strings.companyAddressSavedMissing || 'Saved settings not configured yet.'), disabled: !companyAddressConfig.configured })
-                + renderSidebarActionCard({ action: 'insert-email-footer', label: strings.emailFooterBlock || 'Email Footer', note: strings.footer || 'Footer' })
+                + '<div class="marketing-builder-sidebar-action-list marketing-builder-sidebar-action-list--grid">'
+                + renderSidebarActionCard({ action: 'insert-unsubscribe', label: strings.insertUnsubscribe || 'Insert Unsubscribe Link', note: strings.unsubscribe || 'Required', primary: true, icon: 'unsubscribe' })
+                + renderSidebarActionCard({ action: 'insert-company-address', label: strings.companyAddressBlock || 'Company Address', note: hasConfiguredCompanyAddress() ? (strings.companyAddressUseSaved || 'Use Saved Company Address') : (strings.companyAddressSavedMissing || 'Saved settings not configured yet.'), icon: 'address' })
+                + renderSidebarActionCard({ action: 'insert-email-footer', label: strings.emailFooterBlock || 'Email Footer', note: strings.footer || 'Footer', icon: 'footer' })
                 + '</div>'
                 + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(statusText) + '</p>',
                 'marketing-builder-palette-group--actions'
@@ -1606,6 +1626,28 @@
 
         function getSurface(block) {
             return block ? block.querySelector('[data-block-surface]') : null;
+        }
+
+        function getBodySurface(block) {
+            if (!block) {
+                return null;
+            }
+
+            return block.querySelector('.mb-richtext')
+                || block.querySelector('.mb-company-address-text')
+                || block.querySelector('.mb-footer-text');
+        }
+
+        function getBorderTarget(block) {
+            var surface = getSurface(block);
+            var headingNode = block ? block.querySelector('.mb-heading-text') : null;
+            var bodyNode = getBodySurface(block);
+
+            if (headingNode && bodyNode && bodyNode !== headingNode) {
+                return bodyNode;
+            }
+
+            return surface || bodyNode;
         }
 
         function getBlockLabel(block) {
@@ -2574,7 +2616,7 @@
                     return;
                 }
                 if (node.querySelectorAll) {
-                    targets = targets.concat(Array.prototype.slice.call(node.querySelectorAll('p, li, span, strong, em, a, div')));
+                    targets = targets.concat(Array.prototype.slice.call(node.querySelectorAll('p, ol, ul, li, span, strong, b, em, i, u, s, a, div, blockquote, h1, h2, h3')));
                 }
                 Array.prototype.forEach.call(targets, function (targetNode) {
                     if (property === 'fontFamily') {
@@ -2709,7 +2751,9 @@
             }
 
             var surface = getSurface(block);
+            var borderTarget = getBorderTarget(block) || surface;
             var surfaceStyle = window.getComputedStyle(surface);
+            var borderStyle = window.getComputedStyle(borderTarget);
             var blockStyle = window.getComputedStyle(block);
             var type = block.dataset.builderBlock;
             var imageNode = getImageNode(block);
@@ -2717,6 +2761,8 @@
             var contentTab = '';
             var styleTab = '';
             var advancedTab = '';
+            var headingStyleNode = block.querySelector('.mb-heading-text');
+            var bodyStyleNode = getBodySurface(block) || block.querySelector('.mb-hero-subheadline') || block.querySelector('.mb-image-caption');
 
             html += '<div class="marketing-builder-settings-header">'
                 + '<button type="button" class="btn btn-default marketing-builder-back-button" data-action="back-to-elements">' + escapeHtml(strings.backToElements || '← Elements') + '</button>'
@@ -2816,10 +2862,13 @@
             ]);
             if (type === 'hero') {
                 styleTab += renderHeroStyleTab(block, surfaceStyle, imageNode, imageStyle);
-            } else if (type === 'heading' || type === 'cta' || type === 'feature_list' || type === 'coupon' || type === 'image_box') {
-                styleTab += getTypographyControls(getNodeStyle(block.querySelector('.mb-heading-text'), surfaceStyle), 'heading', 'Heading');
-            } else if (type === 'text' || type === 'testimonial' || type === 'inner_section' || type === 'company_address' || type === 'footer' || type === 'email_footer') {
-                styleTab += getTypographyControls(getNodeStyle(block.querySelector('.mb-richtext') || block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text'), surfaceStyle), 'body', type === 'text' ? 'Text' : 'Body');
+            } else {
+                if (headingStyleNode && (type === 'heading' || type === 'cta' || type === 'feature_list' || type === 'coupon' || type === 'image_box')) {
+                    styleTab += getTypographyControls(getNodeStyle(headingStyleNode, surfaceStyle), 'heading', 'Heading');
+                }
+                if (bodyStyleNode && (type === 'text' || type === 'testimonial' || type === 'inner_section' || type === 'company_address' || type === 'footer' || type === 'email_footer' || type === 'cta' || type === 'feature_list' || type === 'image_box')) {
+                    styleTab += getTypographyControls(getNodeStyle(bodyStyleNode, surfaceStyle), 'body', type === 'text' ? 'Text' : 'Body');
+                }
             }
             if (type === 'image' || type === 'image_box' || type === 'coupon' || type === 'testimonial' || type === 'qr') {
                 var captionNode = block.querySelector('.mb-image-caption') || block.querySelector('.mb-qr-caption');
@@ -2865,9 +2914,9 @@
             advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.marginTop || 'Margin Top') + '</label><input type="number" class="form-control" data-control="block-margin-top" value="' + escapeHtml(String(parseInt(blockStyle.marginTop, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.marginBottom || 'Margin Bottom') + '</label><input type="number" class="form-control" data-control="block-margin-bottom" value="' + escapeHtml(String(parseInt(blockStyle.marginBottom, 10) || 0)) + '"></div></div></div>';
             advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingTop || 'Padding Top') + '</label><input type="number" class="form-control" data-control="surface-padding-top" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingTop, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingRight || 'Padding Right') + '</label><input type="number" class="form-control" data-control="surface-padding-right" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingRight, 10) || 0)) + '"></div></div></div>';
             advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingBottom || 'Padding Bottom') + '</label><input type="number" class="form-control" data-control="surface-padding-bottom" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingBottom, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingLeft || 'Padding Left') + '</label><input type="number" class="form-control" data-control="surface-padding-left" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingLeft, 10) || 0)) + '"></div></div></div>';
-            advancedTab += '<div class="form-group"><label>Border Type</label><select class="form-control" data-control="surface-border-type"><option value="none"' + ((surfaceStyle.borderTopStyle === 'none' || parseInt(surfaceStyle.borderTopWidth, 10) === 0) ? ' selected' : '') + '>None</option><option value="solid"' + (surfaceStyle.borderTopStyle === 'solid' ? ' selected' : '') + '>Solid line</option><option value="double"' + (surfaceStyle.borderTopStyle === 'double' ? ' selected' : '') + '>Double line</option><option value="dashed"' + (surfaceStyle.borderTopStyle === 'dashed' ? ' selected' : '') + '>Dashed</option><option value="dotted"' + (surfaceStyle.borderTopStyle === 'dotted' ? ' selected' : '') + '>Dotted</option><option value="zigzag"' + (surfaceStyle.borderTopStyle === 'zigzag' ? ' selected' : '') + '>Zig Zag</option></select></div>';
-            advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderWidth || 'Border Width') + '</label><input type="number" class="form-control" data-control="surface-border-width" value="' + escapeHtml(String(parseInt(surfaceStyle.borderTopWidth, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderRadius || 'Border Radius') + '</label><input type="number" class="form-control" data-control="surface-border-radius" value="' + escapeHtml(String(parseInt(surfaceStyle.borderTopLeftRadius, 10) || 0)) + '"></div></div></div>';
-            advancedTab += renderColorRow([{ label: strings.borderColor || 'Border Color', control: 'surface-border-color', value: toHex(surfaceStyle.borderTopColor, '#dbe4ee') }]);
+            advancedTab += '<div class="form-group"><label>Border Type</label><select class="form-control" data-control="surface-border-type"><option value="none"' + ((borderStyle.borderTopStyle === 'none' || parseInt(borderStyle.borderTopWidth, 10) === 0) ? ' selected' : '') + '>None</option><option value="solid"' + (borderStyle.borderTopStyle === 'solid' ? ' selected' : '') + '>Solid line</option><option value="double"' + (borderStyle.borderTopStyle === 'double' ? ' selected' : '') + '>Double line</option><option value="dashed"' + (borderStyle.borderTopStyle === 'dashed' ? ' selected' : '') + '>Dashed</option><option value="dotted"' + (borderStyle.borderTopStyle === 'dotted' ? ' selected' : '') + '>Dotted</option><option value="zigzag"' + (borderStyle.borderTopStyle === 'zigzag' ? ' selected' : '') + '>Zig Zag</option></select></div>';
+            advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderWidth || 'Border Width') + '</label><input type="number" class="form-control" data-control="surface-border-width" value="' + escapeHtml(String(parseInt(borderStyle.borderTopWidth, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderRadius || 'Border Radius') + '</label><input type="number" class="form-control" data-control="surface-border-radius" value="' + escapeHtml(String(parseInt(borderStyle.borderTopLeftRadius, 10) || 0)) + '"></div></div></div>';
+            advancedTab += renderColorRow([{ label: strings.borderColor || 'Border Color', control: 'surface-border-color', value: toHex(borderStyle.borderTopColor, '#dbe4ee') }]);
             advancedTab += '<div class="form-group"><label>' + escapeHtml(strings.customLabel || 'Custom Label') + '</label><input type="text" class="form-control" data-control="custom-label" value="' + escapeHtml(block.getAttribute('data-custom-label') || '') + '"></div>';
             advancedTab += renderGlobalControls();
 
@@ -2944,11 +2993,12 @@
             }
 
             var surface = getSurface(block);
+            var borderTarget = getBorderTarget(block) || surface;
             var control = target.getAttribute('data-control');
             var buttonNode = block.querySelector('.mb-button-link') || block.querySelector('.mb-cta-link');
             var buttonLabelNode = block.querySelector('.mb-button-label') || block.querySelector('.mb-cta-label');
             var headingNode = block.querySelector('.mb-heading-text') || block.querySelector('.mb-hero-headline');
-            var bodyNode = block.querySelector('.mb-richtext') || block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text') || block.querySelector('.mb-hero-subheadline') || block.querySelector('.mb-image-caption');
+            var bodyNode = getBodySurface(block) || block.querySelector('.mb-hero-subheadline') || block.querySelector('.mb-image-caption');
             var currentImageNode = getImageNode(block);
             var currentImageLinkNode = getImageLinkNode(block);
             var iconLinkNode = getIconLinkNode(block);
@@ -3097,15 +3147,15 @@
                 block.style.marginBottom = clampNumber(target.value, 0, 160, 16) + 'px';
             } else if (control === 'surface-border-width') {
                 var width = clampNumber(target.value, 0, 20, 0) + 'px';
-                surface.style.borderStyle = parseInt(width, 10) > 0 ? (surface.style.borderStyle || 'solid') : 'none';
-                surface.style.borderWidth = width;
+                borderTarget.style.borderStyle = parseInt(width, 10) > 0 ? (borderTarget.style.borderStyle || 'solid') : 'none';
+                borderTarget.style.borderWidth = width;
             } else if (control === 'surface-border-type') {
                 var borderType = target.value === 'zigzag' ? 'dashed' : target.value;
-                surface.style.borderStyle = borderType;
+                borderTarget.style.borderStyle = borderType;
             } else if (control === 'surface-border-radius') {
-                surface.style.borderRadius = clampNumber(target.value, 0, 60, 0) + 'px';
+                borderTarget.style.borderRadius = clampNumber(target.value, 0, 60, 0) + 'px';
             } else if (control === 'surface-border-color') {
-                surface.style.borderColor = target.value;
+                borderTarget.style.borderColor = target.value;
             } else if (control === 'icon-symbol') {
                 block.querySelector('.mb-icon-symbol').textContent = target.value;
             } else if (control === 'icon-title') {
