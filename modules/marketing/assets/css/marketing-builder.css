@@ -1446,6 +1446,87 @@
     line-height: 1.6;
 }
 
+.marketing-builder-sidebar-editor-shell {
+    padding: 14px;
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.marketing-builder-quill-shell {
+    margin-top: 10px;
+}
+
+.marketing-builder-quill-shell.hide {
+    display: none;
+}
+
+.marketing-builder-sidebar-editor-fallback {
+    resize: vertical;
+    min-height: 220px;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.marketing-builder-sidebar-editor-fallback-shell {
+    margin-top: 10px;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-toolbar.ql-snow {
+    border: 1px solid #dbe6f3;
+    border-bottom: 0;
+    border-radius: 12px 12px 0 0;
+    background: #ffffff;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-container.ql-snow {
+    border: 1px solid #dbe6f3;
+    border-radius: 0 0 12px 12px;
+    background: #ffffff;
+    min-height: 220px;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor {
+    min-height: 220px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #0f172a;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor p,
+.marketing-builder-sidebar-editor-shell .ql-editor ol,
+.marketing-builder-sidebar-editor-shell .ql-editor ul {
+    margin-bottom: 12px;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor h2,
+.marketing-builder-sidebar-editor-shell .ql-editor h3 {
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor h2 {
+    font-size: 24px;
+    line-height: 1.3;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-editor h3 {
+    font-size: 20px;
+    line-height: 1.35;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-snow .ql-picker {
+    color: #0f172a;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-snow .ql-stroke {
+    stroke: #334155;
+}
+
+.marketing-builder-sidebar-editor-shell .ql-snow .ql-fill {
+    fill: #334155;
+}
+
 .marketing-builder-rich-text-toolbar {
     display: flex;
     flex-wrap: wrap;

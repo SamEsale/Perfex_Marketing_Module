@@ -3,11 +3,18 @@
 <?php
 $builderCssPath = module_dir_path('marketing', 'assets/css/marketing-builder.css');
 $builderJsPath  = module_dir_path('marketing', 'assets/js/marketing-builder.js');
+$quillCssPath   = module_dir_path('marketing', 'assets/vendor/quill/quill.snow.css');
+$quillJsPath    = module_dir_path('marketing', 'assets/vendor/quill/quill.js');
 $builderCssUrl  = module_dir_url('marketing', 'assets/css/marketing-builder.css');
 $builderJsUrl   = module_dir_url('marketing', 'assets/js/marketing-builder.js');
+$quillCssUrl    = module_dir_url('marketing', 'assets/vendor/quill/quill.snow.css');
+$quillJsUrl     = module_dir_url('marketing', 'assets/vendor/quill/quill.js');
 $builderCssVer  = is_file($builderCssPath) ? (string) filemtime($builderCssPath) : '1';
 $builderJsVer   = is_file($builderJsPath) ? (string) filemtime($builderJsPath) : '1';
+$quillCssVer    = is_file($quillCssPath) ? (string) filemtime($quillCssPath) : '1';
+$quillJsVer     = is_file($quillJsPath) ? (string) filemtime($quillJsPath) : '1';
 ?>
+<link rel="stylesheet" href="<?= html_escape($quillCssUrl . '?v=' . $quillCssVer); ?>">
 <link rel="stylesheet" href="<?= html_escape($builderCssUrl . '?v=' . $builderCssVer); ?>">
 <?php
 $errorMessages = !empty($form_error_message) ? (is_array($form_error_message) ? $form_error_message : [$form_error_message]) : [];
@@ -889,6 +896,8 @@ foreach ($errorMessages as $errorMessage) {
             richTextNumbers: <?= json_encode(_l('marketing_builder_rich_text_numbers')); ?>,
             richTextLink: <?= json_encode(_l('marketing_builder_rich_text_link')); ?>,
             richTextClear: <?= json_encode(_l('marketing_builder_rich_text_clear')); ?>,
+            richTextEditorUnavailable: <?= json_encode(_l('marketing_builder_rich_text_editor_unavailable')); ?>,
+            richTextEditorFallback: <?= json_encode(_l('marketing_builder_rich_text_editor_fallback')); ?>,
             unsubscribePresent: <?= json_encode(_l('marketing_builder_unsubscribe_present')); ?>,
             unsubscribeMissing: <?= json_encode(_l('marketing_builder_unsubscribe_missing')); ?>,
             removeUnsubscribeConfirm: <?= json_encode(_l('marketing_builder_remove_unsubscribe_confirm')); ?>,
@@ -1013,6 +1022,7 @@ foreach ($errorMessages as $errorMessage) {
         }
     };
 </script>
+<script src="<?= html_escape($quillJsUrl . '?v=' . $quillJsVer); ?>"></script>
 <script src="<?= html_escape($builderJsUrl . '?v=' . $builderJsVer); ?>"></script>
 <script>
     (function (window, document) {

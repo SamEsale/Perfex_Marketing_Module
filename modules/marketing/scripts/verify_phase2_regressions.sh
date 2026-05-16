@@ -43,6 +43,9 @@ CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
 CAMPAIGN_INDEX_VIEW_FILE="modules/marketing/views/campaigns/index.php"
 CAMPAIGN_PREVIEW_VIEW_FILE="modules/marketing/views/campaigns/preview.php"
 BUILDER_JS_ASSET_FILE="modules/marketing/assets/js/marketing-builder.js"
+BUILDER_CSS_ASSET_FILE="modules/marketing/assets/css/marketing-builder.css"
+QUILL_JS_ASSET_FILE="modules/marketing/assets/vendor/quill/quill.js"
+QUILL_CSS_ASSET_FILE="modules/marketing/assets/vendor/quill/quill.snow.css"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
@@ -1301,7 +1304,7 @@ check_campaign_plain_text_placeholder_safety() {
 }
 
 check_campaign_duplicate_builder_personalization_features() {
-  local duplicate_index_branch duplicate_model_helper duplicate_show_button duplicate_index_button duplicate_name_line duplicate_success_line duplicate_failure_line form_merge_select form_merge_button form_conference_option form_company_config form_merge_config settings_heading settings_company_name settings_address_line settings_country bootstrap_company_name bootstrap_company_country js_preset_helper js_preset_alias js_toolbar_marker js_editor_marker js_merge_tag_list js_merge_tag_token js_insert_merge_tag js_use_saved_address js_saved_address_html js_saved_address_apply js_paste_handler js_sanitize_html js_plaintext_html mailer_replacements mailer_apply_helper mailer_subject_line mailer_html_line mailer_text_line mailer_unsubscribe_line webhook_diff whatsapp_diff git_diff_mode
+  local duplicate_index_branch duplicate_model_helper duplicate_show_button duplicate_index_button duplicate_name_line duplicate_success_line duplicate_failure_line form_merge_select form_merge_button form_conference_option form_company_config form_merge_config form_quill_css form_quill_js form_no_cdn settings_heading settings_company_name settings_address_line settings_country bootstrap_company_name bootstrap_company_country quill_js_exists quill_css_exists js_preset_helper js_preset_alias js_quill_detect js_quill_init js_editor_marker js_fallback_marker js_fallback_note js_merge_tag_list js_merge_tag_token js_insert_merge_tag js_quill_merge_insert js_use_saved_address js_saved_address_html js_saved_address_apply js_paste_handler js_sanitize_html js_plaintext_html js_sidebar_sync js_builder_state_sync mailer_replacements mailer_apply_helper mailer_subject_line mailer_html_line mailer_text_line mailer_unsubscribe_line webhook_diff whatsapp_diff git_diff_mode
   duplicate_index_branch="$(first_fixed_match "\$this->input->post('duplicate_campaign_id')" "$CAMPAIGNS_CONTROLLER_FILE")"
   duplicate_model_helper="$(first_match 'function[[:space:]]+duplicate_campaign' "$CAMPAIGNS_FILE")"
   duplicate_show_button="$(first_fixed_match 'name="duplicate_campaign_id" value="<?= (int) $campaign['\''id'\'']; ?>">' "$CAMPAIGN_SHOW_VIEW_FILE")"
@@ -1314,25 +1317,36 @@ check_campaign_duplicate_builder_personalization_features() {
   form_conference_option="$(first_fixed_match '<option value="conference_event"><?= _l('\''marketing_builder_preset_conference_event'\''); ?></option>' "$CAMPAIGN_FORM_VIEW_FILE")"
   form_company_config="$(first_fixed_match 'companyAddress:' "$CAMPAIGN_FORM_VIEW_FILE")"
   form_merge_config="$(first_fixed_match 'mergeTags:' "$CAMPAIGN_FORM_VIEW_FILE")"
+  form_quill_css="$(first_fixed_match "assets/vendor/quill/quill.snow.css" "$CAMPAIGN_FORM_VIEW_FILE")"
+  form_quill_js="$(first_fixed_match "assets/vendor/quill/quill.js" "$CAMPAIGN_FORM_VIEW_FILE")"
+  form_no_cdn="$(grep -nEi 'cdn|unpkg|jsdelivr' "$CAMPAIGN_FORM_VIEW_FILE" | grep -i 'quill' || true)"
   settings_heading="$(first_fixed_match 'marketing_company_address_settings_heading' "$SETTINGS_VIEW_FILE")"
   settings_company_name="$(first_fixed_match 'id="marketing_company_name"' "$SETTINGS_VIEW_FILE")"
   settings_address_line="$(first_fixed_match 'id="marketing_company_address_line_1"' "$SETTINGS_VIEW_FILE")"
   settings_country="$(first_fixed_match 'id="marketing_company_country"' "$SETTINGS_VIEW_FILE")"
   bootstrap_company_name="$(first_fixed_match "'marketing_company_name' => ''" "$BOOTSTRAP_FILE")"
   bootstrap_company_country="$(first_fixed_match "'marketing_company_country' => ''" "$BOOTSTRAP_FILE")"
+  [[ -f "$ROOT_DIR/$QUILL_JS_ASSET_FILE" ]] && quill_js_exists="$QUILL_JS_ASSET_FILE" || quill_js_exists=''
+  [[ -f "$ROOT_DIR/$QUILL_CSS_ASSET_FILE" ]] && quill_css_exists="$QUILL_CSS_ASSET_FILE" || quill_css_exists=''
   js_preset_helper="$(first_match 'function[[:space:]]+createConferenceEventPreset' "$BUILDER_JS_ASSET_FILE")"
   js_preset_alias="$(first_fixed_match "name === 'conference_event' || name === 'event'" "$BUILDER_JS_ASSET_FILE")"
-  js_toolbar_marker="$(first_fixed_match 'marketing-builder-rich-text-toolbar' "$BUILDER_JS_ASSET_FILE")"
-  js_editor_marker="$(first_fixed_match 'data-marketing-builder-rich-text-editor="1"' "$BUILDER_JS_ASSET_FILE")"
+  js_quill_detect="$(first_fixed_match 'if (window.Quill) {' "$BUILDER_JS_ASSET_FILE")"
+  js_quill_init="$(first_fixed_match 'new window.Quill(editorHost, {' "$BUILDER_JS_ASSET_FILE")"
+  js_editor_marker="$(first_fixed_match 'data-marketing-builder-quill-editor="1"' "$BUILDER_JS_ASSET_FILE")"
+  js_fallback_marker="$(first_fixed_match 'data-marketing-builder-textarea-fallback="1"' "$BUILDER_JS_ASSET_FILE")"
+  js_fallback_note="$(first_fixed_match 'richTextEditorUnavailable' "$BUILDER_JS_ASSET_FILE")"
   js_merge_tag_list="$(first_fixed_match 'marketing-builder-merge-tag-list' "$BUILDER_JS_ASSET_FILE")"
   js_merge_tag_token="$(first_fixed_match 'data-merge-tag-token' "$BUILDER_JS_ASSET_FILE")"
   js_insert_merge_tag="$(first_fixed_match 'function insertMergeTag(token)' "$BUILDER_JS_ASSET_FILE")"
+  js_quill_merge_insert="$(first_fixed_match "quill.insertText(index, normalizedToken, 'user');" "$BUILDER_JS_ASSET_FILE")"
   js_use_saved_address="$(first_fixed_match 'data-action="use-saved-company-address"' "$BUILDER_JS_ASSET_FILE")"
   js_saved_address_html="$(first_fixed_match 'function getSavedCompanyAddressHtml()' "$BUILDER_JS_ASSET_FILE")"
   js_saved_address_apply="$(first_fixed_match 'function applySavedCompanyAddress(block)' "$BUILDER_JS_ASSET_FILE")"
   js_paste_handler="$(first_fixed_match "canvas.addEventListener('paste'" "$BUILDER_JS_ASSET_FILE")"
   js_sanitize_html="$(first_match 'function[[:space:]]+sanitizeEditableHtml' "$BUILDER_JS_ASSET_FILE")"
   js_plaintext_html="$(first_match 'function[[:space:]]+plainTextToSanitizedHtml' "$BUILDER_JS_ASSET_FILE")"
+  js_sidebar_sync="$(first_match 'function[[:space:]]+applySidebarEditorHtml' "$BUILDER_JS_ASSET_FILE")"
+  js_builder_state_sync="$(first_fixed_match 'builderStateField.value = serializeBuilderState();' "$BUILDER_JS_ASSET_FILE")"
   mailer_replacements="$(first_match 'function[[:space:]]+build_personalization_replacements' "$MAILER_FILE")"
   mailer_apply_helper="$(first_match 'function[[:space:]]+apply_personalization_replacements' "$MAILER_FILE")"
   mailer_subject_line="$(first_fixed_match '$subject = $this->apply_personalization_replacements((string) ($campaign['\''subject'\''] ?? '\'''\''), $personalization);' "$MAILER_FILE")"
@@ -1343,16 +1357,16 @@ check_campaign_duplicate_builder_personalization_features() {
   whatsapp_diff="$(git_changed_path_if_available "$WHATSAPP_FILE")"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$duplicate_index_branch" || -z "$duplicate_model_helper" || -z "$duplicate_show_button" || -z "$duplicate_index_button" || -z "$duplicate_name_line" || -z "$duplicate_success_line" || -z "$duplicate_failure_line" || -z "$form_merge_select" || -z "$form_merge_button" || -z "$form_conference_option" || -z "$form_company_config" || -z "$form_merge_config" || -z "$settings_heading" || -z "$settings_company_name" || -z "$settings_address_line" || -z "$settings_country" || -z "$bootstrap_company_name" || -z "$bootstrap_company_country" || -z "$js_preset_helper" || -z "$js_preset_alias" || -z "$js_toolbar_marker" || -z "$js_editor_marker" || -z "$js_merge_tag_list" || -z "$js_merge_tag_token" || -z "$js_insert_merge_tag" || -z "$js_use_saved_address" || -z "$js_saved_address_html" || -z "$js_saved_address_apply" || -z "$js_paste_handler" || -z "$js_sanitize_html" || -z "$js_plaintext_html" || -z "$mailer_replacements" || -z "$mailer_apply_helper" || -z "$mailer_subject_line" || -z "$mailer_html_line" || -z "$mailer_text_line" || -z "$mailer_unsubscribe_line" || -n "$webhook_diff" || -n "$whatsapp_diff" ]]; then
+  if [[ -z "$duplicate_index_branch" || -z "$duplicate_model_helper" || -z "$duplicate_show_button" || -z "$duplicate_index_button" || -z "$duplicate_name_line" || -z "$duplicate_success_line" || -z "$duplicate_failure_line" || -z "$form_merge_select" || -z "$form_merge_button" || -z "$form_conference_option" || -z "$form_company_config" || -z "$form_merge_config" || -z "$form_quill_css" || -z "$form_quill_js" || -n "$form_no_cdn" || -z "$settings_heading" || -z "$settings_company_name" || -z "$settings_address_line" || -z "$settings_country" || -z "$bootstrap_company_name" || -z "$bootstrap_company_country" || -z "$quill_js_exists" || -z "$quill_css_exists" || -z "$js_preset_helper" || -z "$js_preset_alias" || -z "$js_quill_detect" || -z "$js_quill_init" || -z "$js_editor_marker" || -z "$js_fallback_marker" || -z "$js_fallback_note" || -z "$js_merge_tag_list" || -z "$js_merge_tag_token" || -z "$js_insert_merge_tag" || -z "$js_quill_merge_insert" || -z "$js_use_saved_address" || -z "$js_saved_address_html" || -z "$js_saved_address_apply" || -z "$js_paste_handler" || -z "$js_sanitize_html" || -z "$js_plaintext_html" || -z "$js_sidebar_sync" || -z "$js_builder_state_sync" || -z "$mailer_replacements" || -z "$mailer_apply_helper" || -z "$mailer_subject_line" || -z "$mailer_html_line" || -z "$mailer_text_line" || -z "$mailer_unsubscribe_line" || -n "$webhook_diff" || -n "$whatsapp_diff" ]]; then
     fail \
       "campaign duplication, rich-text builder editing, personalization tags, saved company address settings, and conference template remain wired end-to-end" \
-      "expected duplicate POST branch/model helper/buttons with Copy-of naming, builder merge-tag controls and conference preset option, company-address settings defaults/UI, rich-text toolbar markers with paste sanitization and saved-address action, personalization helpers in $MAILER_FILE with subject/html/text replacement and preserved unsubscribe tag, and no webhook/whatsapp runtime diffs; duplicate_branch=${duplicate_index_branch:-missing}; duplicate_model=${duplicate_model_helper:-missing}; duplicate_show=${duplicate_show_button:-missing}; duplicate_index=${duplicate_index_button:-missing}; duplicate_name=${duplicate_name_line:-missing}; success=${duplicate_success_line:-missing}; failure=${duplicate_failure_line:-missing}; merge_select=${form_merge_select:-missing}; merge_button=${form_merge_button:-missing}; conference=${form_conference_option:-missing}; company_config=${form_company_config:-missing}; merge_config=${form_merge_config:-missing}; settings_heading=${settings_heading:-missing}; settings_company=${settings_company_name:-missing}; settings_address=${settings_address_line:-missing}; settings_country=${settings_country:-missing}; bootstrap_company=${bootstrap_company_name:-missing}; bootstrap_country=${bootstrap_company_country:-missing}; preset_helper=${js_preset_helper:-missing}; preset_alias=${js_preset_alias:-missing}; toolbar=${js_toolbar_marker:-missing}; editor=${js_editor_marker:-missing}; merge_list=${js_merge_tag_list:-missing}; merge_token=${js_merge_tag_token:-missing}; insert_merge=${js_insert_merge_tag:-missing}; use_saved=${js_use_saved_address:-missing}; saved_html=${js_saved_address_html:-missing}; saved_apply=${js_saved_address_apply:-missing}; paste=${js_paste_handler:-missing}; sanitize=${js_sanitize_html:-missing}; plaintext=${js_plaintext_html:-missing}; replacements=${mailer_replacements:-missing}; apply=${mailer_apply_helper:-missing}; subject=${mailer_subject_line:-missing}; html=${mailer_html_line:-missing}; text=${mailer_text_line:-missing}; unsubscribe=${mailer_unsubscribe_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${webhook_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}"
+      "expected duplicate POST branch/model helper/buttons with Copy-of naming, builder merge-tag controls and conference preset option, company-address settings defaults/UI, local Quill assets with non-CDN form loading, Quill detection plus fallback textarea and sidebar sync, personalization helpers in $MAILER_FILE with subject/html/text replacement and preserved unsubscribe tag, and no webhook/whatsapp runtime diffs; duplicate_branch=${duplicate_index_branch:-missing}; duplicate_model=${duplicate_model_helper:-missing}; duplicate_show=${duplicate_show_button:-missing}; duplicate_index=${duplicate_index_button:-missing}; duplicate_name=${duplicate_name_line:-missing}; success=${duplicate_success_line:-missing}; failure=${duplicate_failure_line:-missing}; merge_select=${form_merge_select:-missing}; merge_button=${form_merge_button:-missing}; conference=${form_conference_option:-missing}; company_config=${form_company_config:-missing}; merge_config=${form_merge_config:-missing}; form_quill_css=${form_quill_css:-missing}; form_quill_js=${form_quill_js:-missing}; form_cdn=${form_no_cdn:-none}; settings_heading=${settings_heading:-missing}; settings_company=${settings_company_name:-missing}; settings_address=${settings_address_line:-missing}; settings_country=${settings_country:-missing}; bootstrap_company=${bootstrap_company_name:-missing}; bootstrap_country=${bootstrap_company_country:-missing}; quill_js=${quill_js_exists:-missing}; quill_css=${quill_css_exists:-missing}; preset_helper=${js_preset_helper:-missing}; preset_alias=${js_preset_alias:-missing}; quill_detect=${js_quill_detect:-missing}; quill_init=${js_quill_init:-missing}; editor=${js_editor_marker:-missing}; fallback=${js_fallback_marker:-missing}; fallback_note=${js_fallback_note:-missing}; merge_list=${js_merge_tag_list:-missing}; merge_token=${js_merge_tag_token:-missing}; insert_merge=${js_insert_merge_tag:-missing}; quill_merge=${js_quill_merge_insert:-missing}; use_saved=${js_use_saved_address:-missing}; saved_html=${js_saved_address_html:-missing}; saved_apply=${js_saved_address_apply:-missing}; paste=${js_paste_handler:-missing}; sanitize=${js_sanitize_html:-missing}; plaintext=${js_plaintext_html:-missing}; sidebar_sync=${js_sidebar_sync:-missing}; builder_state=${js_builder_state_sync:-missing}; replacements=${mailer_replacements:-missing}; apply=${mailer_apply_helper:-missing}; subject=${mailer_subject_line:-missing}; html=${mailer_html_line:-missing}; text=${mailer_text_line:-missing}; unsubscribe=${mailer_unsubscribe_line:-missing}; git_diff_mode=${git_diff_mode:-unknown}; webhook_diff=${webhook_diff:-none}; whatsapp_diff=${whatsapp_diff:-none}"
     return
   fi
 
   pass \
     "campaign duplication, rich-text builder editing, personalization tags, saved company address settings, and conference template remain wired end-to-end" \
-    "duplicate_branch=$duplicate_index_branch | conference=$form_conference_option | toolbar=$js_toolbar_marker | paste=$js_paste_handler | replacements=$mailer_replacements | git_diff_mode=$git_diff_mode"
+    "duplicate_branch=$duplicate_index_branch | conference=$form_conference_option | quill=$quill_js_exists | editor=$js_editor_marker | paste=$js_paste_handler | replacements=$mailer_replacements | git_diff_mode=$git_diff_mode"
 }
 
 check_campaign_show_command_center() {
@@ -2852,7 +2866,7 @@ check_release_packaging_docs_hardening() {
   docs_required_line="$(first_fixed_match 'required documentation missing from release zip' "$RELEASE_VALIDATOR_FILE")"
   integrity_script_line="$(first_fixed_match 'marketing/scripts/verify_phase4_integrity_runtime.php' "$RELEASE_VALIDATOR_FILE")"
   vendor_forbidden_line="$(first_fixed_match '^marketing/vendor/' "$RELEASE_VALIDATOR_FILE")"
-  source_forbidden_line="$(first_fixed_match "no git metadata, marketplace clutter, env, vendor, cache, temp, log, or backup artifacts detected" "$RELEASE_VALIDATOR_FILE")"
+  source_forbidden_line="$(first_fixed_match "no git metadata, marketplace clutter, env, top-level vendor, cache, temp, log, or backup artifacts detected" "$RELEASE_VALIDATOR_FILE")"
   readme_zip_root="$(first_fixed_match 'marketing/' "$README_FILE")"
   readme_install_path="$(first_fixed_match 'modules/marketing/marketing.php' "$README_FILE")"
   readme_nested_root="$(first_fixed_match 'marketing/modules/marketing/marketing.php' "$README_FILE")"

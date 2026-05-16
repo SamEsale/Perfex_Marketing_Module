@@ -201,11 +201,11 @@ pass "release manifest is present and contains required distribution keys" "vali
 
 source_artifacts="$(find "$MODULE_DIR" \
   \( -path "$MODULE_DIR/release" -o -path "$MODULE_DIR/.git" \) -prune -o \
-  \( -name '.DS_Store' -o -name '*.bak' -o -name '*.tmp' -o -name '*~' -o -name '.env' -o -name '.env.*' -o -path '*/.github/*' -o -path '*/__MACOSX/*' -o -path '*/node_modules/*' -o -path '*/vendor/*' -o -path '*/.idea/*' -o -path '*/.vscode/*' -o -path '*/tests/*' -o -path '*/tmp/*' -o -path '*/temp/*' -o -path '*/cache/*' -o -path '*/logs/*' \) -print)"
+  \( -name '.DS_Store' -o -name '*.bak' -o -name '*.tmp' -o -name '*~' -o -name '.env' -o -name '.env.*' -o -path '*/.github/*' -o -path '*/__MACOSX/*' -o -path '*/node_modules/*' -o -path "$MODULE_DIR/vendor/*" -o -path '*/.idea/*' -o -path '*/.vscode/*' -o -path '*/tests/*' -o -path '*/tmp/*' -o -path '*/temp/*' -o -path '*/cache/*' -o -path '*/logs/*' \) -print)"
 if [[ -n "$source_artifacts" ]]; then
   fail "forbidden release artifacts detected in source tree" "${source_artifacts%%$'\n'*}"
 fi
-pass "source tree is free of forbidden release artifacts" "no git metadata, marketplace clutter, env, vendor, cache, temp, log, or backup artifacts detected"
+pass "source tree is free of forbidden release artifacts" "no git metadata, marketplace clutter, env, top-level vendor, cache, temp, log, or backup artifacts detected"
 
 if [[ "$ZIP_PATH" == "--source-only" ]]; then
   pass "release zip inspection skipped" "validated source tree only"

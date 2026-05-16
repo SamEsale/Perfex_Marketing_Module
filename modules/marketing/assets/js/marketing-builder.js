@@ -183,7 +183,8 @@
                 contentBackground: '#ffffff',
                 textColor: '#0f172a',
                 linkColor: '#2563eb'
-            }
+            },
+            sidebarEditor: null
         };
 
         var dropIndicator = createElement('<div class="marketing-builder-drop-indicator" aria-hidden="true"></div>');
@@ -461,6 +462,217 @@
             return html !== '' ? html : '<p>' + escapeHtml(String(text || '')) + '</p>';
         }
 
+        function isSidebarRichTextBlockType(type) {
+            return ['text', 'feature_list', 'testimonial', 'inner_section', 'company_address', 'footer', 'email_footer'].indexOf(String(type || '')) !== -1;
+        }
+
+        function getSidebarTextEditableNode(block) {
+            if (!block) {
+                return null;
+            }
+
+            return block.querySelector('.mb-richtext')
+                || block.querySelector('.mb-company-address-text')
+                || block.querySelector('.mb-footer-text');
+        }
+
+        function htmlToFallbackPlainText(html) {
+            var parser = new window.DOMParser();
+            var doc = parser.parseFromString('<div>' + String(html || '') + '</div>', 'text/html');
+            var pieces = [];
+
+            function appendBreak(count) {
+                while (count-- > 0) {
+                    pieces.push('\n');
+                }
+            }
+
+            function walk(node, listContext) {
+                if (!node) {
+                    return;
+                }
+
+                if (node.nodeType === 3) {
+                    pieces.push(node.nodeValue || '');
+                    return;
+                }
+
+                if (node.nodeType !== 1) {
+                    return;
+                }
+
+                var tagName = String(node.tagName || '').toUpperCase();
+                if (tagName === 'BR') {
+                    appendBreak(1);
+                    return;
+                }
+
+                if (tagName === 'LI') {
+                    pieces.push(listContext === 'ol' ? '1. ' : '- ');
+                }
+
+                Array.prototype.forEach.call(node.childNodes || [], function (childNode) {
+                    walk(childNode, tagName === 'UL' || tagName === 'OL' ? tagName.toLowerCase() : listContext);
+                });
+
+                if (tagName === 'LI') {
+                    appendBreak(1);
+                } else if (tagName === 'P' || tagName === 'DIV' || tagName === 'H1' || tagName === 'H2' || tagName === 'H3' || tagName === 'H4') {
+                    appendBreak(2);
+                } else if (tagName === 'UL' || tagName === 'OL') {
+                    appendBreak(1);
+                }
+            }
+
+            Array.prototype.forEach.call(doc.body.firstChild ? doc.body.firstChild.childNodes : [], function (childNode) {
+                walk(childNode, '');
+            });
+
+            return pieces.join('')
+                .replace(/\n{3,}/g, '\n\n')
+                .replace(/[ \t]+\n/g, '\n')
+                .trim();
+        }
+
+        function destroySidebarTextEditor() {
+            if (state.sidebarEditor && state.sidebarEditor.quill && state.sidebarEditor.onTextChange) {
+                state.sidebarEditor.quill.off('text-change', state.sidebarEditor.onTextChange);
+            }
+
+            state.sidebarEditor = null;
+        }
+
+        function applySidebarEditorHtml(block, node, html) {
+            var sanitized = sanitizeEditableHtml(html);
+
+            if (!block || !node) {
+                return;
+            }
+
+            node.innerHTML = sanitized || '<p><br></p>';
+            syncFields();
+        }
+
+        function syncSidebarEditorFromBlock() {
+            var editorState = state.sidebarEditor;
+            var sourceHtml;
+            var normalizedHtml;
+
+            if (!editorState || !editorState.block || !editorState.node) {
+                return;
+            }
+
+            sourceHtml = sanitizeEditableHtml(editorState.node.innerHTML || '');
+
+            if (editorState.mode === 'quill' && editorState.quill) {
+                normalizedHtml = sanitizeEditableHtml(editorState.quill.root.innerHTML || '');
+                if (normalizedHtml === sourceHtml) {
+                    return;
+                }
+
+                editorState.syncing = true;
+                editorState.quill.setContents([]);
+                editorState.quill.clipboard.dangerouslyPasteHTML(sourceHtml || '<p><br></p>');
+                editorState.syncing = false;
+                return;
+            }
+
+            if (editorState.mode === 'textarea' && editorState.textarea) {
+                editorState.textarea.value = htmlToFallbackPlainText(sourceHtml);
+            }
+        }
+
+        function initializeSidebarTextEditor(block) {
+            var editorHost;
+            var fallbackShell;
+            var fallbackTextarea;
+            var sourceNode;
+            var initialHtml;
+            var quill;
+            var textChangeHandler;
+
+            destroySidebarTextEditor();
+
+            if (!block || !isSidebarRichTextBlockType(block.dataset.builderBlock)) {
+                return;
+            }
+
+            sourceNode = getSidebarTextEditableNode(block);
+            editorHost = properties.querySelector('[data-marketing-builder-quill-editor="1"]');
+            fallbackShell = properties.querySelector('[data-marketing-builder-textarea-fallback-shell="1"]');
+            fallbackTextarea = properties.querySelector('[data-marketing-builder-textarea-fallback="1"]');
+            initialHtml = sanitizeEditableHtml(sourceNode ? sourceNode.innerHTML : '');
+
+            if (!sourceNode || !editorHost || !fallbackShell || !fallbackTextarea) {
+                return;
+            }
+
+            if (window.Quill) {
+                quill = new window.Quill(editorHost, {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: [
+                            [{ header: [false, 2, 3] }],
+                            ['bold', 'italic', 'underline'],
+                            [{ list: 'ordered' }, { list: 'bullet' }],
+                            ['link'],
+                            ['clean']
+                        ]
+                    }
+                });
+
+                fallbackShell.classList.add('hide');
+                editorHost.parentNode.classList.remove('hide');
+
+                state.sidebarEditor = {
+                    mode: 'quill',
+                    block: block,
+                    node: sourceNode,
+                    quill: quill,
+                    fallbackShell: fallbackShell,
+                    textarea: fallbackTextarea,
+                    syncing: true,
+                    onTextChange: null
+                };
+
+                quill.clipboard.dangerouslyPasteHTML(initialHtml || '<p><br></p>');
+                state.sidebarEditor.syncing = false;
+
+                textChangeHandler = function () {
+                    if (!state.sidebarEditor || state.sidebarEditor.syncing || state.sidebarEditor.block !== block) {
+                        return;
+                    }
+
+                    applySidebarEditorHtml(block, sourceNode, quill.root.innerHTML || '');
+                };
+
+                state.sidebarEditor.onTextChange = textChangeHandler;
+                quill.on('text-change', textChangeHandler);
+                quill.focus();
+                return;
+            }
+
+            editorHost.parentNode.classList.add('hide');
+            fallbackShell.classList.remove('hide');
+            fallbackTextarea.value = htmlToFallbackPlainText(initialHtml);
+            fallbackTextarea.addEventListener('input', function () {
+                if (!state.sidebarEditor || state.sidebarEditor.block !== block) {
+                    return;
+                }
+
+                applySidebarEditorHtml(block, sourceNode, plainTextToSanitizedHtml(fallbackTextarea.value));
+            });
+
+            state.sidebarEditor = {
+                mode: 'textarea',
+                block: block,
+                node: sourceNode,
+                textarea: fallbackTextarea,
+                fallbackShell: fallbackShell,
+                syncing: false
+            };
+        }
+
         function getPrimaryEditableNode(block) {
             if (!block) {
                 return null;
@@ -554,6 +766,28 @@
             if (normalizedToken === '') {
                 window.alert(strings.mergeTagSelectPrompt || 'Select a merge tag first.');
                 return;
+            }
+
+            if (state.sidebarEditor && state.sidebarEditor.block === state.activeBlock) {
+                if (state.sidebarEditor.mode === 'quill' && state.sidebarEditor.quill) {
+                    var range = state.sidebarEditor.quill.getSelection(true);
+                    var index = range ? range.index : Math.max(0, state.sidebarEditor.quill.getLength() - 1);
+                    state.sidebarEditor.quill.insertText(index, normalizedToken, 'user');
+                    state.sidebarEditor.quill.setSelection(index + normalizedToken.length, 0, 'silent');
+                    state.sidebarEditor.quill.focus();
+                    return;
+                }
+
+                if (state.sidebarEditor.mode === 'textarea' && state.sidebarEditor.textarea) {
+                    var textarea = state.sidebarEditor.textarea;
+                    var start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
+                    var end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : textarea.value.length;
+                    textarea.value = textarea.value.slice(0, start) + normalizedToken + textarea.value.slice(end);
+                    textarea.selectionStart = textarea.selectionEnd = start + normalizedToken.length;
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    textarea.focus();
+                    return;
+                }
             }
 
             var activeElement = document.activeElement;
@@ -2067,6 +2301,7 @@
             var html = '';
 
             if (!block) {
+                destroySidebarTextEditor();
                 properties.innerHTML = '<div class="marketing-builder-settings-empty"><p class="marketing-builder-help no-margin">' + escapeHtml(strings.selectBlock || 'Select a block to edit it.') + '</p></div>'
                     + renderGlobalControls();
                 return;
@@ -2092,11 +2327,35 @@
                 var headingNode = block.querySelector('.mb-heading-text') || block.querySelector('.mb-hero-headline');
                 contentTab += '<div class="form-group"><label>' + escapeHtml(strings.headline || 'Headline') + '</label><textarea class="form-control" rows="3" data-control="generic-heading">' + escapeHtml(headingNode ? headingNode.textContent : '') + '</textarea></div>';
             }
-            if (type === 'text' || type === 'feature_list' || type === 'testimonial' || type === 'inner_section' || type === 'company_address' || type === 'footer' || type === 'email_footer') {
-                contentTab += '<div class="marketing-builder-settings-help-card" data-marketing-builder-rich-text-editor="1">'
+            if (isSidebarRichTextBlockType(type)) {
+                contentTab += '<div class="marketing-builder-sidebar-editor-shell" data-marketing-builder-rich-text-editor="1">'
                     + '<label class="marketing-builder-settings-help-title">' + escapeHtml(strings.text || 'Text') + '</label>'
-                    + renderRichTextToolbar(block)
-                    + '</div>';
+                    + '<div class="marketing-builder-quill-shell" data-marketing-builder-quill-shell="1">'
+                    + '<div class="marketing-builder-quill-editor" data-marketing-builder-quill-editor="1"></div>'
+                    + '</div>'
+                    + '<div class="marketing-builder-sidebar-editor-fallback-shell hide" data-marketing-builder-textarea-fallback-shell="1">'
+                    + '<label class="marketing-builder-settings-help-title">' + escapeHtml(strings.richTextEditorFallback || 'Fallback Text Editor') + '</label>'
+                    + '<textarea class="form-control marketing-builder-sidebar-editor-fallback" rows="10" data-marketing-builder-textarea-fallback="1"></textarea>'
+                    + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.richTextEditorUnavailable || 'Rich text editor unavailable. Plain text fallback is active.') + '</p>'
+                    + '</div>'
+                    + '<p class="marketing-builder-settings-note">' + escapeHtml(strings.richTextHelp || 'Use the editor below to keep paragraphs, lists, and links clean for email clients.') + '</p>';
+
+                if (mergeTags.length) {
+                    contentTab += '<div class="marketing-builder-settings-note-card"><strong>' + escapeHtml(strings.mergeTags || 'Merge Tags') + '</strong>'
+                        + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.personalizeHelp || 'Insert personalization placeholders at the current cursor position inside the selected block.') + '</p>'
+                        + renderMergeTagButtons()
+                        + '</div>';
+                }
+
+                if (block && (block.dataset.builderBlock === 'company_address' || block.dataset.builderBlock === 'footer' || block.dataset.builderBlock === 'email_footer')) {
+                    contentTab += '<div class="marketing-builder-settings-note-card">'
+                        + '<strong>' + escapeHtml(strings.companyAddressBlock || 'Company Address') + '</strong>'
+                        + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(companyAddressConfig.configured ? (strings.companyAddressSavedConfigured || 'Saved company address settings are available for this block.') : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet.')) + '</p>'
+                        + '<button type="button" class="btn btn-default btn-sm mtop10" data-action="use-saved-company-address">' + escapeHtml(strings.companyAddressUseSaved || 'Use Saved Company Address') + '</button>'
+                        + '</div>';
+                }
+
+                contentTab += '</div>';
             }
             if (type === 'hero') {
                 contentTab += renderHeroContentTab(block);
@@ -2221,6 +2480,7 @@
             html += '</div>';
 
             properties.innerHTML = html;
+            initializeSidebarTextEditor(block);
         }
 
         function applySurfaceLinkColor(block, color) {
@@ -2974,7 +3234,10 @@
             setActiveBlock(block);
         });
 
-        canvas.addEventListener('input', function () {
+        canvas.addEventListener('input', function (event) {
+            if (state.sidebarEditor && state.activeBlock && event.target && state.activeBlock.contains(event.target)) {
+                syncSidebarEditorFromBlock();
+            }
             syncFields();
         });
 
