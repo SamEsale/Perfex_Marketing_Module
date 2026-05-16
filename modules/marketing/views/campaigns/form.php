@@ -28,6 +28,10 @@ $whatsAppTemplateLanguageValue = trim((string) ($campaign['whatsapp_template_lan
 $builderStateValue = trim((string) ($campaign['builder_state'] ?? ''));
 $htmlContentValue = trim((string) ($campaign['html_content'] ?? ''));
 $textContentValue = trim((string) ($campaign['text_content'] ?? ''));
+$builderCompanyAddress = isset($builder_company_address) && is_array($builder_company_address)
+    ? array_merge(['html' => 'Your Company<br>123 Market Street<br>City, State', 'text' => "Your Company\n123 Market Street\nCity, State", 'configured' => false], $builder_company_address)
+    : ['html' => 'Your Company<br>123 Market Street<br>City, State', 'text' => "Your Company\n123 Market Street\nCity, State", 'configured' => false];
+$builderMergeTags = isset($builder_merge_tags) && is_array($builder_merge_tags) ? $builder_merge_tags : [];
 $scheduleMode = ($campaign['schedule_mode'] ?? 'now') === 'later' ? 'later' : 'now';
 $scheduledAtValue = trim((string) ($campaign['scheduled_at'] ?? ''));
 $scheduledAtDisplayValue = '';
@@ -571,6 +575,13 @@ foreach ($errorMessages as $errorMessage) {
                                 </div>
                                 <div class="marketing-builder-topbar-group">
                                     <span id="marketing-builder-unsubscribe-status" class="marketing-builder-status-chip marketing-builder-status-chip--missing"><?= _l('marketing_builder_unsubscribe_missing'); ?></span>
+                                    <select id="marketing-builder-merge-tag-select" class="form-control marketing-builder-inline-select">
+                                        <option value=""><?= _l('marketing_builder_merge_tags'); ?></option>
+                                        <?php foreach ($builderMergeTags as $mergeTag) { ?>
+                                            <option value="<?= html_escape($mergeTag['token'] ?? ''); ?>"><?= html_escape(($mergeTag['label'] ?? '') . ' - ' . ($mergeTag['token'] ?? '')); ?></option>
+                                        <?php } ?>
+                                    </select>
+                                    <button type="button" class="btn btn-default" id="marketing-builder-insert-merge-tag"><?= _l('marketing_builder_insert_merge_tag'); ?></button>
                                     <select id="marketing-builder-preset-select" class="form-control marketing-builder-inline-select">
                                         <option value="default"><?= _l('marketing_builder_default_template_name'); ?></option>
                                         <option value="newsletter"><?= _l('marketing_builder_preset_newsletter'); ?></option>
@@ -578,7 +589,7 @@ foreach ($errorMessages as $errorMessage) {
                                         <option value="real_estate"><?= _l('marketing_builder_preset_real_estate'); ?></option>
                                         <option value="product"><?= _l('marketing_builder_preset_product'); ?></option>
                                         <option value="simple_text"><?= _l('marketing_builder_preset_simple_text'); ?></option>
-                                        <option value="event"><?= _l('marketing_builder_preset_event'); ?></option>
+                                        <option value="conference_event"><?= _l('marketing_builder_preset_conference_event'); ?></option>
                                     </select>
                                     <button type="button" class="btn btn-primary" id="marketing-builder-apply-preset"><?= _l('marketing_builder_apply_preset'); ?></button>
                                 </div>
@@ -847,6 +858,12 @@ foreach ($errorMessages as $errorMessage) {
             name: <?= json_encode($this->security->get_csrf_token_name()); ?>,
             hash: <?= json_encode($this->security->get_csrf_hash()); ?>
         },
+        companyAddress: {
+            html: <?= json_encode((string) $builderCompanyAddress['html']); ?>,
+            text: <?= json_encode((string) $builderCompanyAddress['text']); ?>,
+            configured: <?= !empty($builderCompanyAddress['configured']) ? 'true' : 'false'; ?>
+        },
+        mergeTags: <?= json_encode(array_values($builderMergeTags)); ?>,
         strings: {
             selectBlock: <?= json_encode(_l('marketing_builder_select_block')); ?>,
             uploadImage: <?= json_encode(_l('marketing_builder_upload_image')); ?>,
@@ -856,6 +873,22 @@ foreach ($errorMessages as $errorMessage) {
             uploadFailed: <?= json_encode(_l('marketing_builder_upload_failed')); ?>,
             invalidLink: <?= json_encode(_l('marketing_builder_invalid_link')); ?>,
             replaceConfirm: <?= json_encode(_l('marketing_builder_replace_confirm')); ?>,
+            mergeTags: <?= json_encode(_l('marketing_builder_merge_tags')); ?>,
+            insertMergeTag: <?= json_encode(_l('marketing_builder_insert_merge_tag')); ?>,
+            mergeTagApplied: <?= json_encode(_l('marketing_builder_merge_tag_applied')); ?>,
+            mergeTagSelectPrompt: <?= json_encode(_l('marketing_builder_merge_tag_select_prompt')); ?>,
+            personalizeHelp: <?= json_encode(_l('marketing_builder_personalization_help')); ?>,
+            richTextHelp: <?= json_encode(_l('marketing_builder_rich_text_help')); ?>,
+            richTextBold: <?= json_encode(_l('marketing_builder_rich_text_bold')); ?>,
+            richTextItalic: <?= json_encode(_l('marketing_builder_rich_text_italic')); ?>,
+            richTextUnderline: <?= json_encode(_l('marketing_builder_rich_text_underline')); ?>,
+            richTextParagraph: <?= json_encode(_l('marketing_builder_rich_text_paragraph')); ?>,
+            richTextHeading2: <?= json_encode(_l('marketing_builder_rich_text_heading_2')); ?>,
+            richTextHeading3: <?= json_encode(_l('marketing_builder_rich_text_heading_3')); ?>,
+            richTextBullets: <?= json_encode(_l('marketing_builder_rich_text_bullets')); ?>,
+            richTextNumbers: <?= json_encode(_l('marketing_builder_rich_text_numbers')); ?>,
+            richTextLink: <?= json_encode(_l('marketing_builder_rich_text_link')); ?>,
+            richTextClear: <?= json_encode(_l('marketing_builder_rich_text_clear')); ?>,
             unsubscribePresent: <?= json_encode(_l('marketing_builder_unsubscribe_present')); ?>,
             unsubscribeMissing: <?= json_encode(_l('marketing_builder_unsubscribe_missing')); ?>,
             removeUnsubscribeConfirm: <?= json_encode(_l('marketing_builder_remove_unsubscribe_confirm')); ?>,
@@ -918,7 +951,7 @@ foreach ($errorMessages as $errorMessage) {
             presetRealEstate: <?= json_encode(_l('marketing_builder_preset_real_estate')); ?>,
             presetProduct: <?= json_encode(_l('marketing_builder_preset_product')); ?>,
             presetSimpleText: <?= json_encode(_l('marketing_builder_preset_simple_text')); ?>,
-            presetEvent: <?= json_encode(_l('marketing_builder_preset_event')); ?>,
+            presetConferenceEvent: <?= json_encode(_l('marketing_builder_preset_conference_event')); ?>,
             globalSettings: <?= json_encode(_l('marketing_builder_global_settings')); ?>,
             blockSettings: <?= json_encode(_l('marketing_builder_block_settings')); ?>,
             background: <?= json_encode(_l('marketing_builder_background')); ?>,
@@ -971,6 +1004,9 @@ foreach ($errorMessages as $errorMessage) {
             height: <?= json_encode(_l('marketing_builder_height')); ?>,
             apply: <?= json_encode(_l('marketing_builder_apply')); ?>,
             cancel: <?= json_encode(_l('marketing_builder_cancel')); ?>,
+            companyAddressUseSaved: <?= json_encode(_l('marketing_builder_company_address_use_saved')); ?>,
+            companyAddressSavedConfigured: <?= json_encode(_l('marketing_builder_company_address_saved_configured')); ?>,
+            companyAddressSavedMissing: <?= json_encode(_l('marketing_builder_company_address_saved_missing')); ?>,
             foregroundColor: <?= json_encode(_l('marketing_builder_foreground_color')); ?>,
             backgroundColor: <?= json_encode(_l('marketing_builder_background_color')); ?>,
             regenerate: <?= json_encode(_l('marketing_builder_regenerate')); ?>

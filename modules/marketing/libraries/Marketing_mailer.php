@@ -548,6 +548,90 @@ class Marketing_mailer
         );
     }
 
+    protected function build_personalization_replacements(array $recipient, $unsubscribeUrl)
+    {
+        $contact = $this->get_recipient_contact_profile($recipient);
+        $email = trim((string) ($contact['email'] ?? ($recipient['email'] ?? '')));
+        $firstName = trim((string) ($contact['first_name'] ?? ''));
+        $lastName = trim((string) ($contact['last_name'] ?? ''));
+        $fullName = trim((string) ($contact['full_name'] ?? ''));
+        $company = trim((string) ($contact['company'] ?? ''));
+
+        if ($fullName === '') {
+            $fullName = trim($firstName . ' ' . $lastName);
+        }
+
+        if ($firstName === '' && $fullName !== '') {
+            $parts = preg_split('/\s+/', $fullName);
+            $firstName = is_array($parts) && !empty($parts[0]) ? trim((string) $parts[0]) : '';
+        }
+
+        if ($lastName === '' && $fullName !== '' && $firstName !== '' && stripos($fullName, $firstName) === 0) {
+            $lastName = trim((string) substr($fullName, strlen($firstName)));
+        }
+
+        return [
+            '{{first_name}}' => $firstName,
+            '{{last_name}}' => $lastName,
+            '{{full_name}}' => $fullName,
+            '{{email}}' => $email,
+            '{{company}}' => $company,
+            '{{unsubscribe_url}}' => (string) $unsubscribeUrl,
+        ];
+    }
+
+    protected function apply_personalization_replacements($content, array $replacements)
+    {
+        if (!is_string($content) || $content === '') {
+            return (string) $content;
+        }
+
+        return strtr($content, $replacements);
+    }
+
+    protected function get_recipient_contact_profile(array $recipient)
+    {
+        $contactId = (int) ($recipient['marketing_contact_id'] ?? 0);
+        $contactsTable = db_prefix() . 'marketing_contacts';
+        $profile = [
+            'email' => trim((string) ($recipient['email'] ?? '')),
+            'first_name' => '',
+            'last_name' => '',
+            'full_name' => '',
+            'company' => '',
+        ];
+
+        if ($contactId <= 0 || !$this->ci->db->table_exists($contactsTable)) {
+            return $profile;
+        }
+
+        $select = ['email'];
+        foreach (['first_name', 'last_name', 'full_name', 'company'] as $column) {
+            if ($this->ci->db->field_exists($column, $contactsTable)) {
+                $select[] = $column;
+            }
+        }
+
+        $row = $this->ci->db
+            ->select(implode(', ', $select))
+            ->from($contactsTable)
+            ->where('id', $contactId)
+            ->get()
+            ->row_array();
+
+        if (!is_array($row)) {
+            return $profile;
+        }
+
+        return array_merge($profile, [
+            'email' => trim((string) ($row['email'] ?? $profile['email'])),
+            'first_name' => trim((string) ($row['first_name'] ?? '')),
+            'last_name' => trim((string) ($row['last_name'] ?? '')),
+            'full_name' => trim((string) ($row['full_name'] ?? '')),
+            'company' => trim((string) ($row['company'] ?? '')),
+        ]);
+    }
+
     public function send_campaign_message(array $campaign, array $recipient)
     {
         $fromEmail = $campaign['from_email'] ?: get_option('marketing_smtp_from_email');
@@ -595,8 +679,10 @@ class Marketing_mailer
             ];
         }
 
-        $htmlContent = str_replace('{{unsubscribe_url}}', $unsubscribeUrl, (string) $campaign['html_content']);
-        $textContent = str_replace('{{unsubscribe_url}}', $unsubscribeUrl, (string) ($campaign['text_content'] ?? ''));
+        $personalization = $this->build_personalization_replacements($recipient, $unsubscribeUrl);
+        $subject = $this->apply_personalization_replacements((string) ($campaign['subject'] ?? ''), $personalization);
+        $htmlContent = $this->apply_personalization_replacements((string) $campaign['html_content'], $personalization);
+        $textContent = $this->apply_personalization_replacements((string) ($campaign['text_content'] ?? ''), $personalization);
         $replyTracking = $this->append_reply_tracking_markup($htmlContent, $textContent, $campaign, $recipient);
         $htmlContent = $replyTracking['html'];
         $textContent = $replyTracking['text'];
@@ -605,7 +691,7 @@ class Marketing_mailer
         $template = new StdClass();
         $template->message = $htmlContent;
         $template->fromname = $fromName;
-        $template->subject = $campaign['subject'];
+        $template->subject = $subject;
 
         $template = parse_email_template($template);
         $message = check_for_links($template->message);

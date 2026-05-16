@@ -308,6 +308,53 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <label for="marketing_default_reply_to_email" class="control-label"><?= _l('marketing_default_reply_to_email'); ?></label>
                                             <input type="email" id="marketing_default_reply_to_email" name="<?= html_escape($settingFieldName('marketing_default_reply_to_email')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_default_reply_to_email')); ?>">
                                         </div>
+                                        <hr />
+                                        <h5 class="bold no-margin"><?= _l('marketing_company_address_settings_heading'); ?></h5>
+                                        <p class="text-muted mtop10"><?= _l('marketing_company_address_settings_note'); ?></p>
+                                        <div class="form-group">
+                                            <label for="marketing_company_name" class="control-label"><?= _l('marketing_company_name'); ?></label>
+                                            <input type="text" id="marketing_company_name" name="<?= html_escape($settingFieldName('marketing_company_name')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_name')); ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="marketing_company_address_line_1" class="control-label"><?= _l('marketing_company_address_line_1'); ?></label>
+                                            <input type="text" id="marketing_company_address_line_1" name="<?= html_escape($settingFieldName('marketing_company_address_line_1')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_address_line_1')); ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="marketing_company_address_line_2" class="control-label"><?= _l('marketing_company_address_line_2'); ?></label>
+                                            <input type="text" id="marketing_company_address_line_2" name="<?= html_escape($settingFieldName('marketing_company_address_line_2')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_address_line_2')); ?>">
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-sm-6">
+                                                <div class="form-group">
+                                                    <label for="marketing_company_city" class="control-label"><?= _l('marketing_company_city'); ?></label>
+                                                    <input type="text" id="marketing_company_city" name="<?= html_escape($settingFieldName('marketing_company_city')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_city')); ?>">
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6">
+                                                <div class="form-group">
+                                                    <label for="marketing_company_state_region" class="control-label"><?= _l('marketing_company_state_region'); ?></label>
+                                                    <input type="text" id="marketing_company_state_region" name="<?= html_escape($settingFieldName('marketing_company_state_region')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_state_region')); ?>">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-sm-6">
+                                                <div class="form-group">
+                                                    <label for="marketing_company_postal_code" class="control-label"><?= _l('marketing_company_postal_code'); ?></label>
+                                                    <input type="text" id="marketing_company_postal_code" name="<?= html_escape($settingFieldName('marketing_company_postal_code')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_postal_code')); ?>">
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6">
+                                                <div class="form-group">
+                                                    <label for="marketing_company_country" class="control-label"><?= _l('marketing_company_country'); ?></label>
+                                                    <input type="text" id="marketing_company_country" name="<?= html_escape($settingFieldName('marketing_company_country')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_country')); ?>">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="marketing_company_website" class="control-label"><?= _l('marketing_company_website'); ?></label>
+                                            <input type="text" id="marketing_company_website" name="<?= html_escape($settingFieldName('marketing_company_website')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_company_website')); ?>" placeholder="https://example.com">
+                                        </div>
                                         <div class="form-group">
                                             <label class="control-label"><?= _l('marketing_track_opens'); ?></label>
                                             <div class="radio radio-primary radio-inline">

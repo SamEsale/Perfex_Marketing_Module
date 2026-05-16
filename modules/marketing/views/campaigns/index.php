@@ -78,6 +78,14 @@ $statusClassMap = [
                                                             <?= _l('edit'); ?>
                                                         </a>
                                                     <?php } ?>
+                                                    <?php if (!empty($can_duplicate)) { ?>
+                                                        <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                            <input type="hidden" name="duplicate_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                            <button type="submit" class="btn btn-default">
+                                                                <?= _l('marketing_campaign_duplicate_button'); ?>
+                                                            </button>
+                                                        <?= form_close(); ?>
+                                                    <?php } ?>
                                                     <?php if ($can_send && in_array($campaign['status'], ['draft', 'scheduled', 'sending'], true) && (int) $campaign['queued_recipients'] === 0) { ?>
                                                         <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
                                                             <input type="hidden" name="prepare_campaign_id" value="<?= (int) $campaign['id']; ?>">

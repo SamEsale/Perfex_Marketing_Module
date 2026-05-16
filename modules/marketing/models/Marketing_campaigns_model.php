@@ -471,6 +471,82 @@ class Marketing_campaigns_model extends App_Model
             && $this->count_recipients_by_status($campaign['id'], 'failed') === 0;
     }
 
+    public function duplicate_campaign($campaignId, $staffId = null)
+    {
+        $campaignId = (int) $campaignId;
+        $campaign = $this->get($campaignId);
+
+        if (!$campaign) {
+            return false;
+        }
+
+        $duplicateName = trim((string) ($campaign['name'] ?? ''));
+        $duplicateName = $duplicateName !== ''
+            ? sprintf('Copy of %s', $duplicateName)
+            : 'Copy of Campaign #' . $campaignId;
+
+        $data = [
+            'name' => $duplicateName,
+            'subject' => (string) ($campaign['subject'] ?? ''),
+            'preview_text' => (string) ($campaign['preview_text'] ?? ''),
+            'from_name' => (string) ($campaign['from_name'] ?? ''),
+            'from_email' => (string) ($campaign['from_email'] ?? ''),
+            'reply_to_email' => (string) ($campaign['reply_to_email'] ?? ''),
+            'list_id' => (int) ($campaign['list_id'] ?? 0),
+            'status' => 'draft',
+            'delivery_channel' => $this->normalize_delivery_channel($campaign['delivery_channel'] ?? 'email'),
+            'whatsapp_template_name' => (string) ($campaign['whatsapp_template_name'] ?? ''),
+            'whatsapp_template_language' => (string) ($campaign['whatsapp_template_language'] ?? 'en_US'),
+            'whatsapp_template_var1' => (string) ($campaign['whatsapp_template_var1'] ?? ''),
+            'whatsapp_template_var2' => (string) ($campaign['whatsapp_template_var2'] ?? ''),
+            'whatsapp_template_var3' => (string) ($campaign['whatsapp_template_var3'] ?? ''),
+            'editor_type' => (string) ($campaign['editor_type'] ?? 'builder'),
+            'builder_state' => (string) ($campaign['builder_state'] ?? ''),
+            'html_content' => (string) ($campaign['html_content'] ?? ''),
+            'text_content' => (string) ($campaign['text_content'] ?? ''),
+            'track_opens' => !empty($campaign['track_opens']) ? 1 : 0,
+            'track_clicks' => !empty($campaign['track_clicks']) ? 1 : 0,
+            'scheduled_at' => null,
+            'send_started_at' => null,
+            'send_completed_at' => null,
+            'queue_worker_token' => null,
+            'queue_worker_started_at' => null,
+            'queue_worker_heartbeat_at' => null,
+        ];
+
+        $targetingStorageColumn = $this->get_campaign_targeting_storage_column();
+        if ($targetingStorageColumn !== null) {
+            $data[$targetingStorageColumn] = (string) ($campaign[$targetingStorageColumn] ?? '');
+        }
+
+        if ($staffId !== null && $staffId > 0) {
+            $data['created_by'] = (int) $staffId;
+        }
+
+        $data = $this->filter_existing_columns($this->table, $data);
+
+        if (array_key_exists('created_by', $data) && $staffId !== null && $staffId > 0) {
+            $createdBy = $data['created_by'];
+            unset($data['created_by']);
+        } else {
+            $createdBy = null;
+        }
+
+        $this->db->insert($this->table, $data);
+        $newCampaignId = (int) $this->db->insert_id();
+
+        if ($newCampaignId <= 0) {
+            return false;
+        }
+
+        if ($createdBy !== null && $this->column_exists($this->table, 'created_by')) {
+            $this->db->where('id', $newCampaignId);
+            $this->db->update($this->table, ['created_by' => $createdBy]);
+        }
+
+        return $newCampaignId;
+    }
+
     public function list_exists($listId)
     {
         return total_rows($this->listsTable, ['id' => (int) $listId]) > 0;

@@ -189,6 +189,12 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                             <?php if ($can_edit_campaign) { ?>
                                                 <a href="<?= admin_url('marketing/campaigns/edit/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('edit'); ?></a>
                                             <?php } ?>
+                                            <?php if (!empty($can_duplicate_campaign)) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="duplicate_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_duplicate_button'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
                                             <?php if ($can_prepare_recipients && (int) $recipient_summary['queued'] === 0) { ?>
                                                 <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
                                                     <input type="hidden" name="prepare_campaign_id" value="<?= (int) $campaign['id']; ?>">

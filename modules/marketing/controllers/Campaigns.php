@@ -296,6 +296,33 @@ class Campaigns extends AdminController
             redirect(admin_url('marketing/campaigns'));
         }
 
+        if ($this->input->post('duplicate_campaign_id')) {
+            if (staff_cant('create', 'marketing')) {
+                access_denied('marketing');
+            }
+
+            $campaignId = (int) $this->input->post('duplicate_campaign_id');
+            $campaign = $this->marketing_campaigns_model->get($campaignId);
+
+            if (!$campaign) {
+                set_alert('danger', _l('marketing_campaign_not_found'));
+                redirect(admin_url('marketing/campaigns'));
+            }
+
+            if (staff_cant('view', 'marketing') && staff_can('view_own', 'marketing') && (int) $campaign['created_by'] !== get_staff_user_id()) {
+                access_denied('marketing');
+            }
+
+            $duplicatedCampaignId = (int) $this->marketing_campaigns_model->duplicate_campaign($campaignId, get_staff_user_id());
+            if ($duplicatedCampaignId > 0) {
+                set_alert('success', _l('marketing_campaign_duplicate_success'));
+                redirect(admin_url('marketing/campaigns/edit/' . $duplicatedCampaignId));
+            }
+
+            set_alert('danger', _l('marketing_campaign_duplicate_failure'));
+            redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+        }
+
         if (staff_can('view', 'marketing')) {
             $campaigns = $this->marketing_campaigns_model->get_all();
         } else {
@@ -319,6 +346,7 @@ class Campaigns extends AdminController
         $data['can_edit']   = staff_can('edit', 'marketing');
         $data['can_delete'] = staff_can('delete', 'marketing');
         $data['can_send']   = staff_can('send', 'marketing');
+        $data['can_duplicate'] = staff_can('create', 'marketing');
 
         $this->load->view('marketing/campaigns/index', $data);
     }
@@ -349,6 +377,8 @@ class Campaigns extends AdminController
         $data['consent_status_options'] = $this->marketing_audiences_model->get_consent_status_options();
         $data['supports_created_date_filter'] = $this->marketing_campaigns_model->contact_created_date_filter_supported();
         $data['form_error_message'] = $this->saveCampaignErrorMessage;
+        $data['builder_company_address'] = $this->get_builder_company_address_config();
+        $data['builder_merge_tags'] = $this->get_builder_merge_tags();
 
         $this->load->view('marketing/campaigns/form', $data);
     }
@@ -395,6 +425,8 @@ class Campaigns extends AdminController
         $data['consent_status_options'] = $this->marketing_audiences_model->get_consent_status_options();
         $data['supports_created_date_filter'] = $this->marketing_campaigns_model->contact_created_date_filter_supported();
         $data['form_error_message'] = $this->saveCampaignErrorMessage;
+        $data['builder_company_address'] = $this->get_builder_company_address_config();
+        $data['builder_merge_tags'] = $this->get_builder_merge_tags();
 
         $this->load->view('marketing/campaigns/form', $data);
     }
@@ -514,6 +546,7 @@ class Campaigns extends AdminController
             && (int) $recipientSummary['processing'] === 0;
         $data['can_delete'] = staff_can('delete', 'marketing');
         $data['can_delete_campaign'] = $data['can_delete'] && $this->marketing_campaigns_model->campaign_can_be_deleted($campaign);
+        $data['can_duplicate_campaign'] = staff_can('create', 'marketing');
         $data['show_reply_lead_metadata'] = staff_can('view', 'marketing');
         $data['can_retry_failed'] = $data['can_send']
             && (int) $recipientSummary['failed'] > 0
@@ -1375,6 +1408,66 @@ class Campaigns extends AdminController
         $text = trim((string) $text);
 
         return $this->is_unsafe_default_plain_text($text) ? '' : $text;
+    }
+
+    private function get_builder_merge_tags()
+    {
+        return [
+            ['token' => '{{first_name}}', 'label' => _l('marketing_first_name')],
+            ['token' => '{{last_name}}', 'label' => _l('marketing_last_name')],
+            ['token' => '{{full_name}}', 'label' => _l('marketing_full_name')],
+            ['token' => '{{email}}', 'label' => _l('marketing_email_address')],
+            ['token' => '{{company}}', 'label' => _l('marketing_company')],
+            ['token' => '{{unsubscribe_url}}', 'label' => _l('marketing_builder_merge_tag_unsubscribe_url')],
+        ];
+    }
+
+    private function get_builder_company_address_config()
+    {
+        $lines = [];
+        $companyName = trim((string) get_option('marketing_company_name'));
+        $line1 = trim((string) get_option('marketing_company_address_line_1'));
+        $line2 = trim((string) get_option('marketing_company_address_line_2'));
+        $city = trim((string) get_option('marketing_company_city'));
+        $stateRegion = trim((string) get_option('marketing_company_state_region'));
+        $postalCode = trim((string) get_option('marketing_company_postal_code'));
+        $country = trim((string) get_option('marketing_company_country'));
+        $website = trim((string) get_option('marketing_company_website'));
+
+        if ($companyName !== '') {
+            $lines[] = $companyName;
+        }
+        if ($line1 !== '') {
+            $lines[] = $line1;
+        }
+        if ($line2 !== '') {
+            $lines[] = $line2;
+        }
+
+        $localityParts = array_values(array_filter([$city, $stateRegion, $postalCode], static function ($value) {
+            return trim((string) $value) !== '';
+        }));
+        if (!empty($localityParts)) {
+            $lines[] = implode(', ', $localityParts);
+        }
+        if ($country !== '') {
+            $lines[] = $country;
+        }
+        if ($website !== '') {
+            $lines[] = $website;
+        }
+
+        if (empty($lines)) {
+            $lines = ['Your Company', '123 Market Street', 'City, State'];
+        }
+
+        $escapedLines = array_map('html_escape', $lines);
+
+        return [
+            'html' => implode('<br>', $escapedLines),
+            'text' => implode("\n", $lines),
+            'configured' => $companyName !== '' || $line1 !== '' || $city !== '' || $country !== '',
+        ];
     }
 
     private function is_unsafe_default_plain_text($text)

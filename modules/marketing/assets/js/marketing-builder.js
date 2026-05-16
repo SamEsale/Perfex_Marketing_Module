@@ -148,10 +148,14 @@
         var paletteSearch = document.getElementById('marketing-builder-search');
         var libraryHeader = document.getElementById('marketing-builder-library-header');
         var insertNowButton = document.getElementById('marketing-builder-insert-unsubscribe-now');
+        var mergeTagSelect = document.getElementById('marketing-builder-merge-tag-select');
+        var mergeTagInsertButton = document.getElementById('marketing-builder-insert-merge-tag');
         var previewModal = window.jQuery ? window.jQuery('#marketingBuilderPreviewModal') : null;
         var imageModal = window.jQuery ? window.jQuery('#marketingBuilderImageModal') : null;
         var qrModal = window.jQuery ? window.jQuery('#marketingBuilderQrModal') : null;
         var csrf = config.csrf || { name: '', hash: '' };
+        var companyAddressConfig = config.companyAddress || {};
+        var mergeTags = Array.isArray(config.mergeTags) ? config.mergeTags : [];
         var DEFAULT_PADDING = 5;
         var EMAIL_FONT_OPTIONS = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Courier New'];
 
@@ -286,6 +290,386 @@
             return '<div class="mb-richtext" contenteditable="true"><p style="margin:0;">' + escapeHtml(text) + '</p></div>';
         }
 
+        function getSavedCompanyAddressHtml() {
+            return String(companyAddressConfig.html || 'Your Company<br>123 Market Street<br>City, State');
+        }
+
+        function getSavedCompanyAddressText() {
+            return String(companyAddressConfig.text || 'Your Company\n123 Market Street\nCity, State');
+        }
+
+        function getMergeTagTokenByKey(key) {
+            var map = {
+                first_name: '{{first_name}}',
+                last_name: '{{last_name}}',
+                full_name: '{{full_name}}',
+                email: '{{email}}',
+                company: '{{company}}',
+                unsubscribe_url: '{{unsubscribe_url}}'
+            };
+
+            return map[key] || key;
+        }
+
+        function sanitizeEditableHtml(rawHtml) {
+            var parser = new window.DOMParser();
+            var doc = parser.parseFromString('<div>' + String(rawHtml || '') + '</div>', 'text/html');
+            var allowedTags = {
+                P: true,
+                BR: true,
+                UL: true,
+                OL: true,
+                LI: true,
+                STRONG: true,
+                B: true,
+                EM: true,
+                I: true,
+                U: true,
+                A: true,
+                H1: true,
+                H2: true,
+                H3: true,
+                H4: true,
+                DIV: true,
+                SPAN: true
+            };
+
+            function sanitizeNode(node) {
+                if (!node) {
+                    return null;
+                }
+
+                if (node.nodeType === 3) {
+                    return document.createTextNode(node.nodeValue || '');
+                }
+
+                if (node.nodeType !== 1) {
+                    return null;
+                }
+
+                var tagName = String(node.tagName || '').toUpperCase();
+                if (!allowedTags[tagName]) {
+                    var fragment = document.createDocumentFragment();
+                    Array.prototype.forEach.call(node.childNodes || [], function (childNode) {
+                        var sanitizedChild = sanitizeNode(childNode);
+                        if (sanitizedChild) {
+                            fragment.appendChild(sanitizedChild);
+                        }
+                    });
+                    return fragment;
+                }
+
+                var safeTagName = tagName === 'DIV' ? 'P' : tagName;
+                var cleanNode = document.createElement(safeTagName.toLowerCase());
+
+                if (safeTagName === 'A') {
+                    var href = String(node.getAttribute('href') || '').trim();
+                    if (isValidLink(href)) {
+                        cleanNode.setAttribute('href', href);
+                    } else {
+                        cleanNode.setAttribute('href', '#');
+                    }
+                    cleanNode.setAttribute('target', '_blank');
+                    cleanNode.setAttribute('rel', 'noopener noreferrer');
+                }
+
+                Array.prototype.forEach.call(node.childNodes || [], function (childNode) {
+                    var sanitizedChild = sanitizeNode(childNode);
+                    if (sanitizedChild) {
+                        cleanNode.appendChild(sanitizedChild);
+                    }
+                });
+
+                return cleanNode;
+            }
+
+            var holder = document.createElement('div');
+            Array.prototype.forEach.call(doc.body.firstChild ? doc.body.firstChild.childNodes : [], function (childNode) {
+                var sanitizedChild = sanitizeNode(childNode);
+                if (sanitizedChild) {
+                    holder.appendChild(sanitizedChild);
+                }
+            });
+
+            return holder.innerHTML.trim();
+        }
+
+        function plainTextToSanitizedHtml(text) {
+            var lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+            var html = '';
+            var paragraph = [];
+            var listType = '';
+            var listItems = [];
+
+            function flushParagraph() {
+                if (!paragraph.length) {
+                    return;
+                }
+                html += '<p>' + escapeHtml(paragraph.join('\n')).replace(/\n/g, '<br>') + '</p>';
+                paragraph = [];
+            }
+
+            function flushList() {
+                if (!listType || !listItems.length) {
+                    listType = '';
+                    listItems = [];
+                    return;
+                }
+
+                html += '<' + listType + '>' + listItems.map(function (item) {
+                    return '<li>' + escapeHtml(item) + '</li>';
+                }).join('') + '</' + listType + '>';
+                listType = '';
+                listItems = [];
+            }
+
+            lines.forEach(function (line) {
+                var trimmed = String(line || '').trim();
+                if (trimmed === '') {
+                    flushParagraph();
+                    flushList();
+                    return;
+                }
+
+                if (/^[-*]\s+/.test(trimmed)) {
+                    flushParagraph();
+                    if (listType !== 'ul') {
+                        flushList();
+                        listType = 'ul';
+                    }
+                    listItems.push(trimmed.replace(/^[-*]\s+/, ''));
+                    return;
+                }
+
+                if (/^\d+\.\s+/.test(trimmed)) {
+                    flushParagraph();
+                    if (listType !== 'ol') {
+                        flushList();
+                        listType = 'ol';
+                    }
+                    listItems.push(trimmed.replace(/^\d+\.\s+/, ''));
+                    return;
+                }
+
+                flushList();
+                paragraph.push(line);
+            });
+
+            flushParagraph();
+            flushList();
+
+            return html !== '' ? html : '<p>' + escapeHtml(String(text || '')) + '</p>';
+        }
+
+        function getPrimaryEditableNode(block) {
+            if (!block) {
+                return null;
+            }
+
+            if (block.dataset.builderBlock === 'hero' && state.activeHeroChild) {
+                var activeHeroPart = block.querySelector('[data-hero-part="' + state.activeHeroChild + '"]');
+                if (activeHeroPart) {
+                    if (activeHeroPart.matches('[contenteditable="true"]')) {
+                        return activeHeroPart;
+                    }
+                    return activeHeroPart.querySelector('[contenteditable="true"]');
+                }
+            }
+
+            return block.querySelector('.mb-richtext')
+                || block.querySelector('.mb-company-address-text')
+                || block.querySelector('.mb-footer-text')
+                || block.querySelector('.mb-heading-text')
+                || block.querySelector('.mb-hero-headline')
+                || block.querySelector('.mb-hero-subheadline')
+                || block.querySelector('.mb-image-caption')
+                || block.querySelector('.mb-icon-title')
+                || block.querySelector('.mb-icon-description')
+                || block.querySelector('[contenteditable="true"]');
+        }
+
+        function focusEditableNode(node) {
+            if (!node) {
+                return false;
+            }
+
+            node.focus();
+            return true;
+        }
+
+        function insertContentAtCursor(node, content, asHtml) {
+            if (!node) {
+                return false;
+            }
+
+            focusEditableNode(node);
+            if (document.queryCommandSupported && document.queryCommandSupported(asHtml ? 'insertHTML' : 'insertText')) {
+                document.execCommand(asHtml ? 'insertHTML' : 'insertText', false, content);
+                return true;
+            }
+
+            var selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                return false;
+            }
+
+            var range = selection.getRangeAt(0);
+            range.deleteContents();
+
+            if (asHtml) {
+                var fragment = range.createContextualFragment(content);
+                range.insertNode(fragment);
+            } else {
+                range.insertNode(document.createTextNode(content));
+            }
+
+            selection.removeAllRanges();
+            return true;
+        }
+
+        function executeRichTextCommand(command, value) {
+            var editable = document.activeElement && document.activeElement.closest
+                ? document.activeElement.closest('[contenteditable="true"]')
+                : null;
+
+            if (!editable || !state.activeBlock || !state.activeBlock.contains(editable)) {
+                editable = getPrimaryEditableNode(state.activeBlock);
+            }
+
+            if (!editable) {
+                return;
+            }
+
+            focusEditableNode(editable);
+            document.execCommand(command, false, value || null);
+            if (editable.classList.contains('mb-richtext') || editable.classList.contains('mb-company-address-text') || editable.classList.contains('mb-footer-text')) {
+                editable.innerHTML = sanitizeEditableHtml(editable.innerHTML);
+            }
+            syncFields();
+            renderProperties();
+        }
+
+        function insertMergeTag(token) {
+            var normalizedToken = String(token || '').trim();
+            if (normalizedToken === '') {
+                window.alert(strings.mergeTagSelectPrompt || 'Select a merge tag first.');
+                return;
+            }
+
+            var activeElement = document.activeElement;
+            if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
+                var start = typeof activeElement.selectionStart === 'number' ? activeElement.selectionStart : activeElement.value.length;
+                var end = typeof activeElement.selectionEnd === 'number' ? activeElement.selectionEnd : activeElement.value.length;
+                var currentValue = String(activeElement.value || '');
+                activeElement.value = currentValue.slice(0, start) + normalizedToken + currentValue.slice(end);
+                activeElement.selectionStart = activeElement.selectionEnd = start + normalizedToken.length;
+                activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+                return;
+            }
+
+            if (!insertContentAtCursor(getPrimaryEditableNode(state.activeBlock), normalizedToken, false)) {
+                window.alert(strings.selectBlock || 'Select a block to edit it.');
+                return;
+            }
+
+            syncFields();
+        }
+
+        function applySavedCompanyAddress(block) {
+            if (!block) {
+                return;
+            }
+
+            var addressNode = block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text');
+            if (!addressNode) {
+                return;
+            }
+
+            addressNode.innerHTML = getSavedCompanyAddressHtml();
+            syncFields();
+            renderProperties();
+        }
+
+        function renderMergeTagButtons() {
+            if (!mergeTags.length) {
+                return '';
+            }
+
+            return '<div class="marketing-builder-merge-tag-list" data-marketing-builder-merge-tag-list="1">'
+                + mergeTags.map(function (tag) {
+                    return '<button type="button" class="marketing-builder-merge-tag-chip" data-merge-tag-token="' + escapeHtml(tag.token || '') + '">' + escapeHtml(tag.label || tag.token || '') + '</button>';
+                }).join('')
+                + '</div>';
+        }
+
+        function renderRichTextToolbar(block) {
+            var toolbar = '<div class="marketing-builder-rich-text-toolbar" data-marketing-builder-rich-text-toolbar="1">'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="bold">' + escapeHtml(strings.richTextBold || 'Bold') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="italic">' + escapeHtml(strings.richTextItalic || 'Italic') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="underline">' + escapeHtml(strings.richTextUnderline || 'Underline') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="formatBlock" data-rich-text-value="P">' + escapeHtml(strings.richTextParagraph || 'Paragraph') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="formatBlock" data-rich-text-value="H2">' + escapeHtml(strings.richTextHeading2 || 'Heading 2') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="formatBlock" data-rich-text-value="H3">' + escapeHtml(strings.richTextHeading3 || 'Heading 3') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="insertUnorderedList">' + escapeHtml(strings.richTextBullets || 'Bullet List') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="insertOrderedList">' + escapeHtml(strings.richTextNumbers || 'Numbered List') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="createLink">' + escapeHtml(strings.richTextLink || 'Add Link') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="removeFormat">' + escapeHtml(strings.richTextClear || 'Clear Formatting') + '</button>'
+                + '</div>';
+
+            toolbar += '<p class="marketing-builder-settings-note">' + escapeHtml(strings.richTextHelp || 'Select text on the canvas, then use these controls to format and sanitize the selected content.') + '</p>';
+
+            if (mergeTags.length) {
+                toolbar += '<div class="marketing-builder-settings-note-card"><strong>' + escapeHtml(strings.mergeTags || 'Merge Tags') + '</strong>'
+                    + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.personalizeHelp || 'Insert personalization placeholders at the current cursor position inside the selected block.') + '</p>'
+                    + renderMergeTagButtons()
+                    + '</div>';
+            }
+
+            if (block && (block.dataset.builderBlock === 'company_address' || block.dataset.builderBlock === 'footer' || block.dataset.builderBlock === 'email_footer')) {
+                toolbar += '<div class="marketing-builder-settings-note-card">'
+                    + '<strong>' + escapeHtml(strings.companyAddressBlock || 'Company Address') + '</strong>'
+                    + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(companyAddressConfig.configured ? (strings.companyAddressSavedConfigured || 'Saved company address settings are available for this block.') : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet.')) + '</p>'
+                    + '<button type="button" class="btn btn-default btn-sm mtop10" data-action="use-saved-company-address">' + escapeHtml(strings.companyAddressUseSaved || 'Use Saved Company Address') + '</button>'
+                    + '</div>';
+            }
+
+            return toolbar;
+        }
+
+        function createConferenceEventPreset() {
+            var blocks = [];
+            var hero = createHeroBlock();
+            var intro = createTextBlock();
+            var details = createInnerSectionBlock();
+            var agenda = createFeatureListBlock();
+            var cta = createCtaBlock();
+            var footer = createFooterBlock();
+
+            hero.querySelector('.mb-hero-headline').textContent = 'Conference / Event Invitation';
+            hero.querySelector('.mb-hero-subheadline').textContent = 'Invite your audience to a live event with polished details, a clear CTA, and mobile-friendly structure.';
+            hero.querySelector('.mb-cta-label').textContent = 'Reserve your seat';
+            hero.querySelector('.mb-cta-link').setAttribute('href', 'https://example.com/register');
+
+            intro.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<p>Dear {{first_name}},</p><p>We would love to welcome you to our upcoming conference. Use this reusable template to share the headline, event story, and why this invitation matters to each recipient.</p>');
+
+            details.setAttribute('data-custom-label', strings.presetConferenceEvent || 'Conference / Event Invitation');
+            details.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<p><strong>Event details</strong></p><p>Date: Add your event date<br>Time: Add your event time<br>Location: Add your venue or streaming link</p>');
+
+            agenda.querySelector('.mb-heading-text').textContent = 'Agenda / Highlights';
+            agenda.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<ul><li>Opening keynote or welcome message</li><li>Key sessions, speakers, or product highlights</li><li>Networking, breakout topics, or next steps</li></ul>');
+
+            cta.querySelector('.mb-heading-text').textContent = 'Save your place today';
+            cta.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<p>Use this section for your registration push, ticket note, or RSVP reminder. Include any deadline or attendance benefit that matters.</p>');
+            cta.querySelector('.mb-button-label').textContent = 'Register now';
+            cta.querySelector('.mb-button-link').setAttribute('href', 'https://example.com/register');
+
+            footer.querySelector('.mb-footer-text').innerHTML = getSavedCompanyAddressHtml();
+
+            blocks.push(hero, intro, details, agenda, cta, footer);
+
+            return blocks;
+        }
+
         function defaultSurfaceStyle(extraStyle) {
             return 'background:#ffffff;padding:' + DEFAULT_PADDING + 'px;border-radius:14px;' + (extraStyle || '');
         }
@@ -414,7 +798,7 @@
         function createCompanyAddressBlock() {
             return blockShell('company_address', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;color:#64748b;font-family:Arial, sans-serif;font-size:13px;line-height:1.7;font-weight:400;') + '">'
-                + '<div class="mb-company-address-text" contenteditable="true">Your Company<br>123 Market Street<br>City, State</div>'
+                + '<div class="mb-company-address-text" contenteditable="true">' + getSavedCompanyAddressHtml() + '</div>'
                 + '</td></tr></table>');
         }
 
@@ -476,7 +860,7 @@
         function createFooterBlock() {
             return blockShell('footer', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#0f172a;padding:' + DEFAULT_PADDING + 'px;border-radius:16px;text-align:center;color:#cbd5e1;font-family:Arial, sans-serif;font-size:13px;line-height:1.7;font-weight:400;">'
-                + '<div class="mb-footer-text" contenteditable="true">Your Company<br>123 Market Street<br>City, State</div>'
+                + '<div class="mb-footer-text" contenteditable="true">' + getSavedCompanyAddressHtml() + '</div>'
                 + '<div style="margin-top:12px;"><a href="{{unsubscribe_url}}" style="color:#93c5fd;text-decoration:underline;">Unsubscribe</a></div>'
                 + '</td></tr></table>');
         }
@@ -1004,6 +1388,8 @@
         }
 
         function applyPreset(name, confirmReplace) {
+            var presetBlocks = [];
+
             if (confirmReplace && canvas.querySelector('.mb-block') && !window.confirm(strings.replaceConfirm || 'Replace the current email design with this template? This will remove the current design.')) {
                 return;
             }
@@ -1035,11 +1421,11 @@
             } else if (name === 'simple_text') {
                 insertBlockAtPlacement(createTextBlock(), { container: canvas, beforeNode: null });
                 insertBlockAtPlacement(createUnsubscribeBlock(), { container: canvas, beforeNode: null });
-            } else if (name === 'event') {
-                insertBlockAtPlacement(createHeroBlock(), { container: canvas, beforeNode: null });
-                insertBlockAtPlacement(createTextBlock(), { container: canvas, beforeNode: null });
-                insertBlockAtPlacement(createQrBlock(), { container: canvas, beforeNode: null });
-                insertBlockAtPlacement(createFooterBlock(), { container: canvas, beforeNode: null });
+            } else if (name === 'conference_event' || name === 'event') {
+                presetBlocks = createConferenceEventPreset();
+                presetBlocks.forEach(function (presetBlock) {
+                    insertBlockAtPlacement(presetBlock, { container: canvas, beforeNode: null });
+                });
             } else {
                 insertBlockAtPlacement(createHeroBlock(), { container: canvas, beforeNode: null });
                 insertBlockAtPlacement(createTextBlock(), { container: canvas, beforeNode: null });
@@ -1707,7 +2093,10 @@
                 contentTab += '<div class="form-group"><label>' + escapeHtml(strings.headline || 'Headline') + '</label><textarea class="form-control" rows="3" data-control="generic-heading">' + escapeHtml(headingNode ? headingNode.textContent : '') + '</textarea></div>';
             }
             if (type === 'text' || type === 'feature_list' || type === 'testimonial' || type === 'inner_section' || type === 'company_address' || type === 'footer' || type === 'email_footer') {
-                contentTab += '<div class="form-group"><label>' + escapeHtml(strings.text || 'Text') + '</label><textarea class="form-control" rows="5" data-control="generic-body">' + escapeHtml((block.querySelector('.mb-richtext') || block.querySelector('[contenteditable="true"]') || {}).textContent || '') + '</textarea></div>';
+                contentTab += '<div class="marketing-builder-settings-help-card" data-marketing-builder-rich-text-editor="1">'
+                    + '<label class="marketing-builder-settings-help-title">' + escapeHtml(strings.text || 'Text') + '</label>'
+                    + renderRichTextToolbar(block)
+                    + '</div>';
             }
             if (type === 'hero') {
                 contentTab += renderHeroContentTab(block);
@@ -2455,6 +2844,35 @@
                 return;
             }
 
+            var commandNode = event.target.closest('[data-rich-text-command]');
+            if (commandNode) {
+                var command = commandNode.getAttribute('data-rich-text-command') || '';
+                var commandValue = commandNode.getAttribute('data-rich-text-value') || '';
+
+                if (command === 'createLink') {
+                    commandValue = window.prompt(strings.linkUrl || 'Link URL', 'https://');
+                    if (commandValue === null) {
+                        return;
+                    }
+                    commandValue = String(commandValue || '').trim();
+                    if (!isValidLink(commandValue)) {
+                        window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
+                        return;
+                    }
+                }
+
+                executeRichTextCommand(command, commandValue);
+                syncFields();
+                renderProperties();
+                return;
+            }
+
+            var mergeTagNode = event.target.closest('[data-merge-tag-token]');
+            if (mergeTagNode) {
+                insertMergeTag(mergeTagNode.getAttribute('data-merge-tag-token') || '');
+                return;
+            }
+
             var actionNode = event.target.closest('[data-action]');
             if (!actionNode) {
                 return;
@@ -2494,6 +2912,8 @@
                 moveHeroChild(state.activeBlock, actionNode.getAttribute('data-hero-child') || '', 1);
                 setActiveBlock(state.activeBlock);
                 syncFields();
+            } else if (action === 'use-saved-company-address' && state.activeBlock) {
+                applySavedCompanyAddress(state.activeBlock);
             } else if (action === 'upload-image-inline' && state.activeBlock) {
                 state.inlineUploadBlock = state.activeBlock;
                 if (fileInput) {
@@ -2555,6 +2975,36 @@
         });
 
         canvas.addEventListener('input', function () {
+            syncFields();
+        });
+
+        canvas.addEventListener('paste', function (event) {
+            var editable = event.target.closest ? event.target.closest('[contenteditable="true"]') : null;
+            var clipboard;
+            var html;
+            var text;
+            var sanitized;
+
+            if (!editable || !canvas.contains(editable)) {
+                return;
+            }
+
+            event.preventDefault();
+            clipboard = event.clipboardData || window.clipboardData;
+            html = clipboard && clipboard.getData ? clipboard.getData('text/html') : '';
+            text = clipboard && clipboard.getData ? clipboard.getData('text/plain') : '';
+            sanitized = html ? sanitizeEditableHtml(html) : plainTextToSanitizedHtml(text);
+
+            if (!sanitized) {
+                sanitized = plainTextToSanitizedHtml(text);
+            }
+
+            insertContentAtCursor(editable, sanitized, true);
+
+            if (editable.classList.contains('mb-richtext') || editable.classList.contains('mb-company-address-text') || editable.classList.contains('mb-footer-text')) {
+                editable.innerHTML = sanitizeEditableHtml(editable.innerHTML);
+            }
+
             syncFields();
         });
 
@@ -2652,6 +3102,12 @@
 
         if (insertNowButton) {
             insertNowButton.addEventListener('click', insertUnsubscribeBlock);
+        }
+
+        if (mergeTagInsertButton) {
+            mergeTagInsertButton.addEventListener('click', function () {
+                insertMergeTag(mergeTagSelect ? mergeTagSelect.value : '');
+            });
         }
 
         if (paletteSearch) {

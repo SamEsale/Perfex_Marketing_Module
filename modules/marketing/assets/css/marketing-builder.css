@@ -1416,6 +1416,70 @@
     margin-bottom: 14px;
 }
 
+.marketing-builder-settings-help-card {
+    padding: 14px;
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: #fbfdff;
+}
+
+.marketing-builder-settings-help-title {
+    display: block;
+    margin-bottom: 10px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.marketing-builder-settings-note-card {
+    margin-top: 12px;
+    padding: 12px 13px;
+    border: 1px solid #dbe6f3;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.marketing-builder-settings-note {
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.marketing-builder-rich-text-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.marketing-builder-rich-text-button,
+.marketing-builder-merge-tag-chip {
+    border: 1px solid #dbe6f3;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #0f172a;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    transition: border-color .18s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.marketing-builder-rich-text-button:hover,
+.marketing-builder-merge-tag-chip:hover {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+    box-shadow: 0 0 0 3px rgba(191, 219, 254, 0.28);
+}
+
+.marketing-builder-merge-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
 .mb-block [contenteditable="true"]:focus {
     outline: none;
 }
