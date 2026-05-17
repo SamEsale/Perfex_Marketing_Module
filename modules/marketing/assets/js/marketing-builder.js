@@ -74,6 +74,9 @@
             '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
             '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
             'href="{{unsubscribe_url}}"',
+            "href='{{unsubscribe_url}}'",
+            'href=&quot;{{unsubscribe_url}}&quot;',
+            'href=&#39;{{unsubscribe_url}}&#39;',
             '/marketing/unsubscribe/',
             '>unsubscribe<',
             'unsubscribe here'
@@ -97,6 +100,39 @@
 
     function hasUnsubscribeToken(value) {
         return containsUnsubscribeTokenOrLink(value);
+    }
+
+    function hasActualUnsubscribeLinkMarkup(value) {
+        var normalized = String(value || '');
+        var candidates = [normalized];
+        var decoder = document.createElement('textarea');
+        var patterns = [
+            '{{unsubscribe_url}}',
+            '%7b%7bunsubscribe_url%7d%7d',
+            '&#123;&#123;unsubscribe_url&#125;&#125;',
+            '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
+            '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
+            'href="{{unsubscribe_url}}"',
+            "href='{{unsubscribe_url}}'",
+            'href=&quot;{{unsubscribe_url}}&quot;',
+            'href=&#39;{{unsubscribe_url}}&#39;',
+            '/marketing/unsubscribe/'
+        ];
+
+        try {
+            candidates.push(decodeURIComponent(normalized));
+        } catch (error) {
+        }
+
+        decoder.innerHTML = normalized;
+        candidates.push(decoder.value || '');
+
+        return candidates.some(function (candidate) {
+            var haystack = String(candidate || '').toLowerCase();
+            return patterns.some(function (pattern) {
+                return haystack.indexOf(pattern) !== -1;
+            });
+        });
     }
 
     function normalizePlainTextValue(value) {
@@ -1594,26 +1630,56 @@
             return createFooterBlock();
         }
 
-        function ensureFooterUnsubscribeToken(block) {
+        function buildComplianceUnsubscribeNode(blockType) {
+            var linkColor = (blockType === 'footer' || blockType === 'email_footer') ? '#93c5fd' : '#2563eb';
+            return createElement('<div class="mb-compliance-unsubscribe" style="margin-top:12px;"><a href="{{unsubscribe_url}}" style="color:' + linkColor + ';text-decoration:underline;">Unsubscribe</a></div>');
+        }
+
+        function ensureComplianceUnsubscribeLink(block) {
             if (!block) {
                 return;
             }
 
             var type = block.dataset.builderBlock;
-            if (type !== 'footer' && type !== 'email_footer') {
-                return;
-            }
-
-            if (hasUnsubscribeToken(block.innerHTML)) {
+            if (type !== 'company_address' && type !== 'footer' && type !== 'email_footer') {
                 return;
             }
 
             var surface = getSurface(block);
+            var repaired = false;
             if (!surface) {
                 return;
             }
 
-            surface.appendChild(createElement('<div style="margin-top:12px;"><a href="{{unsubscribe_url}}" style="color:#93c5fd;text-decoration:underline;">Unsubscribe</a></div>'));
+            Array.prototype.forEach.call(surface.querySelectorAll('a'), function (anchor) {
+                var text = String(anchor.textContent || '').trim().toLowerCase();
+                var href = String(anchor.getAttribute('href') || '').trim();
+                if (text.indexOf('unsubscribe') === -1) {
+                    return;
+                }
+                if (!hasActualUnsubscribeLinkMarkup(anchor.outerHTML) || href === '' || href === '#') {
+                    anchor.setAttribute('href', '{{unsubscribe_url}}');
+                    anchor.setAttribute('style', 'color:' + ((type === 'footer' || type === 'email_footer') ? '#93c5fd' : '#2563eb') + ';text-decoration:underline;');
+                    repaired = true;
+                }
+            });
+
+            if (hasActualUnsubscribeLinkMarkup(surface.innerHTML)) {
+                return;
+            }
+
+            Array.prototype.forEach.call(surface.children || [], function (child) {
+                var text = String(child.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if ((text === 'unsubscribe' || text === 'unsubscribe here') && !child.querySelector('a')) {
+                    child.parentNode.removeChild(child);
+                    repaired = true;
+                }
+            });
+
+            surface.appendChild(buildComplianceUnsubscribeNode(type));
+            if (repaired) {
+                block.dataset.complianceUnsubscribeNormalized = '1';
+            }
         }
 
         function createLegacyBlock(rawHtml) {
@@ -2101,7 +2167,7 @@
             if (block.dataset.builderBlock === 'hero') {
                 normalizeHeroBlock(block);
             }
-            ensureFooterUnsubscribeToken(block);
+            ensureComplianceUnsubscribeLink(block);
             if (block.dataset.builderBlock === 'social') {
                 socialMeta = ensureSocialBlockStructure(block);
                 updateSocialLinks(block, {
@@ -2219,6 +2285,7 @@
             } else {
                 setActiveBlock(block);
             }
+            ensureComplianceUnsubscribeLink(block);
             syncFields();
         }
 
@@ -2397,7 +2464,7 @@
         function updateUnsubscribeStatus() {
             var html = renderEmailHtml();
             var builderMarkup = builderStateField ? builderStateField.value : serializeBuilderState();
-            var hasToken = hasUnsubscribeToken(html) || hasUnsubscribeToken(builderMarkup);
+            var hasToken = hasActualUnsubscribeLinkMarkup(html) || hasActualUnsubscribeLinkMarkup(builderMarkup);
             var unsubscribeStatus = getCurrentUnsubscribeStatusNode();
 
             if (!unsubscribeStatus) {
