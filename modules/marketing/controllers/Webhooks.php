@@ -1541,6 +1541,18 @@ class Webhooks extends CI_Controller
     {
         $messageType = trim((string) ($message['type'] ?? ''));
         $meta = [];
+        $allowedRawKeys = [
+            'type' => 50,
+            'provider_media_type' => 50,
+            'id' => 255,
+            'mime_type' => 120,
+            'sha256' => 255,
+            'filename' => 255,
+            'caption' => 500,
+            'error_code' => 32,
+            'error_title' => 180,
+            'error_message' => 280,
+        ];
 
         if ($messageType !== '') {
             $meta['type'] = $messageType;
@@ -1552,9 +1564,28 @@ class Webhooks extends CI_Controller
         }
 
         if (!empty($message['raw']) && is_array($message['raw'])) {
-            foreach ($message['raw'] as $key => $value) {
-                if (is_scalar($value) || $value === null) {
+            foreach ($allowedRawKeys as $key => $maxLength) {
+                if (!array_key_exists($key, $message['raw'])) {
+                    continue;
+                }
+
+                $value = $message['raw'][$key];
+                if (is_bool($value)) {
                     $meta[$key] = $value;
+                    continue;
+                }
+
+                $value = $this->scalarString($value, '');
+                $value = trim(strip_tags($value));
+                $value = preg_replace('/\s+/', ' ', $value);
+                if ($value !== '') {
+                    $meta[$key] = mb_substr($value, 0, $maxLength);
+                }
+            }
+
+            foreach (['voice', 'animated'] as $booleanKey) {
+                if (array_key_exists($booleanKey, $message['raw'])) {
+                    $meta[$booleanKey] = (bool) $message['raw'][$booleanKey];
                 }
             }
         }

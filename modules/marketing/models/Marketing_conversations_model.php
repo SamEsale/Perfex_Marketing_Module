@@ -1004,6 +1004,8 @@ class Marketing_conversations_model extends App_Model
         $type = trim((string) ($decoded['type'] ?? ''));
         $mimeType = trim((string) ($decoded['mime_type'] ?? ''));
         $filename = trim((string) ($decoded['filename'] ?? ''));
+        $caption = trim((string) ($decoded['caption'] ?? ''));
+        $providerMediaId = trim((string) ($decoded['id'] ?? ''));
 
         $parts = [];
         if ($type !== '') {
@@ -1013,8 +1015,15 @@ class Marketing_conversations_model extends App_Model
         }
         if ($filename !== '') {
             $parts[] = $filename;
-        } elseif ($mimeType !== '') {
+        }
+        if ($mimeType !== '') {
             $parts[] = $mimeType;
+        }
+        if ($caption !== '') {
+            $parts[] = 'Caption: ' . mb_substr(preg_replace('/\s+/', ' ', $caption), 0, 120);
+        }
+        if ($providerMediaId !== '') {
+            $parts[] = 'ID: ' . mb_substr($providerMediaId, 0, 24) . (mb_strlen($providerMediaId) > 24 ? '...' : '');
         }
 
         return implode(' · ', array_filter($parts, static function ($part) {

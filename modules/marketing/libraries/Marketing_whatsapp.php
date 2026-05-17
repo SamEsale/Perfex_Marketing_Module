@@ -467,9 +467,7 @@ class Marketing_whatsapp
                         'text' => $bodyText,
                         'timestamp' => $this->normalizeTimestamp($message['timestamp'] ?? null),
                         'context_message_id' => trim((string) ($message['context']['id'] ?? '')),
-                        'raw' => [
-                            'type' => $messageType,
-                        ],
+                        'raw' => $this->extractSafeMessageRaw($message, $messageType),
                     ];
                 }
 
@@ -509,6 +507,103 @@ class Marketing_whatsapp
         $digits = preg_replace('/[^0-9]/', '', $phone);
 
         return $digits === '' ? '' : $prefix . $digits;
+    }
+
+    protected function extractSafeMessageRaw(array $message, $messageType)
+    {
+        $raw = [];
+        $messageType = trim((string) $messageType);
+        if ($messageType !== '') {
+            $raw['type'] = $messageType;
+        }
+
+        foreach ($this->extractSafeMessageMediaMetadata($message, $messageType) as $key => $value) {
+            $raw[$key] = $value;
+        }
+
+        foreach ($this->extractSafeMessageErrorMetadata($message) as $key => $value) {
+            $raw[$key] = $value;
+        }
+
+        return $raw;
+    }
+
+    protected function extractSafeMessageMediaMetadata(array $message, $messageType)
+    {
+        $messageType = strtolower(trim((string) $messageType));
+        $section = [];
+
+        switch ($messageType) {
+            case 'image':
+            case 'document':
+            case 'audio':
+            case 'video':
+            case 'sticker':
+                $section = isset($message[$messageType]) && is_array($message[$messageType])
+                    ? $message[$messageType]
+                    : [];
+                break;
+            default:
+                return [];
+        }
+
+        if (empty($section)) {
+            return [];
+        }
+
+        $meta = [
+            'provider_media_type' => $messageType,
+        ];
+
+        foreach ([
+            'id' => 255,
+            'mime_type' => 120,
+            'sha256' => 255,
+            'filename' => 255,
+            'caption' => 500,
+        ] as $key => $maxLength) {
+            $value = $this->sanitizeMetadataScalar($section[$key] ?? '', $maxLength);
+            if ($value !== '') {
+                $meta[$key] = $value;
+            }
+        }
+
+        if ($messageType === 'audio' && array_key_exists('voice', $section)) {
+            $meta['voice'] = $this->normalizeMetadataBoolean($section['voice']);
+        }
+
+        if ($messageType === 'sticker' && array_key_exists('animated', $section)) {
+            $meta['animated'] = $this->normalizeMetadataBoolean($section['animated']);
+        }
+
+        return $this->filterEmptyMetadata($meta);
+    }
+
+    protected function extractSafeMessageErrorMetadata(array $message)
+    {
+        $errors = isset($message['errors']) && is_array($message['errors']) ? $message['errors'] : [];
+        $error = !empty($errors[0]) && is_array($errors[0]) ? $errors[0] : [];
+        if (empty($error)) {
+            return [];
+        }
+
+        $meta = [];
+        $errorCode = $this->sanitizeMetadataScalar($error['code'] ?? '', 32);
+        if ($errorCode !== '') {
+            $meta['error_code'] = $errorCode;
+        }
+
+        $errorTitle = $this->sanitizeMetadataScalar($error['title'] ?? '', 180);
+        if ($errorTitle !== '') {
+            $meta['error_title'] = $errorTitle;
+        }
+
+        $errorMessage = $this->sanitizeMetadataScalar($error['message'] ?? '', 280);
+        if ($errorMessage !== '') {
+            $meta['error_message'] = $errorMessage;
+        }
+
+        return $meta;
     }
 
     protected function extractMessageText(array $message)
@@ -573,6 +668,52 @@ class Marketing_whatsapp
         $message = preg_replace('/\s+/', ' ', $message);
 
         return mb_substr($message, 0, 180);
+    }
+
+    protected function sanitizeMetadataScalar($value, $maxLength = 255)
+    {
+        if (is_array($value) || is_object($value) || $value === null) {
+            return '';
+        }
+
+        $value = trim(strip_tags((string) $value));
+        $value = preg_replace('/\s+/', ' ', $value);
+        if ($value === '') {
+            return '';
+        }
+
+        return mb_substr($value, 0, max(1, (int) $maxLength));
+    }
+
+    protected function normalizeMetadataBoolean($value)
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    protected function filterEmptyMetadata(array $meta)
+    {
+        $filtered = [];
+
+        foreach ($meta as $key => $value) {
+            if (is_bool($value)) {
+                $filtered[$key] = $value;
+                continue;
+            }
+
+            if (is_string($value) && $value !== '') {
+                $filtered[$key] = $value;
+            }
+        }
+
+        return $filtered;
     }
 
     protected function extractMetaErrorDetails($decoded, $rawResponse = '')
