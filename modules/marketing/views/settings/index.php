@@ -20,6 +20,54 @@ $licenseFieldValue = function ($key, $default = '') use ($license_form) {
     return array_key_exists($key, $license_form) ? $license_form[$key] : $default;
 };
 
+$provider_readiness = isset($provider_readiness) && is_array($provider_readiness) ? $provider_readiness : [];
+$normalizedProviderReadiness = [];
+foreach ($provider_readiness as $providerStatus) {
+    if (!is_array($providerStatus)) {
+        continue;
+    }
+
+    $providerChecks = isset($providerStatus['checks']) && is_array($providerStatus['checks']) ? $providerStatus['checks'] : [];
+    $normalizedChecks = [];
+    foreach ($providerChecks as $providerCheck) {
+        if (!is_array($providerCheck)) {
+            continue;
+        }
+
+        $normalizedChecks[] = array_merge([
+            'label' => '',
+            'value' => '',
+        ], $providerCheck);
+    }
+
+    $normalizedProviderReadiness[] = array_merge([
+        'title' => '',
+        'status_key' => 'unavailable',
+        'status_label' => '',
+        'note' => '',
+        'checks' => [],
+    ], $providerStatus, [
+        'checks' => $normalizedChecks,
+    ]);
+}
+$provider_readiness = $normalizedProviderReadiness;
+
+$release_readiness = isset($release_readiness) && is_array($release_readiness) ? $release_readiness : [];
+$normalizedReleaseReadiness = [];
+foreach ($release_readiness as $readinessItem) {
+    if (!is_array($readinessItem)) {
+        continue;
+    }
+
+    $normalizedReleaseReadiness[] = array_merge([
+        'title' => '',
+        'status_key' => 'unavailable',
+        'status_label' => '',
+        'note' => '',
+    ], $readinessItem);
+}
+$release_readiness = $normalizedReleaseReadiness;
+
 $whatsappEnabled = !empty($whatsapp_settings['enabled']);
 $licenseStatusClass = 'alert-info';
 

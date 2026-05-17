@@ -285,14 +285,28 @@ class Settings extends AdminController
         $readmePath = $moduleRoot . '/README.md';
         $installationPath = $moduleRoot . '/INSTALLATION.md';
         $operationsPath = $moduleRoot . '/docs/OPERATIONS.md';
+        $productionChecklistPath = $moduleRoot . '/docs/PRODUCTION_CHECKLIST.md';
+        $releaseManifestDocPath = $moduleRoot . '/docs/RELEASE_MANIFEST.md';
+        $releaseManifestJsonPath = $moduleRoot . '/release/manifest.json';
+        $releaseBuilderPath = $moduleRoot . '/scripts/build_release_package.sh';
         $releaseValidatorPath = $moduleRoot . '/scripts/verify_release_package.sh';
         $integrityRuntimePath = $moduleRoot . '/scripts/verify_phase4_integrity_runtime.php';
         $moduleVersion = trim((string) ($licenseState['module_version'] ?? ''));
         $licenseStatus = trim((string) ($licenseState['status'] ?? 'inactive'));
         $licenseConfigured = !empty($licenseState['api_configured']) || trim((string) ($licenseState['api_base_url_hint'] ?? '')) !== '';
-        $docsAvailable = is_file($readmePath) && is_file($installationPath) && is_file($operationsPath);
+        $docsAvailable = is_file($readmePath)
+            && is_file($installationPath)
+            && is_file($operationsPath)
+            && is_file($productionChecklistPath)
+            && is_file($releaseManifestDocPath);
         $providerReadinessAvailable = !empty($providerReadiness);
         $schemaHealthy = !empty($schemaReport['ok']);
+        $releaseValidationReady = is_file($releaseValidatorPath)
+            && is_file($releaseBuilderPath)
+            && is_file($releaseManifestJsonPath);
+        $operationsReady = is_file($operationsPath)
+            && is_file($productionChecklistPath)
+            && is_file($releaseManifestDocPath);
 
         return [
             [
@@ -329,11 +343,11 @@ class Settings extends AdminController
             ],
             [
                 'title' => _l('marketing_release_readiness_release_validation'),
-                'status_key' => is_file($releaseValidatorPath) ? 'ready' : 'unavailable',
-                'status_label' => is_file($releaseValidatorPath)
+                'status_key' => $releaseValidationReady ? 'ready' : 'unavailable',
+                'status_label' => $releaseValidationReady
                     ? _l('marketing_release_readiness_status_ready')
                     : _l('marketing_release_readiness_status_unavailable'),
-                'note' => is_file($releaseValidatorPath)
+                'note' => $releaseValidationReady
                     ? _l('marketing_release_readiness_release_validation_note')
                     : _l('marketing_release_readiness_release_validation_missing_note'),
             ],
@@ -359,11 +373,11 @@ class Settings extends AdminController
             ],
             [
                 'title' => _l('marketing_release_readiness_operations'),
-                'status_key' => is_file($operationsPath) ? 'ready' : 'needs_review',
-                'status_label' => is_file($operationsPath)
+                'status_key' => $operationsReady ? 'ready' : 'needs_review',
+                'status_label' => $operationsReady
                     ? _l('marketing_release_readiness_status_ready')
                     : _l('marketing_release_readiness_status_needs_review'),
-                'note' => is_file($operationsPath)
+                'note' => $operationsReady
                     ? _l('marketing_release_readiness_operations_note')
                     : _l('marketing_release_readiness_operations_missing_note'),
             ],

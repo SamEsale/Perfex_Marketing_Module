@@ -122,6 +122,14 @@
         gap: 12px;
         margin-top: 16px;
     }
+    .marketing-analytics-provider-group-title {
+        margin: 16px 0 6px;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+    }
     .marketing-analytics-provider-row {
         display: flex;
         justify-content: space-between;
@@ -302,6 +310,27 @@
                         $campaignPerformanceItems = isset($campaignPerformance['items']) && is_array($campaignPerformance['items'])
                             ? $campaignPerformance['items']
                             : [];
+                        $normalizedCampaignPerformanceItems = [];
+                        foreach ($campaignPerformanceItems as $campaignRow) {
+                            if (!is_array($campaignRow)) {
+                                continue;
+                            }
+
+                            $normalizedCampaignPerformanceItems[] = array_merge([
+                                'id' => 0,
+                                'name' => '',
+                                'status' => 'draft',
+                                'sent_count' => 0,
+                                'delivered_count' => 0,
+                                'open_count' => 0,
+                                'click_count' => 0,
+                                'bounce_count' => 0,
+                                'complaint_count' => 0,
+                                'unsubscribe_count' => 0,
+                                'last_activity_at' => '',
+                            ], $campaignRow);
+                        }
+                        $campaignPerformanceItems = $normalizedCampaignPerformanceItems;
                         $providerHealth = isset($provider_health) && is_array($provider_health)
                             ? array_merge([
                                 'available' => false,
@@ -325,6 +354,23 @@
                         $providerFailureItems = isset($providerHealth['failure_items']) && is_array($providerHealth['failure_items'])
                             ? $providerHealth['failure_items']
                             : [];
+                        $normalizeProviderMetricItems = static function (array $items) {
+                            $normalized = [];
+                            foreach ($items as $item) {
+                                if (!is_array($item)) {
+                                    continue;
+                                }
+
+                                $normalized[] = array_merge([
+                                    'code' => '',
+                                    'count' => 0,
+                                ], $item);
+                            }
+
+                            return $normalized;
+                        };
+                        $providerWarningItems = $normalizeProviderMetricItems($providerWarningItems);
+                        $providerFailureItems = $normalizeProviderMetricItems($providerFailureItems);
                         $events_pagination = isset($events_pagination) && is_array($events_pagination)
                             ? array_merge(['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1], $events_pagination)
                             : ['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1];
@@ -583,14 +629,22 @@
                                         <span class="marketing-analytics-badge"><?= _l('marketing_queue_active'); ?>: <?= !empty($providerHealth['queue_paused']) ? _l('marketing_disabled') : _l('marketing_enabled'); ?></span>
                                         <span class="marketing-analytics-badge"><?= _l('marketing_schema_ready'); ?>: <?= !empty($providerHealth['schema_ready']) ? _l('settings_yes') : _l('settings_no'); ?></span>
                                         <span class="marketing-analytics-badge"><?= _l('marketing_provider_health_recent_recoveries'); ?>: <?= (int) ($providerHealth['recent_recovered_total'] ?? 0); ?></span>
+                                        <span class="marketing-analytics-badge">Warning signals: <?= count($providerWarningItems); ?></span>
+                                        <span class="marketing-analytics-badge">Failure signals: <?= count($providerFailureItems); ?></span>
                                     </div>
 
                                     <div class="marketing-analytics-provider-list">
+                                        <?php if (!empty($providerWarningItems)) { ?>
+                                            <div class="marketing-analytics-provider-group-title">Warnings</div>
+                                        <?php } ?>
                                         <?php foreach ($providerWarningItems as $item) { ?>
                                             <div class="marketing-analytics-provider-row">
                                                 <span class="marketing-analytics-provider-label"><?= html_escape($formatMetricCode($item['code'] ?? '')); ?></span>
                                                 <span class="marketing-analytics-provider-count"><?= (int) ($item['count'] ?? 0); ?></span>
                                             </div>
+                                        <?php } ?>
+                                        <?php if (!empty($providerFailureItems)) { ?>
+                                            <div class="marketing-analytics-provider-group-title">Failures</div>
                                         <?php } ?>
                                         <?php foreach ($providerFailureItems as $item) { ?>
                                             <div class="marketing-analytics-provider-row">

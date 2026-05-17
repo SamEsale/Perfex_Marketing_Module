@@ -1,5 +1,44 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
+<?php
+$recent_campaigns = isset($recent_campaigns) && is_array($recent_campaigns) ? $recent_campaigns : [];
+$normalizedRecentCampaigns = [];
+foreach ($recent_campaigns as $campaign) {
+    if (!is_array($campaign)) {
+        continue;
+    }
+
+    $normalizedRecentCampaigns[] = array_merge([
+        'id' => 0,
+        'name' => '',
+        'subject' => '',
+        'status' => '',
+    ], $campaign);
+}
+$recent_campaigns = $normalizedRecentCampaigns;
+
+$recent_activity = isset($recent_activity) && is_array($recent_activity) ? $recent_activity : [];
+$normalizedRecentActivity = [];
+foreach ($recent_activity as $event) {
+    if (!is_array($event)) {
+        continue;
+    }
+
+    $normalizedRecentActivity[] = array_merge([
+        'event_type' => '',
+        'provider' => '',
+        'email' => '',
+        'event_at' => '',
+    ], $event);
+}
+$recent_activity = $normalizedRecentActivity;
+
+$reports_cleanup = isset($reports_cleanup) && is_array($reports_cleanup) ? $reports_cleanup : [];
+$reports_cleanup = array_merge([
+    'activity_confirmation_phrase' => 'DELETE ACTIVITY REPORTS',
+    'campaigns_confirmation_phrase' => 'DELETE CAMPAIGN REPORTS',
+], $reports_cleanup);
+?>
 <style>
     .marketing-reports-shell {
         border: 1px solid #e2e8f0;
@@ -239,12 +278,12 @@
                                                     value=""
                                                     autocomplete="off"
                                                     spellcheck="false"
-                                                    placeholder="<?= html_escape($reports_cleanup['activity_confirmation_phrase'] ?? 'DELETE ACTIVITY REPORTS'); ?>"
+                                                    placeholder="<?= html_escape($reports_cleanup['activity_confirmation_phrase']); ?>"
                                                 />
                                                 <p class="marketing-reports-danger-helper">
                                                     <?= sprintf(
                                                         _l('marketing_reports_cleanup_confirmation_phrase'),
-                                                        '<code>' . html_escape($reports_cleanup['activity_confirmation_phrase'] ?? 'DELETE ACTIVITY REPORTS') . '</code>'
+                                                        '<code>' . html_escape($reports_cleanup['activity_confirmation_phrase']) . '</code>'
                                                     ); ?>
                                                 </p>
                                             </div>
@@ -271,12 +310,12 @@
                                                     value=""
                                                     autocomplete="off"
                                                     spellcheck="false"
-                                                    placeholder="<?= html_escape($reports_cleanup['campaigns_confirmation_phrase'] ?? 'DELETE CAMPAIGN REPORTS'); ?>"
+                                                    placeholder="<?= html_escape($reports_cleanup['campaigns_confirmation_phrase']); ?>"
                                                 />
                                                 <p class="marketing-reports-danger-helper">
                                                     <?= sprintf(
                                                         _l('marketing_reports_cleanup_confirmation_phrase'),
-                                                        '<code>' . html_escape($reports_cleanup['campaigns_confirmation_phrase'] ?? 'DELETE CAMPAIGN REPORTS') . '</code>'
+                                                        '<code>' . html_escape($reports_cleanup['campaigns_confirmation_phrase']) . '</code>'
                                                     ); ?>
                                                 </p>
                                             </div>

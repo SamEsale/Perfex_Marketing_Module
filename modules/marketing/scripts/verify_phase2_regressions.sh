@@ -1724,7 +1724,7 @@ check_no_destructive_event_history_clear() {
 }
 
 check_analytics_view_array_guards() {
-  local stats_line recent_line normalized_line pagination_line empty_line diagnostics_line warning_line
+  local stats_line recent_line normalized_line pagination_line empty_line diagnostics_line warning_line campaign_items_line provider_items_line provider_normalize_line
   stats_line="$(first_fixed_match '$stats = isset($stats) && is_array($stats) ? $stats : [];' "$ANALYTICS_VIEW_FILE")"
   recent_line="$(first_fixed_match '$recent = isset($recent) && is_array($recent) ? $recent : [];' "$ANALYTICS_VIEW_FILE")"
   normalized_line="$(first_fixed_match '$normalizedRecent = [];' "$ANALYTICS_VIEW_FILE")"
@@ -1732,17 +1732,20 @@ check_analytics_view_array_guards() {
   empty_line="$(first_fixed_match '<?php if (empty($recent)) { ?>' "$ANALYTICS_VIEW_FILE")"
   diagnostics_line="$(first_fixed_match '$retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)' "$ANALYTICS_VIEW_FILE")"
   warning_line="$(first_fixed_match '$analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)' "$ANALYTICS_VIEW_FILE")"
+  campaign_items_line="$(first_fixed_match '$normalizedCampaignPerformanceItems = [];' "$ANALYTICS_VIEW_FILE")"
+  provider_items_line="$(first_fixed_match '$normalizeProviderMetricItems = static function (array $items) {' "$ANALYTICS_VIEW_FILE")"
+  provider_normalize_line="$(first_fixed_match '$providerWarningItems = $normalizeProviderMetricItems($providerWarningItems);' "$ANALYTICS_VIEW_FILE")"
 
-  if [[ -z "$stats_line" || -z "$recent_line" || -z "$normalized_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" || -z "$warning_line" ]]; then
+  if [[ -z "$stats_line" || -z "$recent_line" || -z "$normalized_line" || -z "$pagination_line" || -z "$empty_line" || -z "$diagnostics_line" || -z "$warning_line" || -z "$campaign_items_line" || -z "$provider_items_line" || -z "$provider_normalize_line" ]]; then
     fail \
       "analytics view guards stats, events, pagination, retention diagnostics, and top-click arrays before rendering" \
-      "expected stats/recent normalization, per-row event defaults, pagination/diagnostics guards, warning normalization, and empty() handling in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; normalized=${normalized_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}; warning=${warning_line:-missing}"
+      "expected stats/recent normalization, per-row event defaults, pagination/diagnostics guards, warning normalization, campaign/provider metric normalization, and empty() handling in $ANALYTICS_VIEW_FILE; stats=${stats_line:-missing}; recent=${recent_line:-missing}; normalized=${normalized_line:-missing}; pagination=${pagination_line:-missing}; empty=${empty_line:-missing}; diagnostics=${diagnostics_line:-missing}; warning=${warning_line:-missing}; campaign_items=${campaign_items_line:-missing}; provider_items=${provider_items_line:-missing}; provider_normalize=${provider_normalize_line:-missing}"
     return
   fi
 
   pass \
     "analytics view guards stats, events, pagination, retention diagnostics, and top-click arrays before rendering" \
-    "stats=$stats_line | recent=$recent_line | normalized=$normalized_line"
+    "stats=$stats_line | recent=$recent_line | normalized=$normalized_line | provider=$provider_items_line"
 }
 
 check_analytics_event_table_single_pagination() {
@@ -2145,7 +2148,7 @@ check_settings_license_block_order() {
 }
 
 check_settings_provider_readiness_panel() {
-  local controller_assignment controller_helper email_line ses_line inbound_line whatsapp_line smtp_check token_check app_secret_check inbound_secret_check preserve_inbound preserve_token preserve_secret view_heading view_note view_panel view_status view_loop view_secret_exposure forbidden_webhook forbidden_whatsapp forbidden_ses git_diff_mode
+  local controller_assignment controller_helper email_line ses_line inbound_line whatsapp_line smtp_check token_check app_secret_check inbound_secret_check preserve_inbound preserve_token preserve_secret view_heading view_note view_panel view_status view_loop view_normalize view_checks_normalize view_secret_exposure forbidden_webhook forbidden_whatsapp forbidden_ses git_diff_mode
   controller_assignment="$(first_fixed_match "\$data['provider_readiness'] = \$this->build_provider_readiness_summary(" "$SETTINGS_CONTROLLER_FILE")"
   controller_helper="$(first_match 'function[[:space:]]+build_provider_readiness_summary' "$SETTINGS_CONTROLLER_FILE")"
   email_line="$(first_fixed_match "_l('marketing_provider_readiness_email_delivery')" "$SETTINGS_CONTROLLER_FILE")"
@@ -2164,16 +2167,18 @@ check_settings_provider_readiness_panel() {
   view_panel="$(first_fixed_match 'marketing-provider-readiness-list' "$SETTINGS_VIEW_FILE")"
   view_status="$(first_fixed_match 'marketing-provider-readiness-status-' "$SETTINGS_VIEW_FILE")"
   view_loop="$(first_fixed_match "<?php foreach (\$provider_readiness as \$providerStatus) { ?>" "$SETTINGS_VIEW_FILE")"
+  view_normalize="$(first_fixed_match '$normalizedProviderReadiness = [];' "$SETTINGS_VIEW_FILE")"
+  view_checks_normalize="$(first_fixed_match '$normalizedChecks[] = array_merge([' "$SETTINGS_VIEW_FILE")"
   view_secret_exposure="$(grep -nE -- "get_option\\('marketing_(whatsapp_access_token|whatsapp_app_secret|inbound_email_secret)'\\)" "$SETTINGS_VIEW_FILE" || true)"
   forbidden_webhook="$(git_changed_path_if_available modules/marketing/controllers/Webhooks.php)"
   forbidden_whatsapp="$(git_changed_path_if_available modules/marketing/libraries/Marketing_whatsapp.php)"
   forbidden_ses="$(git_changed_path_if_available modules/marketing/libraries/Marketing_ses_sns.php)"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$email_line" || -z "$ses_line" || -z "$inbound_line" || -z "$whatsapp_line" || -z "$smtp_check" || -z "$token_check" || -z "$app_secret_check" || -z "$inbound_secret_check" || -z "$preserve_inbound" || -z "$preserve_token" || -z "$preserve_secret" || -z "$view_heading" || -z "$view_note" || -z "$view_panel" || -z "$view_status" || -z "$view_loop" || -n "$view_secret_exposure" ]]; then
+  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$email_line" || -z "$ses_line" || -z "$inbound_line" || -z "$whatsapp_line" || -z "$smtp_check" || -z "$token_check" || -z "$app_secret_check" || -z "$inbound_secret_check" || -z "$preserve_inbound" || -z "$preserve_token" || -z "$preserve_secret" || -z "$view_heading" || -z "$view_note" || -z "$view_panel" || -z "$view_status" || -z "$view_loop" || -z "$view_normalize" || -z "$view_checks_normalize" || -n "$view_secret_exposure" ]]; then
     fail \
       "settings page adds read-only provider readiness without exposing secrets or changing provider runtime files" \
-      "expected controller-driven provider readiness summary in $SETTINGS_CONTROLLER_FILE, read-only readiness panel markup in $SETTINGS_VIEW_FILE, preserved blank-secret/token save behavior, and no direct secret rendering via get_option() in the view; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; email=${email_line:-missing}; ses=${ses_line:-missing}; inbound=${inbound_line:-missing}; whatsapp=${whatsapp_line:-missing}; smtp=${smtp_check:-missing}; token=${token_check:-missing}; app_secret=${app_secret_check:-missing}; inbound_secret=${inbound_secret_check:-missing}; preserve_inbound=${preserve_inbound:-missing}; preserve_token=${preserve_token:-missing}; preserve_secret=${preserve_secret:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; panel=${view_panel:-missing}; status=${view_status:-missing}; loop=${view_loop:-missing}; view_secret_exposure=${view_secret_exposure:-none}; git_diff_mode=${git_diff_mode:-unknown}"
+      "expected controller-driven provider readiness summary in $SETTINGS_CONTROLLER_FILE, read-only readiness panel markup with normalized arrays in $SETTINGS_VIEW_FILE, preserved blank-secret/token save behavior, and no direct secret rendering via get_option() in the view; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; email=${email_line:-missing}; ses=${ses_line:-missing}; inbound=${inbound_line:-missing}; whatsapp=${whatsapp_line:-missing}; smtp=${smtp_check:-missing}; token=${token_check:-missing}; app_secret=${app_secret_check:-missing}; inbound_secret=${inbound_secret_check:-missing}; preserve_inbound=${preserve_inbound:-missing}; preserve_token=${preserve_token:-missing}; preserve_secret=${preserve_secret:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; panel=${view_panel:-missing}; status=${view_status:-missing}; loop=${view_loop:-missing}; normalize=${view_normalize:-missing}; checks=${view_checks_normalize:-missing}; view_secret_exposure=${view_secret_exposure:-none}; git_diff_mode=${git_diff_mode:-unknown}"
     return
   fi
 
@@ -2183,7 +2188,7 @@ check_settings_provider_readiness_panel() {
 }
 
 check_settings_release_readiness_panel() {
-  local controller_assignment controller_helper module_line license_line docs_line validator_line provider_line integrity_line operations_line docs_path integrity_path validator_path view_heading view_note view_loop lang_heading lang_note view_secret_exposure shell_exec_usage forbidden_webhook forbidden_whatsapp forbidden_ses git_diff_mode
+  local controller_assignment controller_helper module_line license_line docs_line validator_line provider_line integrity_line operations_line docs_path checklist_path manifest_doc_path manifest_json_path builder_path integrity_path validator_path release_validation_ready operations_ready view_heading view_note view_loop view_normalize lang_heading lang_note view_secret_exposure shell_exec_usage forbidden_webhook forbidden_whatsapp forbidden_ses git_diff_mode
   controller_assignment="$(first_fixed_match "\$data['release_readiness'] = \$this->build_release_readiness_summary(" "$SETTINGS_CONTROLLER_FILE")"
   controller_helper="$(first_match 'function[[:space:]]+build_release_readiness_summary' "$SETTINGS_CONTROLLER_FILE")"
   module_line="$(first_fixed_match "_l('marketing_release_readiness_module_metadata')" "$SETTINGS_CONTROLLER_FILE")"
@@ -2194,11 +2199,18 @@ check_settings_release_readiness_panel() {
   integrity_line="$(first_fixed_match "_l('marketing_release_readiness_integrity')" "$SETTINGS_CONTROLLER_FILE")"
   operations_line="$(first_fixed_match "_l('marketing_release_readiness_operations')" "$SETTINGS_CONTROLLER_FILE")"
   docs_path="$(first_fixed_match "'/README.md'" "$SETTINGS_CONTROLLER_FILE")"
+  checklist_path="$(first_fixed_match "'/docs/PRODUCTION_CHECKLIST.md'" "$SETTINGS_CONTROLLER_FILE")"
+  manifest_doc_path="$(first_fixed_match "'/docs/RELEASE_MANIFEST.md'" "$SETTINGS_CONTROLLER_FILE")"
+  manifest_json_path="$(first_fixed_match "'/release/manifest.json'" "$SETTINGS_CONTROLLER_FILE")"
+  builder_path="$(first_fixed_match "'/scripts/build_release_package.sh'" "$SETTINGS_CONTROLLER_FILE")"
   integrity_path="$(first_fixed_match "'/scripts/verify_phase4_integrity_runtime.php'" "$SETTINGS_CONTROLLER_FILE")"
   validator_path="$(first_fixed_match "'/scripts/verify_release_package.sh'" "$SETTINGS_CONTROLLER_FILE")"
+  release_validation_ready="$(first_fixed_match '$releaseValidationReady = is_file($releaseValidatorPath)' "$SETTINGS_CONTROLLER_FILE")"
+  operations_ready="$(first_fixed_match '$operationsReady = is_file($operationsPath)' "$SETTINGS_CONTROLLER_FILE")"
   view_heading="$(first_fixed_match "_l('marketing_release_readiness_heading')" "$SETTINGS_VIEW_FILE")"
   view_note="$(first_fixed_match "_l('marketing_release_readiness_note')" "$SETTINGS_VIEW_FILE")"
   view_loop="$(first_fixed_match "<?php foreach (\$release_readiness as \$readinessItem) { ?>" "$SETTINGS_VIEW_FILE")"
+  view_normalize="$(first_fixed_match '$normalizedReleaseReadiness = [];' "$SETTINGS_VIEW_FILE")"
   lang_heading="$(first_fixed_match "\$lang['marketing_release_readiness_heading']" "modules/marketing/language/english/marketing_lang.php")"
   lang_note="$(first_fixed_match "\$lang['marketing_release_readiness_note']" "modules/marketing/language/english/marketing_lang.php")"
   view_secret_exposure="$(grep -nE -- "license_key|access_token|app_secret|webhook_verify_token|inbound_email_secret" "$SETTINGS_VIEW_FILE" | grep 'release_readiness' || true)"
@@ -2208,10 +2220,10 @@ check_settings_release_readiness_panel() {
   forbidden_ses="$(git_changed_path_if_available modules/marketing/libraries/Marketing_ses_sns.php)"
   git_diff_mode="$(git_worktree_available && printf 'git-worktree' || printf 'no-git-worktree')"
 
-  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$module_line" || -z "$license_line" || -z "$docs_line" || -z "$validator_line" || -z "$provider_line" || -z "$integrity_line" || -z "$operations_line" || -z "$docs_path" || -z "$integrity_path" || -z "$validator_path" || -z "$view_heading" || -z "$view_note" || -z "$view_loop" || -z "$lang_heading" || -z "$lang_note" || -n "$view_secret_exposure" || -n "$shell_exec_usage" ]]; then
+  if [[ -z "$controller_assignment" || -z "$controller_helper" || -z "$module_line" || -z "$license_line" || -z "$docs_line" || -z "$validator_line" || -z "$provider_line" || -z "$integrity_line" || -z "$operations_line" || -z "$docs_path" || -z "$checklist_path" || -z "$manifest_doc_path" || -z "$manifest_json_path" || -z "$builder_path" || -z "$integrity_path" || -z "$validator_path" || -z "$release_validation_ready" || -z "$operations_ready" || -z "$view_heading" || -z "$view_note" || -z "$view_loop" || -z "$view_normalize" || -z "$lang_heading" || -z "$lang_note" || -n "$view_secret_exposure" || -n "$shell_exec_usage" ]]; then
     fail \
       "settings page adds read-only release readiness without shell execution or runtime file changes" \
-      "expected controller-driven release readiness summary, settings-page panel markup, language strings, module-relative doc/validator/integrity file checks, no secret rendering, and no shell execution; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; module=${module_line:-missing}; license=${license_line:-missing}; docs=${docs_line:-missing}; validator=${validator_line:-missing}; provider=${provider_line:-missing}; integrity=${integrity_line:-missing}; operations=${operations_line:-missing}; docs_path=${docs_path:-missing}; integrity_path=${integrity_path:-missing}; validator_path=${validator_path:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; loop=${view_loop:-missing}; lang_heading=${lang_heading:-missing}; lang_note=${lang_note:-missing}; secret=${view_secret_exposure:-none}; shell=${shell_exec_usage:-none}; git_diff_mode=${git_diff_mode:-unknown}"
+      "expected controller-driven release readiness summary, settings-page panel markup with normalized arrays, language strings, module-relative doc/validator/build/manifest/integrity file checks, no secret rendering, and no shell execution; assignment=${controller_assignment:-missing}; helper=${controller_helper:-missing}; module=${module_line:-missing}; license=${license_line:-missing}; docs=${docs_line:-missing}; validator=${validator_line:-missing}; provider=${provider_line:-missing}; integrity=${integrity_line:-missing}; operations=${operations_line:-missing}; docs_path=${docs_path:-missing}; checklist=${checklist_path:-missing}; manifest_doc=${manifest_doc_path:-missing}; manifest_json=${manifest_json_path:-missing}; builder=${builder_path:-missing}; integrity_path=${integrity_path:-missing}; validator_path=${validator_path:-missing}; release_validation_ready=${release_validation_ready:-missing}; operations_ready=${operations_ready:-missing}; heading=${view_heading:-missing}; note=${view_note:-missing}; loop=${view_loop:-missing}; normalize=${view_normalize:-missing}; lang_heading=${lang_heading:-missing}; lang_note=${lang_note:-missing}; secret=${view_secret_exposure:-none}; shell=${shell_exec_usage:-none}; git_diff_mode=${git_diff_mode:-unknown}"
     return
   fi
 
@@ -2247,7 +2259,7 @@ check_dashboard_operator_ui_structure() {
 }
 
 check_marketing_reports_surface() {
-  local controller_method controller_recent_campaigns controller_recent_activity controller_view menu_item dashboard_campaigns dashboard_activity dashboard_reset reports_title reports_note reports_campaigns reports_activity reports_campaigns_table reports_activity_table campaigns_length activity_length reset_campaigns reset_activity reset_button_type reset_handler reset_guard reset_search reset_column_search reset_order reset_length reset_page reset_draw reset_label reset_note reset_form
+  local controller_method controller_recent_campaigns controller_recent_activity controller_view menu_item dashboard_campaigns dashboard_activity dashboard_reset reports_title reports_note reports_campaigns reports_activity reports_campaigns_table reports_activity_table reports_campaigns_normalize reports_activity_normalize reports_cleanup_normalize campaigns_length activity_length reset_campaigns reset_activity reset_button_type reset_handler reset_guard reset_search reset_column_search reset_order reset_length reset_page reset_draw reset_label reset_note reset_form
   controller_method="$(first_match 'function[[:space:]]+reports' "$MARKETING_CONTROLLER_FILE")"
   controller_recent_campaigns="$(first_fixed_match "get_recent_campaigns(5)" "$MARKETING_CONTROLLER_FILE")"
   controller_recent_activity="$(first_fixed_match "get_recent_activity(10)" "$MARKETING_CONTROLLER_FILE")"
@@ -2262,6 +2274,9 @@ check_marketing_reports_surface() {
   reports_activity="$(first_fixed_match "_l('marketing_reports_recent_activity')" "$REPORTS_VIEW_FILE")"
   reports_campaigns_table="$(first_fixed_match 'marketing-reports-recent-campaigns-table' "$REPORTS_VIEW_FILE")"
   reports_activity_table="$(first_fixed_match 'marketing-reports-recent-activity-table' "$REPORTS_VIEW_FILE")"
+  reports_campaigns_normalize="$(first_fixed_match '$normalizedRecentCampaigns = [];' "$REPORTS_VIEW_FILE")"
+  reports_activity_normalize="$(first_fixed_match '$normalizedRecentActivity = [];' "$REPORTS_VIEW_FILE")"
+  reports_cleanup_normalize="$(first_fixed_match '$reports_cleanup = array_merge([' "$REPORTS_VIEW_FILE")"
   campaigns_length="$(first_fixed_match 'data-marketing-default-length="25"' "$REPORTS_VIEW_FILE")"
   activity_length="$(printf '%s\n' "$campaigns_length" | tail -n 1)"
   reset_campaigns="$(first_fixed_match 'data-marketing-reset-table="campaigns"' "$REPORTS_VIEW_FILE")"
@@ -2279,10 +2294,10 @@ check_marketing_reports_surface() {
   reset_note="$(first_fixed_match "marketing_table_reset_view_note" "$REPORTS_VIEW_FILE")"
   reset_form="$(grep -nF "form_open(admin_url('marketing/reset" "$REPORTS_VIEW_FILE" || true)"
 
-  if [[ -z "$controller_method" || -z "$controller_recent_campaigns" || -z "$controller_recent_activity" || -z "$controller_view" || -z "$menu_item" || -n "$dashboard_campaigns" || -n "$dashboard_activity" || -n "$dashboard_reset" || -z "$reports_title" || -z "$reports_note" || -z "$reports_campaigns" || -z "$reports_activity" || -z "$reports_campaigns_table" || -z "$reports_activity_table" || -z "$campaigns_length" || -z "$activity_length" || -z "$reset_campaigns" || -z "$reset_activity" || -z "$reset_button_type" || -z "$reset_handler" || -z "$reset_guard" || -z "$reset_search" || -z "$reset_column_search" || -z "$reset_order" || -z "$reset_length" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -z "$reset_note" || -n "$reset_form" ]]; then
+  if [[ -z "$controller_method" || -z "$controller_recent_campaigns" || -z "$controller_recent_activity" || -z "$controller_view" || -z "$menu_item" || -n "$dashboard_campaigns" || -n "$dashboard_activity" || -n "$dashboard_reset" || -z "$reports_title" || -z "$reports_note" || -z "$reports_campaigns" || -z "$reports_activity" || -z "$reports_campaigns_table" || -z "$reports_activity_table" || -z "$reports_campaigns_normalize" || -z "$reports_activity_normalize" || -z "$reports_cleanup_normalize" || -z "$campaigns_length" || -z "$activity_length" || -z "$reset_campaigns" || -z "$reset_activity" || -z "$reset_button_type" || -z "$reset_handler" || -z "$reset_guard" || -z "$reset_search" || -z "$reset_column_search" || -z "$reset_order" || -z "$reset_length" || -z "$reset_page" || -z "$reset_draw" || -z "$reset_label" || -z "$reset_note" || -n "$reset_form" ]]; then
     fail \
       "marketing reports page contains recent tables and client-side reset controls while dashboard stays operational" \
-      "expected reports controller/view/menu wiring, dashboard removal of recent campaign/activity tables, and report-page-only DataTables reset controls with 25-row defaults; method=${controller_method:-missing}; campaigns=${controller_recent_campaigns:-missing}; activity=${controller_recent_activity:-missing}; view=${controller_view:-missing}; menu=${menu_item:-missing}; dashboard_campaigns=${dashboard_campaigns:-unexpected}; dashboard_activity=${dashboard_activity:-unexpected}; dashboard_reset=${dashboard_reset:-unexpected}; reports_title=${reports_title:-missing}; reports_note=${reports_note:-missing}; reports_campaigns=${reports_campaigns:-missing}; reports_activity=${reports_activity:-missing}; campaigns_table=${reports_campaigns_table:-missing}; activity_table=${reports_activity_table:-missing}; campaigns_length=${campaigns_length:-missing}; activity_length=${activity_length:-missing}; reset_campaigns=${reset_campaigns:-missing}; reset_activity=${reset_activity:-missing}; button=${reset_button_type:-missing}; handler=${reset_handler:-missing}; guard=${reset_guard:-missing}; search=${reset_search:-missing}; column_search=${reset_column_search:-missing}; order=${reset_order:-missing}; length=${reset_length:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; note=${reset_note:-missing}; reset_form=${reset_form:-none}"
+      "expected reports controller/view/menu wiring, normalized recent/report-cleanup arrays, dashboard removal of recent campaign/activity tables, and report-page-only DataTables reset controls with 25-row defaults; method=${controller_method:-missing}; campaigns=${controller_recent_campaigns:-missing}; activity=${controller_recent_activity:-missing}; view=${controller_view:-missing}; menu=${menu_item:-missing}; dashboard_campaigns=${dashboard_campaigns:-unexpected}; dashboard_activity=${dashboard_activity:-unexpected}; dashboard_reset=${dashboard_reset:-unexpected}; reports_title=${reports_title:-missing}; reports_note=${reports_note:-missing}; reports_campaigns=${reports_campaigns:-missing}; reports_activity=${reports_activity:-missing}; campaigns_table=${reports_campaigns_table:-missing}; activity_table=${reports_activity_table:-missing}; campaigns_normalize=${reports_campaigns_normalize:-missing}; activity_normalize=${reports_activity_normalize:-missing}; cleanup_normalize=${reports_cleanup_normalize:-missing}; campaigns_length=${campaigns_length:-missing}; activity_length=${activity_length:-missing}; reset_campaigns=${reset_campaigns:-missing}; reset_activity=${reset_activity:-missing}; button=${reset_button_type:-missing}; handler=${reset_handler:-missing}; guard=${reset_guard:-missing}; search=${reset_search:-missing}; column_search=${reset_column_search:-missing}; order=${reset_order:-missing}; length=${reset_length:-missing}; page=${reset_page:-missing}; draw=${reset_draw:-missing}; label=${reset_label:-missing}; note=${reset_note:-missing}; reset_form=${reset_form:-none}"
     return
   fi
 
