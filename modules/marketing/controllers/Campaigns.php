@@ -1452,14 +1452,14 @@ class Campaigns extends AdminController
     private function get_builder_company_address_config()
     {
         $lines = [];
-        $perfexCompanyName = $this->get_first_non_empty_option(['companyname', 'company_name']);
-        $perfexCompanyAddress = $this->get_first_non_empty_option(['companyaddress', 'company_address', 'address', 'companyinfo_address', 'street']);
-        $perfexCity = $this->get_first_non_empty_option(['companycity', 'company_city', 'city']);
-        $perfexState = $this->get_first_non_empty_option(['companystate', 'company_state', 'state', 'company_state_region']);
-        $perfexZip = $this->get_first_non_empty_option(['companyzip', 'company_zip', 'zip_code', 'zipcode', 'postal_code', 'company_zip_code', 'company_postal_code']);
-        $perfexCountry = $this->get_first_non_empty_option(['company_country_code', 'companycountry', 'company_country', 'country_code', 'country']);
-        $perfexPhone = $this->get_first_non_empty_option(['company_phone', 'company_phonenumber', 'companyphone', 'phonenumber', 'phone']);
-        $perfexVat = $this->get_first_non_empty_option(['company_vat', 'companyvat', 'company_vat_number', 'vat_number', 'vatnumber']);
+        $perfexCompanyName = $this->get_first_non_empty_option(['invoice_company_name', 'companyname', 'company_name']);
+        $perfexCompanyAddress = $this->get_first_non_empty_option(['invoice_company_address', 'companyaddress', 'company_address', 'address', 'companyinfo_address', 'street']);
+        $perfexCity = $this->get_first_non_empty_option(['invoice_company_city', 'companycity', 'company_city', 'city']);
+        $perfexState = $this->get_first_non_empty_option(['invoice_company_state', 'company_state', 'companystate', 'state', 'company_state_region']);
+        $perfexZip = $this->get_first_non_empty_option(['invoice_company_postal_code', 'invoice_company_zip', 'companyzip', 'company_zip', 'zip_code', 'zipcode', 'postal_code', 'company_zip_code', 'company_postal_code']);
+        $perfexCountry = $this->get_first_non_empty_option(['invoice_company_country_code', 'company_country_code', 'companycountry', 'company_country', 'country_code', 'country']);
+        $perfexPhone = $this->get_first_non_empty_option(['invoice_company_phonenumber', 'invoice_company_phone', 'company_phone', 'company_phonenumber', 'companyphone', 'phonenumber', 'phone']);
+        $perfexVat = $this->get_first_non_empty_option(['invoice_company_vat', 'company_vat', 'companyvat', 'company_vat_number', 'vat_number', 'vatnumber']);
         $perfexCompanyInfoFormat = $this->get_first_non_empty_option(['company_info_format', 'company_info']);
 
         $this->append_unique_company_line($lines, $perfexCompanyName);
