@@ -144,10 +144,33 @@ foreach ($errorMessages as $errorMessage) {
 // If the builder/html content already contains an unsubscribe token in any common encoding,
 // don't show the unsubscribe save warning even if the server returned that error.
 if ($hasUnsubscribeSaveError) {
-    $combined = strtolower(trim((string) ($htmlContentValue . ' ' . $builderStateValue)));
-    $decoded = strtolower(html_entity_decode(urldecode($combined)));
-    if (strpos($decoded, '{{unsubscribe_url}}') !== false || strpos($decoded, '%7b%7bunsubscribe_url%7d%7d') !== false || strpos($decoded, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false) {
-        $hasUnsubscribeSaveError = false;
+    $combined = trim((string) ($htmlContentValue . ' ' . $builderStateValue));
+    $candidates = [strtolower($combined)];
+    $decoded = rawurldecode($combined);
+    $entityDecoded = html_entity_decode($combined, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    if ($decoded !== $combined) {
+        $candidates[] = strtolower($decoded);
+    }
+
+    if ($entityDecoded !== $combined) {
+        $candidates[] = strtolower($entityDecoded);
+    }
+
+    foreach ($candidates as $candidate) {
+        if (strpos($candidate, '{{unsubscribe_url}}') !== false
+            || strpos($candidate, '%7b%7bunsubscribe_url%7d%7d') !== false
+            || strpos($candidate, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
+            || strpos($candidate, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false
+            || strpos($candidate, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false
+            || strpos($candidate, 'href="{{unsubscribe_url}}"') !== false
+            || strpos($candidate, '/marketing/unsubscribe/') !== false
+            || strpos($candidate, '>unsubscribe<') !== false
+            || strpos($candidate, 'unsubscribe here') !== false
+        ) {
+            $hasUnsubscribeSaveError = false;
+            break;
+        }
     }
 }
 ?>
@@ -263,7 +286,7 @@ if ($hasUnsubscribeSaveError) {
                                     <div class="marketing-campaign-audience-meta">
                                         <div class="marketing-campaign-audience-meta-row">
                                             <span class="marketing-campaign-audience-meta-label"><?= _l('marketing_campaign_audience_selected_label'); ?></span>
-                                            <span class="marketing-campaign-audience-chip"><?= html_escape($audienceSummaryLabel); ?></span>
+                                            <span class="marketing-campaign-audience-chip" id="marketing-campaign-audience-selected-label" data-empty-label="<?= html_escape(_l('marketing_campaign_audience_summary_none')); ?>"><?= html_escape($audienceSummaryLabel); ?></span>
                                         </div>
                                         <div class="marketing-campaign-audience-meta-row">
                                             <span class="marketing-campaign-audience-meta-label"><?= _l('marketing_campaign_audience_segment_label'); ?></span>
@@ -1037,10 +1060,25 @@ if ($hasUnsubscribeSaveError) {
             var whatsappFields = document.getElementById('marketing-whatsapp-fields');
             var emailFields = document.querySelectorAll('.marketing-email-fields');
             var listField = document.getElementById('list_id');
+            var selectedAudienceLabel = document.getElementById('marketing-campaign-audience-selected-label');
             var campaignIdField = document.getElementById('marketing-campaign-id');
             var modeFields = document.querySelectorAll('input[name="targeting_send_mode"]');
             var targetingFields = document.getElementById('marketing-targeting-fields');
             var config = window.MarketingCampaignBuilderConfig || {};
+
+            function updateSelectedAudienceLabel() {
+                var selectedOption;
+                var label;
+
+                if (!selectedAudienceLabel || !listField) {
+                    return;
+                }
+
+                selectedOption = listField.options && listField.selectedIndex >= 0 ? listField.options[listField.selectedIndex] : null;
+                label = selectedOption && selectedOption.value ? String(selectedOption.text || '').trim() : '';
+
+                selectedAudienceLabel.textContent = label || selectedAudienceLabel.getAttribute('data-empty-label') || <?= json_encode(_l('marketing_campaign_audience_summary_none')); ?>;
+            }
 
             function updateTargetingState() {
                 var filtered = document.getElementById('targeting_send_mode_filtered');
@@ -1094,6 +1132,11 @@ if ($hasUnsubscribeSaveError) {
                 channelField.addEventListener('change', updateChannelState);
             }
             updateChannelState();
+
+            if (listField) {
+                listField.addEventListener('change', updateSelectedAudienceLabel);
+            }
+            updateSelectedAudienceLabel();
 
             if (!estimateButton || !estimateResult || !form || !listField || !window.jQuery) {
                 return;

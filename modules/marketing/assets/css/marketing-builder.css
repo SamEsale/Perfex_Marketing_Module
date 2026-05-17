@@ -1118,12 +1118,8 @@
     content: '−';
 }
 
-.marketing-builder-palette-group--static .marketing-builder-palette-group-title:after {
-    content: '';
-}
-
 .marketing-builder-palette-group-title--static {
-    cursor: default;
+    cursor: pointer;
 }
 
 .marketing-builder-palette-grid {
@@ -1140,6 +1136,10 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.marketing-builder-palette-group:not(.is-open) .marketing-builder-palette-static-body {
+    display: none;
 }
 
 .marketing-builder-sidebar-select {

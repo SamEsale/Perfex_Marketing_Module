@@ -63,7 +63,7 @@
         return /^(https?:\/\/|mailto:|tel:|\{\{unsubscribe_url\}\})/i.test(normalized);
     }
 
-    function hasUnsubscribeToken(value) {
+    function containsUnsubscribeTokenOrLink(value) {
         var normalized = String(value || '');
         var candidates = [normalized];
         var decoder = document.createElement('textarea');
@@ -72,7 +72,11 @@
             '%7b%7bunsubscribe_url%7d%7d',
             '&#123;&#123;unsubscribe_url&#125;&#125;',
             '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
-            '\\u007b\\u007bunsubscribe_url\\u007d\\u007d'
+            '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
+            'href="{{unsubscribe_url}}"',
+            '/marketing/unsubscribe/',
+            '>unsubscribe<',
+            'unsubscribe here'
         ];
 
         try {
@@ -89,6 +93,10 @@
                 return haystack.indexOf(pattern) !== -1;
             });
         });
+    }
+
+    function hasUnsubscribeToken(value) {
+        return containsUnsubscribeTokenOrLink(value);
     }
 
     function normalizePlainTextValue(value) {
@@ -1163,9 +1171,11 @@
                 + '<option value="conference_event">' + escapeHtml(strings.presetConferenceEvent || 'Conference / Event Invitation') + '</option>';
         }
 
-        function renderStaticPaletteSection(title, bodyHtml, extraClass) {
-            return '<div class="marketing-builder-palette-group marketing-builder-palette-group--static is-open' + (extraClass ? ' ' + extraClass : '') + '">'
-                + '<div class="marketing-builder-palette-group-title marketing-builder-palette-group-title--static">' + escapeHtml(title) + '</div>'
+        function renderStaticPaletteSection(id, title, bodyHtml, extraClass) {
+            var isOpen = !!state.paletteSearch || state.openCategory === id;
+
+            return '<div class="marketing-builder-palette-group marketing-builder-palette-group--static' + (isOpen ? ' is-open' : '') + (extraClass ? ' ' + extraClass : '') + '" data-category="' + escapeHtml(id) + '">'
+                + '<button type="button" class="marketing-builder-palette-group-title marketing-builder-palette-group-title--static" data-category-toggle="' + escapeHtml(id) + '">' + escapeHtml(title) + '</button>'
                 + '<div class="marketing-builder-palette-static-body">' + bodyHtml + '</div>'
                 + '</div>';
         }
@@ -1189,6 +1199,7 @@
 
         function renderSidebarLoadTemplateSection() {
             return renderStaticPaletteSection(
+                'load-template',
                 strings.applyPreset || 'Load Template',
                 '<div class="form-group no-margin">'
                     + '<select id="marketing-builder-preset-select" class="form-control marketing-builder-sidebar-select">'
@@ -1206,6 +1217,7 @@
                 : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet. Update them in Marketing Settings first.');
 
             return renderStaticPaletteSection(
+                'compliance',
                 strings.compliance || 'Compliance',
                 '<span id="marketing-builder-unsubscribe-status" class="marketing-builder-status-chip marketing-builder-status-chip--missing">' + escapeHtml(strings.unsubscribeMissing || 'Missing unsubscribe link') + '</span>'
                 + '<div class="marketing-builder-sidebar-action-list marketing-builder-sidebar-action-list--grid">'
@@ -1221,6 +1233,7 @@
 
         function renderSidebarMergeTagsSection() {
             return renderStaticPaletteSection(
+                'merge-tags',
                 strings.insertMergeTag || 'Insert Merge Tags',
                 '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.personalizeHelp || 'Insert personalization placeholders at the current cursor position inside the selected block.') + '</p>'
                 + renderMergeTagButtons(),
@@ -1235,6 +1248,7 @@
                 : (strings.previewDesktop || 'Preview Desktop');
 
             return renderStaticPaletteSection(
+                mode === 'mobile' ? 'preview-mobile' : 'preview-desktop',
                 label,
                 '<button type="button" class="marketing-builder-sidebar-action-card marketing-builder-sidebar-action-card--primary" id="' + escapeHtml(buttonId) + '" data-sidebar-action="' + escapeHtml(mode === 'mobile' ? 'preview-mobile' : 'preview-desktop') + '">'
                 + '<span class="marketing-builder-sidebar-action-card-label">' + escapeHtml(label) + '</span>'
@@ -3672,8 +3686,6 @@
                 } else if (action === 'insert-company-address') {
                     insertOrFocusCompanyAddressBlock();
                 } else if (action === 'use-saved-company-address') {
-                    // Ensure the company address block exists / is focused, then explicitly
-                    // apply the saved company address data if the applier helper exists.
                     insertOrFocusCompanyAddressBlock();
                     try {
                         var targetBlock = null;
@@ -3684,18 +3696,17 @@
                         }
 
                         if (typeof applySavedCompanyAddress === 'function' && targetBlock) {
-                            // Only apply saved settings when configuration indicates they exist.
                             if (typeof companyAddressConfig !== 'undefined' && companyAddressConfig && companyAddressConfig.configured) {
                                 applySavedCompanyAddress(targetBlock);
                                 setActiveBlock(targetBlock);
                                 syncFields();
                             } else {
-                                // Fallback: still ensure the block is focused so user can edit it.
+                                window.alert(strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet.');
                                 setActiveBlock(targetBlock);
+                                syncFields();
                             }
                         }
                     } catch (err) {
-                        // Defensive: don't let unexpected errors break the palette.
                         console.error('use-saved-company-address handler failed:', err);
                     }
                 } else if (action === 'insert-email-footer') {

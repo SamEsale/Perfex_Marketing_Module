@@ -1186,6 +1186,10 @@ class Campaigns extends AdminController
                 || strpos($haystack, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
                 || strpos($haystack, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false
                 || strpos($haystack, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false
+                || strpos($haystack, 'href="{{unsubscribe_url}}"') !== false
+                || strpos($haystack, '/marketing/unsubscribe/') !== false
+                || strpos($haystack, '>unsubscribe<') !== false
+                || strpos($haystack, 'unsubscribe here') !== false
             ) {
                 return true;
             }
@@ -1447,17 +1451,27 @@ class Campaigns extends AdminController
 
     private function get_builder_company_address_config()
     {
-        // Build company address config strictly from Perfex global company options.
         $lines = [];
+        $getOptionFallback = static function (array $keys) {
+            foreach ($keys as $key) {
+                $value = trim((string) get_option($key));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
 
-        $perfexCompanyName = trim((string) get_option('companyname'));
-        $perfexCompanyAddress = trim((string) get_option('company_address'));
-        $perfexCity = trim((string) get_option('company_city'));
-        $perfexState = trim((string) get_option('company_state'));
-        $perfexZip = trim((string) get_option('company_zip'));
-        $perfexCountry = trim((string) get_option('company_country_code')) ?: trim((string) get_option('company_country'));
-        $perfexPhone = trim((string) get_option('company_phonenumber'));
-        $perfexVat = trim((string) get_option('company_vat'));
+            return '';
+        };
+
+        $perfexCompanyName = $getOptionFallback(['companyname', 'company_name']);
+        $perfexCompanyAddress = $getOptionFallback(['company_address', 'address', 'companyinfo_address', 'street']);
+        $perfexCity = $getOptionFallback(['company_city', 'city']);
+        $perfexState = $getOptionFallback(['company_state', 'state', 'company_state_region']);
+        $perfexZip = $getOptionFallback(['company_zip', 'zip_code', 'zipcode', 'postal_code', 'company_zip_code', 'company_postal_code']);
+        $perfexCountry = $getOptionFallback(['company_country_code', 'country_code', 'company_country', 'country']);
+        $perfexPhone = $getOptionFallback(['company_phonenumber', 'company_phone', 'phonenumber', 'phone']);
+        $perfexVat = $getOptionFallback(['company_vat', 'company_vat_number', 'vat_number', 'vatnumber']);
+        $perfexCompanyInfoFormat = $getOptionFallback(['company_info_format', 'company_info']);
 
         if ($perfexCompanyName !== '') {
             $lines[] = $perfexCompanyName;
@@ -1490,11 +1504,36 @@ class Campaigns extends AdminController
         }
 
         if ($perfexPhone !== '') {
-            $lines[] = $perfexPhone;
+            $lines[] = 'Phone: ' . $perfexPhone;
         }
 
         if ($perfexVat !== '') {
-            $lines[] = $perfexVat;
+            $lines[] = 'VAT: ' . $perfexVat;
+        }
+
+        if ($perfexCompanyInfoFormat !== '') {
+            $formattedInfo = strtr($perfexCompanyInfoFormat, [
+                '{company_name}' => $perfexCompanyName,
+                '{address}' => $perfexCompanyAddress,
+                '{city}' => $perfexCity,
+                '{state}' => $perfexState,
+                '{zip_code}' => $perfexZip,
+                '{country}' => $perfexCountry,
+                '{country_code}' => $perfexCountry,
+                '{phone}' => $perfexPhone,
+                '{vat_number}' => $perfexVat,
+                '{vat_number_with_label}' => $perfexVat !== '' ? 'VAT: ' . $perfexVat : '',
+            ]);
+
+            $formattedInfo = preg_replace('/<br\s*\/?>/i', "\n", (string) $formattedInfo);
+            $formattedLines = preg_split('/\r?\n/', html_entity_decode(strip_tags((string) $formattedInfo), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+            foreach ((array) $formattedLines as $formattedLine) {
+                $formattedLine = trim((string) $formattedLine);
+                if ($formattedLine !== '' && !in_array($formattedLine, $lines, true)) {
+                    $lines[] = $formattedLine;
+                }
+            }
         }
 
         $configured = ($perfexCompanyName !== '' || $perfexCompanyAddress !== '' || $perfexCity !== '' || $perfexState !== '' || $perfexZip !== '' || $perfexCountry !== '' || $perfexPhone !== '' || $perfexVat !== '');
