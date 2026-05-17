@@ -388,6 +388,17 @@
             };
         }
 
+        function isLegacyCompanyAddressPlaceholderValue(value) {
+            var normalized = String(value || '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+
+            return normalized === 'your company 123 market street city, state'
+                || normalized === 'your company 123 market street city,state';
+        }
+
         function hasConfiguredCompanyAddress() {
             return !!companyAddressConfig.configured;
         }
@@ -1153,12 +1164,13 @@
             syncFields();
         }
 
-        function applySavedCompanyAddress(block) {
+        function applySavedCompanyAddress(block, options) {
             var payload;
             var sanitizedHtml;
             var textValue;
             var surfaceNode;
             var sidebarEditorNode;
+            var settings = options || {};
 
             if (!block) {
                 return;
@@ -1187,10 +1199,46 @@
                 syncSidebarEditorFromBlock();
             }
 
-            syncFields();
-            if (state.activeBlock === block) {
+            if (!settings.skipSync) {
+                syncFields();
+            }
+            if (!settings.skipRender && state.activeBlock === block) {
                 renderProperties();
             }
+        }
+
+        function shouldNormalizeSavedCompanyAddressBlock(block) {
+            var type;
+            var addressNode;
+            var currentText;
+            var savedPayload;
+
+            if (!block || !block.dataset) {
+                return false;
+            }
+
+            type = String(block.dataset.builderBlock || '');
+            if (type !== 'company_address' && type !== 'footer' && type !== 'email_footer') {
+                return false;
+            }
+
+            addressNode = block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text');
+            if (!addressNode) {
+                return false;
+            }
+
+            savedPayload = getSavedCompanyAddressPayload();
+            currentText = String(addressNode.textContent || '').replace(/\s+/g, ' ').trim();
+
+            if (type === 'footer' || type === 'email_footer') {
+                return isLegacyCompanyAddressPlaceholderValue(addressNode.innerHTML)
+                    || isLegacyCompanyAddressPlaceholderValue(currentText)
+                    || String(addressNode.getAttribute('data-saved-company-address-source') || '').trim() === ''
+                    || String(addressNode.getAttribute('data-saved-company-address-text') || '').trim() !== String(savedPayload.text || '').trim();
+            }
+
+            return isLegacyCompanyAddressPlaceholderValue(addressNode.innerHTML)
+                || isLegacyCompanyAddressPlaceholderValue(currentText);
         }
 
         function isSavedCompanyAddressTargetBlock(block) {
@@ -2166,6 +2214,9 @@
 
             if (block.dataset.builderBlock === 'hero') {
                 normalizeHeroBlock(block);
+            }
+            if (shouldNormalizeSavedCompanyAddressBlock(block)) {
+                applySavedCompanyAddress(block, { skipSync: true, skipRender: true });
             }
             ensureComplianceUnsubscribeLink(block);
             if (block.dataset.builderBlock === 'social') {
