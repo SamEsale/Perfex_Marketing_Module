@@ -1512,7 +1512,7 @@ check_campaign_duplicate_builder_personalization_features() {
   js_social_meta_youtube="$(first_fixed_match 'data-youtube=""' "$BUILDER_JS_ASSET_FILE")"
   js_social_meta_linkedin="$(first_fixed_match 'data-linkedin=""' "$BUILDER_JS_ASSET_FILE")"
   js_social_meta_website="$(first_fixed_match 'data-website=""' "$BUILDER_JS_ASSET_FILE")"
-  js_social_serialize_allowlist="$(first_fixed_match 'node.classList.contains(\'mb-social-meta\')' "$BUILDER_JS_ASSET_FILE")"
+  js_social_serialize_allowlist="$(first_fixed_match "return normalized === 'mb-social-meta';" "$BUILDER_JS_ASSET_FILE")"
   js_social_editor_facebook="$(first_fixed_match 'data-control="social-facebook"' "$BUILDER_JS_ASSET_FILE")"
   js_social_editor_instagram="$(first_fixed_match 'data-control="social-instagram"' "$BUILDER_JS_ASSET_FILE")"
   js_social_editor_twitter="$(first_fixed_match 'data-control="social-twitter"' "$BUILDER_JS_ASSET_FILE")"
@@ -3336,6 +3336,47 @@ check_events_and_dashboard_guards
 check_public_links_filtering
 check_click_dedupe_window
 check_tracking_link_dedupe
+check_social_icons_persisted_round_trip() {
+  local meta_seed_line meta_write_line meta_read_line root_mirror_line defs_line controls_line recursive_tree_line recursive_query_line tree_sync_count meta_class_keep_line meta_attr_keep_line sync_line html_line builder_line sync_pos html_pos builder_pos state_clone_sync_count empty_hide_line non_empty_show_line icon_svg_line text_label_leaks controller_sanitize_line controller_social_strip
+
+  meta_seed_line="$(first_fixed_match '<div class="mb-social-meta hide" data-facebook="" data-instagram="" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>' "$BUILDER_JS_ASSET_FILE")"
+  meta_write_line="$(first_fixed_match "meta.setAttribute('data-' + definition.key, resolvedValue);" "$BUILDER_JS_ASSET_FILE")"
+  meta_read_line="$(first_fixed_match "var metaValue = meta ? String(meta.getAttribute('data-' + definition.key) || '').trim() : '';" "$BUILDER_JS_ASSET_FILE")"
+  root_mirror_line="$(first_fixed_match "block.setAttribute(getSocialDataAttributeName(definition.key), resolvedValue);" "$BUILDER_JS_ASSET_FILE")"
+  defs_line="$(first_fixed_match "{ key: 'website', selector: '.mb-social-website', label: 'Website' }" "$BUILDER_JS_ASSET_FILE")"
+  controls_line="$(first_fixed_match "control === 'social-facebook' || control === 'social-instagram' || control === 'social-twitter' || control === 'social-youtube' || control === 'social-linkedin' || control === 'social-website'" "$BUILDER_JS_ASSET_FILE")"
+  recursive_tree_line="$(first_match 'function[[:space:]]+syncSocialBlockTree' "$BUILDER_JS_ASSET_FILE")"
+  recursive_query_line="$(first_fixed_match "canvas.querySelectorAll('.mb-block[data-builder-block=\"social\"]')" "$BUILDER_JS_ASSET_FILE")"
+  tree_sync_count="$(grep -cF 'syncSocialBlockTree(block, clone);' "$BUILDER_JS_ASSET_FILE" || true)"
+  meta_class_keep_line="$(first_fixed_match "return normalized === 'mb-social-meta';" "$BUILDER_JS_ASSET_FILE")"
+  meta_attr_keep_line="$(first_fixed_match '&& isKnownSocialMetaAttribute(name)) {' "$BUILDER_JS_ASSET_FILE")"
+  sync_line="$(first_fixed_match 'syncCanvasDerivedBlockState();' "$BUILDER_JS_ASSET_FILE")"
+  html_line="$(first_fixed_match 'htmlField.value = html;' "$BUILDER_JS_ASSET_FILE")"
+  builder_line="$(first_fixed_match 'builderStateField.value = serializeBuilderState();' "$BUILDER_JS_ASSET_FILE")"
+  state_clone_sync_count="$(grep -cF 'updateSocialLinks(targetBlock, getPersistedSocialValues(sourceBlock, sourceMeta));' "$BUILDER_JS_ASSET_FILE" || true)"
+  empty_hide_line="$(first_fixed_match "link.style.display = 'none';" "$BUILDER_JS_ASSET_FILE")"
+  non_empty_show_line="$(first_fixed_match "link.style.display = 'inline-flex';" "$BUILDER_JS_ASSET_FILE")"
+  icon_svg_line="$(first_fixed_match '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">' "$BUILDER_JS_ASSET_FILE")"
+  text_label_leaks="$(grep -nE '>(Facebook|Instagram|X|YouTube|LinkedIn|Website)</a>' "$BUILDER_JS_ASSET_FILE" || true)"
+  controller_sanitize_line="$(first_match 'function[[:space:]]+sanitize_campaign_html' "$CAMPAIGNS_CONTROLLER_FILE")"
+  controller_social_strip="$(grep -nE 'mb-social-meta|data-facebook|data-instagram|data-twitter|data-youtube|data-linkedin|data-website|data-social-facebook|data-social-instagram|data-social-twitter|data-social-youtube|data-social-linkedin|data-social-website' "$CAMPAIGNS_CONTROLLER_FILE" || true)"
+
+  sync_pos="${sync_line%%:*}"
+  html_pos="${html_line%%:*}"
+  builder_pos="${builder_line%%:*}"
+
+  if [[ -z "$meta_seed_line" || -z "$meta_write_line" || -z "$meta_read_line" || -z "$root_mirror_line" || -z "$defs_line" || -z "$controls_line" || -z "$recursive_tree_line" || -z "$recursive_query_line" || "$tree_sync_count" -lt 2 || -z "$meta_class_keep_line" || -z "$meta_attr_keep_line" || -z "$sync_line" || -z "$html_line" || -z "$builder_line" || "$state_clone_sync_count" -lt 1 || -z "$empty_hide_line" || -z "$non_empty_show_line" || -z "$icon_svg_line" || -n "$text_label_leaks" || -z "$controller_sanitize_line" || -n "$controller_social_strip" || "$sync_pos" -ge "$html_pos" || "$sync_pos" -ge "$builder_pos" ]]; then
+    fail \
+      "social icons persist through save and reload" \
+      "expected canonical .mb-social-meta seeding/writes/reads, root mirrors, recursive clone sync before html_content and builder_state writes, icon-only rendering, empty-hide/non-empty-show behavior, preserved social metadata in serialized HTML, and no server-side social-attribute stripping; meta_seed=${meta_seed_line:-missing}; meta_write=${meta_write_line:-missing}; meta_read=${meta_read_line:-missing}; root_mirror=${root_mirror_line:-missing}; defs=${defs_line:-missing}; controls=${controls_line:-missing}; recursive_tree=${recursive_tree_line:-missing}; recursive_query=${recursive_query_line:-missing}; tree_sync_count=${tree_sync_count:-0}; meta_class_keep=${meta_class_keep_line:-missing}; meta_attr_keep=${meta_attr_keep_line:-missing}; sync=${sync_line:-missing}; html=${html_line:-missing}; builder=${builder_line:-missing}; state_clone_sync_count=${state_clone_sync_count:-0}; hide=${empty_hide_line:-missing}; show=${non_empty_show_line:-missing}; icon_svg=${icon_svg_line:-missing}; text_labels=${text_label_leaks:-none}; controller_sanitize=${controller_sanitize_line:-missing}; controller_social_strip=${controller_social_strip:-none}"
+    return
+  fi
+
+  pass \
+    "social icons persist through save and reload" \
+    "meta_seed=$meta_seed_line | meta_write=$meta_write_line | meta_read=$meta_read_line | root_mirror=$root_mirror_line | recursive_tree=$recursive_tree_line | tree_sync_count=$tree_sync_count | sync=$sync_line | html=$html_line | builder=$builder_line"
+}
+
 check_duplicate_redirect_metric_gate
 check_campaign_eligibility_semantics
 check_processing_recovery_timeout
@@ -3387,6 +3428,7 @@ check_campaign_form_footer_review_shell
 check_campaign_plain_text_placeholder_safety
 check_campaign_builder_workspace_layout
 check_campaign_duplicate_builder_personalization_features
+check_social_icons_persisted_round_trip
 check_campaign_show_command_center
 check_campaign_send_schedule_guidance
 check_campaign_reprepare_recipients_workflow

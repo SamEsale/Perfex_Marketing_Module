@@ -2119,6 +2119,38 @@
             return 'data-social-' + key;
         }
 
+        function isKnownSocialMetaAttribute(name) {
+            return /^(data-facebook|data-instagram|data-twitter|data-youtube|data-linkedin|data-website)$/.test(String(name || ''));
+        }
+
+        function isKnownSocialRootAttribute(name) {
+            return /^(data-social-facebook|data-social-instagram|data-social-twitter|data-social-youtube|data-social-linkedin|data-social-website)$/.test(String(name || ''));
+        }
+
+        function isSerializableSocialClass(node, className) {
+            var normalized = String(className || '');
+
+            if (!node || normalized === '') {
+                return false;
+            }
+
+            if (node.classList && node.classList.contains('mb-social-meta')) {
+                return normalized === 'mb-social-meta';
+            }
+
+            if (node.classList && node.classList.contains('mb-social-link')) {
+                return normalized === 'mb-social-link'
+                    || normalized === 'mb-social-facebook'
+                    || normalized === 'mb-social-instagram'
+                    || normalized === 'mb-social-twitter'
+                    || normalized === 'mb-social-youtube'
+                    || normalized === 'mb-social-linkedin'
+                    || normalized === 'mb-social-website';
+            }
+
+            return false;
+        }
+
         function getPersistedSocialValues(block, meta) {
             var values = {};
 
@@ -2301,8 +2333,44 @@
             updateSocialLinks(block, values);
         }
 
+        function getSocialBlocksForTree(root) {
+            var blocks = [];
+
+            if (!root) {
+                return blocks;
+            }
+
+            if (root.classList && root.classList.contains('mb-block') && root.dataset.builderBlock === 'social') {
+                blocks.push(root);
+            }
+
+            Array.prototype.forEach.call(root.querySelectorAll('.mb-block[data-builder-block="social"]'), function (block) {
+                blocks.push(block);
+            });
+
+            return blocks;
+        }
+
+        function syncSocialBlockTree(sourceRoot, targetRoot) {
+            var sourceBlocks = getSocialBlocksForTree(sourceRoot);
+            var targetBlocks = getSocialBlocksForTree(targetRoot);
+
+            sourceBlocks.forEach(function (sourceBlock, index) {
+                var targetBlock = targetBlocks[index];
+                var sourceMeta;
+
+                if (!targetBlock) {
+                    return;
+                }
+
+                syncSocialBlockPersistence(sourceBlock);
+                sourceMeta = ensureSocialBlockStructure(sourceBlock);
+                updateSocialLinks(targetBlock, getPersistedSocialValues(sourceBlock, sourceMeta));
+            });
+        }
+
         function syncCanvasDerivedBlockState() {
-            Array.prototype.forEach.call(canvas.querySelectorAll(':scope > .mb-block[data-builder-block="social"]'), function (block) {
+            Array.prototype.forEach.call(canvas.querySelectorAll('.mb-block[data-builder-block="social"]'), function (block) {
                 syncSocialBlockPersistence(block);
             });
         }
@@ -2673,6 +2741,8 @@
 
             var clone = block.cloneNode(true);
 
+            syncSocialBlockTree(block, clone);
+
             Array.prototype.forEach.call(clone.querySelectorAll('.mb-block-toolbar'), function (node) {
                 node.parentNode.removeChild(node);
             });
@@ -2699,11 +2769,11 @@
                     }
 
                     if (node.classList && node.classList.contains('mb-social-meta')
-                        && /^(data-facebook|data-instagram|data-twitter|data-youtube|data-linkedin|data-website)$/.test(name)) {
+                        && isKnownSocialMetaAttribute(name)) {
                         return;
                     }
 
-                    if (node === clone && /^(data-social-facebook|data-social-instagram|data-social-twitter|data-social-youtube|data-social-linkedin|data-social-website)$/.test(name)) {
+                    if (node === clone && isKnownSocialRootAttribute(name)) {
                         return;
                     }
 
@@ -2714,7 +2784,12 @@
                     node.className = String(node.className)
                         .split(/\s+/)
                         .filter(function (className) {
-                            return className && className.indexOf('mb-') !== 0 && className.indexOf('marketing-builder-') !== 0 && className !== 'is-active' && className !== 'is-over';
+                            return className
+                                && (isSerializableSocialClass(node, className)
+                                    || (className.indexOf('mb-') !== 0
+                                        && className.indexOf('marketing-builder-') !== 0
+                                        && className !== 'is-active'
+                                        && className !== 'is-over'));
                         })
                         .join(' ');
                 }
@@ -2749,6 +2824,8 @@
 
             Array.prototype.forEach.call(canvas.querySelectorAll(':scope > .mb-block'), function (block) {
                 var clone = block.cloneNode(true);
+
+                syncSocialBlockTree(block, clone);
 
                 Array.prototype.forEach.call(clone.querySelectorAll('.mb-block-toolbar'), function (node) {
                     node.parentNode.removeChild(node);
