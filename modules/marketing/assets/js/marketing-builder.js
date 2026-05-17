@@ -41,6 +41,28 @@
         element.setAttribute('class', String(classValue || ''));
     }
 
+    function getSocialLinkStyle(isVisible) {
+        return 'display:' + (isVisible ? 'inline-flex' : 'none')
+            + ';align-items:center;justify-content:center;width:34px;height:34px;margin:0 6px;border-radius:999px;vertical-align:middle;color:#2563eb;text-decoration:none;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1;';
+    }
+
+    function normalizeSocialLinkPresentation(link, isVisible) {
+        if (!link || link.nodeType !== 1 || !link.style) {
+            return;
+        }
+
+        link.style.display = isVisible ? 'inline-flex' : 'none';
+        link.style.alignItems = 'center';
+        link.style.justifyContent = 'center';
+        link.style.width = link.style.width || '34px';
+        link.style.height = link.style.height || '34px';
+        link.style.margin = link.style.margin || '0 6px';
+        link.style.borderRadius = link.style.borderRadius || '999px';
+        link.style.verticalAlign = 'middle';
+        link.style.textDecoration = link.style.textDecoration || 'none';
+        link.style.lineHeight = link.style.lineHeight || '1';
+    }
+
     function clampNumber(value, min, max, fallback) {
         var parsed = parseInt(value, 10);
         if (isNaN(parsed)) {
@@ -1719,12 +1741,12 @@
         function createSocialBlock() {
             return blockShell('social', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;') + '">'
-                + '<a href="" class="mb-social-link mb-social-facebook" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Facebook" aria-label="Facebook"></a>'
-                + '<a href="" class="mb-social-link mb-social-instagram" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Instagram" aria-label="Instagram"></a>'
-                + '<a href="" class="mb-social-link mb-social-twitter" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="X" aria-label="X"></a>'
-                + '<a href="" class="mb-social-link mb-social-youtube" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="YouTube" aria-label="YouTube"></a>'
-                + '<a href="" class="mb-social-link mb-social-linkedin" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="LinkedIn" aria-label="LinkedIn"></a>'
-                + '<a href="" class="mb-social-link mb-social-website" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Website" aria-label="Website"></a>'
+                + '<a href="" class="mb-social-link mb-social-facebook" style="' + getSocialLinkStyle(false) + '" title="Facebook" aria-label="Facebook"></a>'
+                + '<a href="" class="mb-social-link mb-social-instagram" style="' + getSocialLinkStyle(false) + '" title="Instagram" aria-label="Instagram"></a>'
+                + '<a href="" class="mb-social-link mb-social-twitter" style="' + getSocialLinkStyle(false) + '" title="X" aria-label="X"></a>'
+                + '<a href="" class="mb-social-link mb-social-youtube" style="' + getSocialLinkStyle(false) + '" title="YouTube" aria-label="YouTube"></a>'
+                + '<a href="" class="mb-social-link mb-social-linkedin" style="' + getSocialLinkStyle(false) + '" title="LinkedIn" aria-label="LinkedIn"></a>'
+                + '<a href="" class="mb-social-link mb-social-website" style="' + getSocialLinkStyle(false) + '" title="Website" aria-label="Website"></a>'
                 + '<div class="mb-social-meta hide" data-facebook="" data-instagram="" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>'
                 + '</td></tr></table>');
         }
@@ -2236,7 +2258,11 @@
         }
 
         function renderSocialIconHtml(definition) {
-            return String(definition && definition.key ? getSocialIconSvg(definition.key) : getSocialIconSvg('website'));
+            return String(definition && definition.key ? getSocialIconSvg(definition.key) : getSocialIconSvg('website'))
+                .replace(
+                    '<svg ',
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" style="display:block;width:18px;height:18px;vertical-align:middle;flex:0 0 18px;" '
+                );
         }
 
         function setSocialLinkIcon(link, definition) {
@@ -2286,10 +2312,11 @@
             getSocialLinkDefinitions().forEach(function (definition) {
                 var link = block.querySelector(definition.selector);
                 if (!link) {
-                    link = createElement('<a href="" class="mb-social-link ' + definition.selector.replace('.', '') + '" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;"></a>');
+                    link = createElement('<a href="" class="mb-social-link ' + definition.selector.replace('.', '') + '" style="' + getSocialLinkStyle(false) + '"></a>');
                     surface.insertBefore(link, meta);
                 }
 
+                normalizeSocialLinkPresentation(link, String(link.getAttribute('href') || '').trim() !== '');
                 setSocialLinkIcon(link, definition);
 
                 if (!meta.hasAttribute('data-' + definition.key)) {
@@ -2327,11 +2354,11 @@
                     return;
                 }
                 if (value === '') {
-                    link.style.display = 'none';
+                    normalizeSocialLinkPresentation(link, false);
                     link.setAttribute('href', '');
                 } else {
                     setSocialLinkIcon(link, item);
-                    link.style.display = 'inline-flex';
+                    normalizeSocialLinkPresentation(link, true);
                     link.setAttribute('href', value);
                 }
             });
@@ -4188,9 +4215,10 @@
         }
 
         function openPreview(mode) {
+            syncFields();
             state.previewMode = mode === 'mobile' ? 'mobile' : 'desktop';
             setElementClassName(previewShell, 'marketing-builder-preview-shell marketing-builder-preview-shell--' + state.previewMode);
-            previewFrame.srcdoc = renderEmailHtml();
+            previewFrame.srcdoc = htmlField && String(htmlField.value || '').trim() !== '' ? htmlField.value : renderEmailHtml();
 
             if (canvasFrame) {
                 setElementClassName(canvasFrame, 'marketing-builder-canvas-frame marketing-builder-canvas-frame--' + state.previewMode);
