@@ -1063,6 +1063,23 @@
     margin-bottom: 6px;
 }
 
+.marketing-builder-canvas .mb-social-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin: 0 6px;
+    border-radius: 999px;
+    vertical-align: middle;
+}
+
+.marketing-builder-canvas .mb-social-link i,
+.marketing-builder-canvas .mb-social-link .marketing-builder-social-icon-fallback {
+    font-size: 18px;
+    line-height: 1;
+}
+
 .marketing-builder-sidebar-view.hide {
     display: none;
 }

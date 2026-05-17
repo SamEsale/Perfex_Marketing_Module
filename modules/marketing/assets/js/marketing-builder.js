@@ -1570,12 +1570,12 @@
         function createSocialBlock() {
             return blockShell('social', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;') + '">'
-                + '<a href="" class="mb-social-link mb-social-facebook" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Facebook</a>'
-                + '<a href="https://instagram.com" class="mb-social-link mb-social-instagram" style="color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Instagram</a>'
-                + '<a href="" class="mb-social-link mb-social-twitter" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">X</a>'
-                + '<a href="" class="mb-social-link mb-social-youtube" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">YouTube</a>'
-                + '<a href="" class="mb-social-link mb-social-linkedin" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">LinkedIn</a>'
-                + '<a href="" class="mb-social-link mb-social-website" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Website</a>'
+                + '<a href="" class="mb-social-link mb-social-facebook" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Facebook" aria-label="Facebook"><i class="fa fa-facebook" aria-hidden="true"></i></a>'
+                + '<a href="https://instagram.com" class="mb-social-link mb-social-instagram" style="display:inline-flex;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Instagram" aria-label="Instagram"><i class="fa fa-instagram" aria-hidden="true"></i></a>'
+                + '<a href="" class="mb-social-link mb-social-twitter" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="X" aria-label="X"><i class="fa fa-twitter" aria-hidden="true"></i></a>'
+                + '<a href="" class="mb-social-link mb-social-youtube" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="YouTube" aria-label="YouTube"><i class="fa fa-youtube-play" aria-hidden="true"></i></a>'
+                + '<a href="" class="mb-social-link mb-social-linkedin" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="LinkedIn" aria-label="LinkedIn"><i class="fa fa-linkedin" aria-hidden="true"></i></a>'
+                + '<a href="" class="mb-social-link mb-social-website" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Website" aria-label="Website"><i class="fa fa-globe" aria-hidden="true"></i></a>'
                 + '<div class="mb-social-meta hide" data-facebook="" data-instagram="https://instagram.com" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>'
                 + '</td></tr></table>');
         }
@@ -1943,13 +1943,27 @@
 
         function getSocialLinkDefinitions() {
             return [
-                { key: 'facebook', selector: '.mb-social-facebook', label: 'Facebook' },
-                { key: 'instagram', selector: '.mb-social-instagram', label: 'Instagram' },
-                { key: 'twitter', selector: '.mb-social-twitter', label: 'X' },
-                { key: 'youtube', selector: '.mb-social-youtube', label: 'YouTube' },
-                { key: 'linkedin', selector: '.mb-social-linkedin', label: 'LinkedIn' },
-                { key: 'website', selector: '.mb-social-website', label: 'Website' }
+                { key: 'facebook', selector: '.mb-social-facebook', label: 'Facebook', iconHtml: '<i class="fa fa-facebook" aria-hidden="true"></i>' },
+                { key: 'instagram', selector: '.mb-social-instagram', label: 'Instagram', iconHtml: '<i class="fa fa-instagram" aria-hidden="true"></i>' },
+                { key: 'twitter', selector: '.mb-social-twitter', label: 'X', iconHtml: '<i class="fa fa-twitter" aria-hidden="true"></i>' },
+                { key: 'youtube', selector: '.mb-social-youtube', label: 'YouTube', iconHtml: '<i class="fa fa-youtube-play" aria-hidden="true"></i>' },
+                { key: 'linkedin', selector: '.mb-social-linkedin', label: 'LinkedIn', iconHtml: '<i class="fa fa-linkedin" aria-hidden="true"></i>' },
+                { key: 'website', selector: '.mb-social-website', label: 'Website', iconHtml: '<i class="fa fa-globe" aria-hidden="true"></i>' }
             ];
+        }
+
+        function renderSocialIconHtml(definition) {
+            return String((definition && definition.iconHtml) || '<i class="fa fa-globe" aria-hidden="true"></i>');
+        }
+
+        function setSocialLinkIcon(link, definition) {
+            if (!link || !definition) {
+                return;
+            }
+
+            link.innerHTML = renderSocialIconHtml(definition);
+            link.setAttribute('title', definition.label);
+            link.setAttribute('aria-label', definition.label);
         }
 
         function ensureSocialBlockStructure(block) {
@@ -1974,11 +1988,11 @@
             getSocialLinkDefinitions().forEach(function (definition) {
                 var link = block.querySelector(definition.selector);
                 if (!link) {
-                    link = createElement('<a href="" class="mb-social-link ' + definition.selector.replace('.', '') + '" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">' + escapeHtml(definition.label) + '</a>');
+                    link = createElement('<a href="" class="mb-social-link ' + definition.selector.replace('.', '') + '" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;"></a>');
                     surface.insertBefore(link, meta);
                 }
 
-                link.textContent = definition.label;
+                setSocialLinkIcon(link, definition);
 
                 if (!meta.hasAttribute('data-' + definition.key)) {
                     meta.setAttribute('data-' + definition.key, '');
@@ -2017,7 +2031,8 @@
                     link.style.display = 'none';
                     link.setAttribute('href', '');
                 } else {
-                    link.style.display = 'inline-block';
+                    setSocialLinkIcon(link, item);
+                    link.style.display = 'inline-flex';
                     link.setAttribute('href', value);
                 }
             });
