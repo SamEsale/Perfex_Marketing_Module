@@ -1074,10 +1074,13 @@
     vertical-align: middle;
 }
 
-.marketing-builder-canvas .mb-social-link i,
+.marketing-builder-canvas .mb-social-link svg,
 .marketing-builder-canvas .mb-social-link .marketing-builder-social-icon-fallback {
     font-size: 18px;
     line-height: 1;
+    width: 18px;
+    height: 18px;
+    display: block;
 }
 
 .marketing-builder-sidebar-view.hide {

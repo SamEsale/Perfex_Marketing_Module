@@ -1570,12 +1570,12 @@
         function createSocialBlock() {
             return blockShell('social', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;') + '">'
-                + '<a href="" class="mb-social-link mb-social-facebook" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Facebook" aria-label="Facebook"><i class="fa fa-facebook" aria-hidden="true"></i></a>'
-                + '<a href="https://instagram.com" class="mb-social-link mb-social-instagram" style="display:inline-flex;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Instagram" aria-label="Instagram"><i class="fa fa-instagram" aria-hidden="true"></i></a>'
-                + '<a href="" class="mb-social-link mb-social-twitter" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="X" aria-label="X"><i class="fa fa-twitter" aria-hidden="true"></i></a>'
-                + '<a href="" class="mb-social-link mb-social-youtube" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="YouTube" aria-label="YouTube"><i class="fa fa-youtube-play" aria-hidden="true"></i></a>'
-                + '<a href="" class="mb-social-link mb-social-linkedin" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="LinkedIn" aria-label="LinkedIn"><i class="fa fa-linkedin" aria-hidden="true"></i></a>'
-                + '<a href="" class="mb-social-link mb-social-website" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Website" aria-label="Website"><i class="fa fa-globe" aria-hidden="true"></i></a>'
+                + '<a href="" class="mb-social-link mb-social-facebook" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Facebook" aria-label="Facebook"></a>'
+                + '<a href="https://instagram.com" class="mb-social-link mb-social-instagram" style="display:inline-flex;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Instagram" aria-label="Instagram"></a>'
+                + '<a href="" class="mb-social-link mb-social-twitter" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="X" aria-label="X"></a>'
+                + '<a href="" class="mb-social-link mb-social-youtube" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="YouTube" aria-label="YouTube"></a>'
+                + '<a href="" class="mb-social-link mb-social-linkedin" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="LinkedIn" aria-label="LinkedIn"></a>'
+                + '<a href="" class="mb-social-link mb-social-website" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;" title="Website" aria-label="Website"></a>'
                 + '<div class="mb-social-meta hide" data-facebook="" data-instagram="https://instagram.com" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>'
                 + '</td></tr></table>');
         }
@@ -1943,17 +1943,30 @@
 
         function getSocialLinkDefinitions() {
             return [
-                { key: 'facebook', selector: '.mb-social-facebook', label: 'Facebook', iconHtml: '<i class="fa fa-facebook" aria-hidden="true"></i>' },
-                { key: 'instagram', selector: '.mb-social-instagram', label: 'Instagram', iconHtml: '<i class="fa fa-instagram" aria-hidden="true"></i>' },
-                { key: 'twitter', selector: '.mb-social-twitter', label: 'X', iconHtml: '<i class="fa fa-twitter" aria-hidden="true"></i>' },
-                { key: 'youtube', selector: '.mb-social-youtube', label: 'YouTube', iconHtml: '<i class="fa fa-youtube-play" aria-hidden="true"></i>' },
-                { key: 'linkedin', selector: '.mb-social-linkedin', label: 'LinkedIn', iconHtml: '<i class="fa fa-linkedin" aria-hidden="true"></i>' },
-                { key: 'website', selector: '.mb-social-website', label: 'Website', iconHtml: '<i class="fa fa-globe" aria-hidden="true"></i>' }
+                { key: 'facebook', selector: '.mb-social-facebook', label: 'Facebook' },
+                { key: 'instagram', selector: '.mb-social-instagram', label: 'Instagram' },
+                { key: 'twitter', selector: '.mb-social-twitter', label: 'X' },
+                { key: 'youtube', selector: '.mb-social-youtube', label: 'YouTube' },
+                { key: 'linkedin', selector: '.mb-social-linkedin', label: 'LinkedIn' },
+                { key: 'website', selector: '.mb-social-website', label: 'Website' }
             ];
         }
 
+        function getSocialIconSvg(channel) {
+            var icons = {
+                facebook: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.5 8.25V6.5c0-.83.67-1.5 1.5-1.5h1.5V2h-2.25A4.75 4.75 0 0 0 9.5 6.75v1.5H7v3h2.5V22h4v-10.75H16l.5-3z"></path></svg>',
+                instagram: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2.5A2.5 2.5 0 0 0 4.5 7v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5V7A2.5 2.5 0 0 0 17 4.5zm5 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2.25A2.75 2.75 0 1 0 12 14.75 2.75 2.75 0 0 0 12 9.25zm5.25-3a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z"></path></svg>',
+                twitter: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17.96 3H21l-6.64 7.6L22 21h-6.13l-4.8-6.27L5.58 21H2.54l7.1-8.13L2 3h6.29l4.33 5.73zm-1.08 16.13h1.68L7.38 4.78H5.57z"></path></svg>',
+                youtube: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M21.58 7.19a2.84 2.84 0 0 0-2-2C17.78 4.67 12 4.67 12 4.67s-5.78 0-7.58.52a2.84 2.84 0 0 0-2 2A29.44 29.44 0 0 0 2 12a29.44 29.44 0 0 0 .42 4.81 2.84 2.84 0 0 0 2 2c1.8.52 7.58.52 7.58.52s5.78 0 7.58-.52a2.84 2.84 0 0 0 2-2A29.44 29.44 0 0 0 22 12a29.44 29.44 0 0 0-.42-4.81zM10 15.5v-7l6 3.5z"></path></svg>',
+                linkedin: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.94 8.5H3.56V20h3.38zM5.25 3A1.97 1.97 0 1 0 7.22 5 1.97 1.97 0 0 0 5.25 3zm15.19 9.32c0-3.12-1.66-4.57-3.89-4.57a3.36 3.36 0 0 0-3 1.66V8.5H10.2V20h3.38v-6.05c0-1.59.3-3.13 2.27-3.13s2 1.84 2 3.23V20h3.38z"></path></svg>',
+                website: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm6.93 9h-3.11a15.85 15.85 0 0 0-1.2-5 8.05 8.05 0 0 1 4.31 5zM12 4.06A13.73 13.73 0 0 1 13.8 11h-3.6A13.73 13.73 0 0 1 12 4.06zM9.38 6a15.85 15.85 0 0 0-1.2 5H5.07a8.05 8.05 0 0 1 4.31-5zM5.07 13h3.11a15.85 15.85 0 0 0 1.2 5 8.05 8.05 0 0 1-4.31-5zM12 19.94A13.73 13.73 0 0 1 10.2 13h3.6A13.73 13.73 0 0 1 12 19.94zM14.62 18a15.85 15.85 0 0 0 1.2-5h3.11a8.05 8.05 0 0 1-4.31 5z"></path></svg>'
+            };
+
+            return icons[channel] || icons.website;
+        }
+
         function renderSocialIconHtml(definition) {
-            return String((definition && definition.iconHtml) || '<i class="fa fa-globe" aria-hidden="true"></i>');
+            return String(definition && definition.key ? getSocialIconSvg(definition.key) : getSocialIconSvg('website'));
         }
 
         function setSocialLinkIcon(link, definition) {
