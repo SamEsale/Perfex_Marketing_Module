@@ -12,12 +12,14 @@
 - SMTP / Amazon SES campaign delivery
 - SES / SNS webhook telemetry
 - Inbound email reply webhook
-- WhatsApp Business settings, webhook verification, inbound conversations, and manual operator reply workflow
+- WhatsApp Business settings, webhook verification, inbound conversations, status reconciliation, manual operator reply workflow, and manual lead conversion workflow
 
 ## Deferred Integrations
 
 - Facebook is deferred / inactive in this package
 - LinkedIn is deferred / inactive in this package
+- YouTube is deferred / inactive as a social integration surface in this package
+- Email-builder social icons for Facebook, Instagram, X/Twitter, YouTube, LinkedIn, and Website are content-only presentation elements, not active social inbox integrations
 - WhatsApp provider approval, asset access, and token lifecycle remain external Meta prerequisites
 
 ## Required Release Docs
@@ -30,6 +32,7 @@
 
 ## Required Validation Scripts
 
+- `scripts/build_release_package.sh`
 - `scripts/verify_release_package.sh`
 - `scripts/verify_phase2_regressions.sh`
 - `scripts/verify_phase4_integrity_runtime.php`
@@ -68,6 +71,13 @@
 - release package validation via `bash scripts/verify_release_package.sh`
 - regression validation via `bash scripts/verify_phase2_regressions.sh`
 - runtime integrity diagnostics via `php modules/marketing/scripts/verify_phase4_integrity_runtime.php`
+
+## Browser Smoke Expectations
+
+- Company address insert/save/reload/preview remains functional
+- Social icons save/reload and render in preview as icon-only links when populated
+- Unsubscribe flow remains explicit, tokenized, and suppression-backed
+- WhatsApp inbound conversation, status reconciliation, manual reply, and manual lead conversion flows remain operator-visible
 
 ## External Dependencies / Approvals
 

@@ -8,11 +8,16 @@
     "smtp_ses_delivery",
     "ses_sns_webhooks",
     "inbound_email_reply_webhook",
-    "whatsapp_business_foundation"
+    "whatsapp_inbound_conversations",
+    "whatsapp_status_reconciliation",
+    "whatsapp_manual_reply",
+    "whatsapp_manual_lead_conversion"
   ],
   "deferred_integrations": [
     "facebook",
     "linkedin",
+    "youtube",
+    "email_builder_social_icons_content_only",
     "whatsapp_meta_approval"
   ],
   "required_docs": [
@@ -23,11 +28,13 @@
     "docs/RELEASE_MANIFEST.md"
   ],
   "required_scripts": [
+    "scripts/build_release_package.sh",
     "scripts/verify_release_package.sh",
     "scripts/verify_phase2_regressions.sh",
     "scripts/verify_phase4_integrity_runtime.php"
   ],
   "validation_commands": [
+    "bash scripts/build_release_package.sh",
     "bash scripts/verify_release_package.sh",
     "bash scripts/verify_phase2_regressions.sh",
     "php modules/marketing/scripts/verify_phase4_integrity_runtime.php"
@@ -63,5 +70,11 @@
     "no_perfex_core_modifications",
     "release_docs_are_read_only_operational_guidance"
   ],
-  "release_notes_summary": "Commercial release package with bounded analytics, provider readiness, release readiness, integrity diagnostics, and deferred Facebook/LinkedIn integrations."
+  "browser_smoke_checks": [
+    "company_address_builder_round_trip",
+    "social_icons_builder_and_preview_round_trip",
+    "unsubscribe_confirmation_and_suppression_flow",
+    "whatsapp_inbound_status_reply_and_manual_conversion_visibility"
+  ],
+  "release_notes_summary": "Commercial release package with bounded analytics, provider readiness, release readiness, integrity diagnostics, WhatsApp operator flows, and deferred non-WhatsApp social integrations."
 }

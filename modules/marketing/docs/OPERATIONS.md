@@ -69,6 +69,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - Review `Marketing -> Settings -> Release Readiness`
 - Run runtime integrity diagnostics from the deployed CRM root with:
   - `php modules/marketing/scripts/verify_phase4_integrity_runtime.php`
+- Complete the browser/manual smoke checklist in `docs/PRODUCTION_CHECKLIST.md` before approving a live release
 
 ## Deployment Sanity Checks
 
@@ -78,6 +79,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - Imported contacts remain active for audience eligibility unless they are explicitly unsubscribed, actively suppressed, removed from membership, marked inactive by an operator, or filtered out by campaign targeting
 - Confirm rendered webhook URLs match the deployed base URL
 - Confirm cron is active before resuming campaign send or schedule operations
+- Confirm email-builder social icons remain icon-only email content and are not described to operators as active Facebook, LinkedIn, YouTube, or other social inbox integrations
 
 ## Rollback Note
 
@@ -146,8 +148,26 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 - If SES click telemetry is absent but module click tracking works, treat the issue as SES configuration-set publishing rather than outbound send failure
 - If Reply-to-Lead does not create or reuse leads, confirm inbound webhook delivery and Reply-to-Lead settings
 - If WhatsApp verification fails, confirm the stored verify token and the displayed webhook URL
+- If WhatsApp status transitions do not appear on outbound messages, confirm the provider message ID is returned on send and that status webhooks are still reaching the `marketing/webhooks/whatsapp` route
+- If manual WhatsApp lead conversion returns an ambiguity warning, treat it as intended duplicate protection and resolve the candidate lead conflict manually
 - If WhatsApp test sends fail with authentication or authorization errors, confirm the saved access token is still valid, not expired or revoked, and that it includes `whatsapp_business_messaging`.
 - Confirm the saved token is assigned access to the configured WhatsApp Phone Number ID. A valid token for the wrong business asset can still fail on the `/messages` endpoint.
 - Confirm the configured Phone Number ID is the Cloud API phone number identifier, not another business or app identifier.
 - Confirm the configured template name is approved for the configured template language such as `en_US`; template approval or locale mismatches are returned by Meta separately from token failures.
 - The `Send Test` button uses the currently saved WhatsApp settings only. Save settings changes first before testing a new token, phone number ID, template, or recipient.
+
+## Browser Manual Smoke Checklist
+
+- Builder:
+  - Save and reload a campaign with company address inserted from saved Perfex company settings
+  - Save, reload, and preview icon-only social links for Facebook, Instagram, X/Twitter, YouTube, LinkedIn, and Website
+  - Confirm Preview Desktop and Preview Mobile include the populated social icons
+- Compliance:
+  - Confirm unsubscribe links remain tokenized in delivered content
+  - Confirm GET unsubscribe shows confirmation only and POST unsubscribe creates or refreshes the suppression state
+- WhatsApp:
+  - Confirm inbound conversation messages load
+  - Confirm outbound manual replies persist and later show sent/delivered/read/failed status transitions when webhooks arrive
+  - Confirm manual lead conversion links a single clear existing lead, creates a new lead only when no match exists, and blocks ambiguous matches
+- Analytics and reporting:
+  - Confirm Marketing Analytics, Marketing Reports, Provider Readiness, and Release Readiness load without exposing tokens, secrets, raw webhook payloads, or shell output

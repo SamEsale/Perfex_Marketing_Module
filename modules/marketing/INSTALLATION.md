@@ -36,6 +36,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
    `bash scripts/verify_release_package.sh`
 10. Review `Provider Readiness` and `Release Readiness` on the Settings page before final handoff to operators or support staff.
 11. Include `docs/PRODUCTION_CHECKLIST.md` and `docs/RELEASE_MANIFEST.md` in the final release handoff packet.
+12. Use the browser/manual smoke checklist in `docs/PRODUCTION_CHECKLIST.md` before live deployment approval.
 
 ## Upgrade
 
@@ -64,7 +65,10 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 - If `Schema Health` reports legacy duplicate tables, review them manually on staging before making any database cleanup changes
 - If email delivery fails, verify SMTP / SES credentials and provider connectivity
 - If WhatsApp sending fails, verify Meta approval, Phone Number ID, token validity, and approved templates
+- If WhatsApp conversations load but no delivery/read/failure updates appear, verify WhatsApp status webhooks are reaching the module and that the saved Phone Number ID matches the sending asset
+- If manual WhatsApp conversion is blocked, review for ambiguous existing lead matches instead of forcing a duplicate lead
 - WhatsApp provider approval/configuration remains externally gated by Meta. A valid-looking saved token may still fail until the Meta app, business asset, and phone-number permissions are fully approved.
+- Email-builder social icons for Facebook, Instagram, X/Twitter, YouTube, LinkedIn, and Website are email content only. They do not activate inbox, webhook, or operator integrations for those channels.
 - Production licensing uses `https://license.spitol.com/api` by default; only define `MARKETING_LICENSE_API_BASE_URL` or set `marketing_license_api_base_url` if you need to override it
 - If licensing shows `unconfigured`, check for an explicit empty override in `MARKETING_LICENSE_API_BASE_URL` or `marketing_license_api_base_url`
 - If licensing shows `grace`, restore connectivity to the licensing server before the grace deadline

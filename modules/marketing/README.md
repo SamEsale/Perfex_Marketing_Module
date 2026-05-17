@@ -30,12 +30,14 @@ This project is a module for **Perfex CRM**. It is not standalone software and m
 - Email campaigns through module-managed SMTP / Amazon SES configuration
 - SES / SNS delivery and engagement telemetry
 - Inbound marketing reply webhook with Reply-to-Lead support
-- WhatsApp Business configuration, webhook verification, inbound conversation handling, manual operator reply surface, and campaign foundation
+- WhatsApp Business configuration, webhook verification, inbound conversation handling, status reconciliation, manual operator reply surface, and manual lead conversion workflow
 
 ## Deferred Integrations
 
 - Facebook is not active in this commercial package
 - LinkedIn is not active in this commercial package
+- YouTube is not an active social integration in this commercial package
+- Facebook, Instagram, X/Twitter, YouTube, LinkedIn, and Website social icons in the email builder are presentation-only email content elements, not active social inbox or webhook integrations
 - WhatsApp provider approval and token lifecycle still depend on external Meta approval and asset access outside this module
 
 ## Operational Guarantees
@@ -113,6 +115,7 @@ The release ZIP root remains `marketing/`, so the uploaded package resolves to `
 Validate the package before shipping:
 
 ```bash
+bash scripts/build_release_package.sh
 bash scripts/verify_phase2_regressions.sh
 bash scripts/verify_release_package.sh
 ```
@@ -136,6 +139,14 @@ php modules/marketing/scripts/verify_phase4_integrity_runtime.php
 ```
 
 - Treat WhatsApp send/auth failures during this phase as external Meta approval or asset-access issues unless the saved settings are clearly incomplete
+
+## Manual Smoke Checklist
+
+- Confirm the builder saves and reloads company address blocks from saved Perfex company settings
+- Confirm the builder saves, reloads, and previews icon-only social links for Facebook, Instagram, X/Twitter, YouTube, LinkedIn, and Website when populated
+- Confirm unsubscribe links remain tokenized, GET-only confirmation stays non-mutating, and confirmed POST unsubscribe creates or refreshes suppression state
+- Confirm WhatsApp inbound conversations render, status updates reconcile, manual replies persist, and manual lead conversion remains explicit and operator-visible
+- Confirm Analytics, Reports, Provider Readiness, and Release Readiness load without exposing secrets or mutating runtime state
 
 ## Documentation
 

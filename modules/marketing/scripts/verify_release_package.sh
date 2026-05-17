@@ -65,6 +65,16 @@ if ! php -r '$path = $argv[1]; $json = file_get_contents($path); if ($json === f
 fi
 pass "manifest JSON valid" "release/manifest.json parses cleanly"
 
+MODULE_VERSION="$(sed -n 's/^Version:[[:space:]]*//p' "$MODULE_DIR/marketing.php" | head -n 1 | tr -d '\r')"
+if [[ -z "$MODULE_VERSION" ]]; then
+  fail "module version header missing" "unable to determine Version from marketing.php"
+fi
+
+if ! php -r '$path = $argv[1]; $version = $argv[2]; $json = file_get_contents($path); if ($json === false) {fwrite(STDERR, "read_failed"); exit(1);} $data = json_decode($json, true); if (!is_array($data)) {fwrite(STDERR, "invalid_json"); exit(1);} if (($data["module_name"] ?? "") !== "Marketing") {fwrite(STDERR, "module_name"); exit(1);} if (($data["version"] ?? "") !== $version) {fwrite(STDERR, "version"); exit(1);} if (($data["package_root"] ?? "") !== "marketing/") {fwrite(STDERR, "package_root"); exit(1);} if (($data["install_path"] ?? "") !== "modules/marketing/marketing.php") {fwrite(STDERR, "install_path"); exit(1);} if (!in_array("scripts/build_release_package.sh", (array) ($data["required_scripts"] ?? []), true)) {fwrite(STDERR, "required_scripts"); exit(1);} if (!in_array("bash scripts/build_release_package.sh", (array) ($data["validation_commands"] ?? []), true)) {fwrite(STDERR, "validation_commands"); exit(1);} if (!in_array("browser_smoke_checks", array_keys($data), true)) {fwrite(STDERR, "browser_smoke_checks"); exit(1);} ' "$MANIFEST_FILE" "$MODULE_VERSION" >/dev/null 2>&1; then
+  fail "manifest package metadata mismatch" "expected module_name=Marketing, version=$MODULE_VERSION, package_root=marketing/, install_path=modules/marketing/marketing.php, build script in required_scripts/validation_commands, and browser_smoke_checks in release/manifest.json"
+fi
+pass "manifest package metadata matches module release expectations" "module version=$MODULE_VERSION | package_root=marketing/ | install_path=modules/marketing/marketing.php"
+
 if ! grep -q 'Module Name:[[:space:]]*Marketing' "$MODULE_DIR/marketing.php"; then
   fail "module metadata header missing" "expected Module Name header in marketing.php"
 fi
@@ -146,6 +156,7 @@ if ! grep -qF 'bash scripts/verify_phase2_regressions.sh' "$MODULE_DIR/docs/OPER
   fail "regression validation command missing from operations guide" "expected bash scripts/verify_phase2_regressions.sh in docs/OPERATIONS.md"
 fi
 for command_ref in \
+  'bash scripts/build_release_package.sh' \
   'bash scripts/verify_release_package.sh' \
   'bash scripts/verify_phase2_regressions.sh' \
   'php modules/marketing/scripts/verify_phase4_integrity_runtime.php'; do
@@ -181,6 +192,15 @@ if ! grep -qF 'No Perfex core modifications' "$MODULE_DIR/docs/RELEASE_MANIFEST.
 fi
 if ! grep -qF 'Meta approval' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
   fail "Meta approval caveat missing" "expected Meta approval caveat in docs/PRODUCTION_CHECKLIST.md"
+fi
+if ! grep -qF 'Email Builder Manual Smoke Checklist' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "email builder smoke checklist missing" "expected Email Builder Manual Smoke Checklist in docs/PRODUCTION_CHECKLIST.md"
+fi
+if ! grep -qF 'WhatsApp Manual Smoke Checklist' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "whatsapp smoke checklist missing" "expected WhatsApp Manual Smoke Checklist in docs/PRODUCTION_CHECKLIST.md"
+fi
+if ! grep -qF 'social icons for Facebook, Instagram, X/Twitter, YouTube, LinkedIn, and Website are treated as email content only' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "social icon distinction missing" "expected email social icon distinction in docs/PRODUCTION_CHECKLIST.md"
 fi
 pass "zip root expectations documented" "docs mention marketing/ zip root, modules/marketing/marketing.php install path, and validation commands"
 
