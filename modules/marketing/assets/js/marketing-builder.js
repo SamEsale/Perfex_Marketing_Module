@@ -2769,7 +2769,44 @@
             syncFields();
         }
 
+        function getNextActiveBlockAfterRemoval(block) {
+            var nextBlock;
+            var previousBlock;
+            var parent;
+
+            if (!block) {
+                return null;
+            }
+
+            nextBlock = block.nextElementSibling;
+            while (nextBlock && !nextBlock.classList.contains('mb-block')) {
+                nextBlock = nextBlock.nextElementSibling;
+            }
+            if (nextBlock && nextBlock.classList.contains('mb-block')) {
+                return nextBlock;
+            }
+
+            previousBlock = block.previousElementSibling;
+            while (previousBlock && !previousBlock.classList.contains('mb-block')) {
+                previousBlock = previousBlock.previousElementSibling;
+            }
+            if (previousBlock && previousBlock.classList.contains('mb-block')) {
+                return previousBlock;
+            }
+
+            parent = block.parentNode;
+            if (parent && parent !== canvas) {
+                return parent.closest('.mb-block');
+            }
+
+            return null;
+        }
+
         function removeActiveBlock() {
+            var removedBlock;
+            var parent;
+            var nextActiveBlock;
+
             if (!state.activeBlock) {
                 return;
             }
@@ -2778,10 +2815,29 @@
                 return;
             }
 
-            var parent = state.activeBlock.parentNode;
-            parent.removeChild(state.activeBlock);
+            removedBlock = state.activeBlock;
+            parent = removedBlock.parentNode;
+            nextActiveBlock = getNextActiveBlockAfterRemoval(removedBlock);
+
+            if (state.sidebarEditor && state.sidebarEditor.block === removedBlock) {
+                destroySidebarTextEditor();
+            }
+            if (state.inlineUploadBlock === removedBlock) {
+                state.inlineUploadBlock = null;
+            }
+            if (state.imageModalBlock === removedBlock) {
+                state.imageModalBlock = null;
+            }
+            if (state.qrModalBlock === removedBlock) {
+                state.qrModalBlock = null;
+            }
+
+            state.activeBlock = null;
+            state.activeHeroChild = '';
+
+            parent.removeChild(removedBlock);
             refreshCanvasState();
-            setActiveBlock(canvas.querySelector('.mb-block'));
+            setActiveBlock(nextActiveBlock && canvas.contains(nextActiveBlock) ? nextActiveBlock : canvas.querySelector(':scope > .mb-block'));
             syncFields();
         }
 
@@ -4161,6 +4217,10 @@
         }
 
         form.addEventListener('submit', function () {
+            if (state.sidebarEditor && state.sidebarEditor.block && !canvas.contains(state.sidebarEditor.block)) {
+                destroySidebarTextEditor();
+                setActiveBlock(null);
+            }
             syncFields();
         });
 
