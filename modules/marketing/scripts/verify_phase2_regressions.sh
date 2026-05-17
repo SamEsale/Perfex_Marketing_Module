@@ -2742,32 +2742,78 @@ check_whatsapp_manual_reply_workflow() {
 }
 
 check_whatsapp_manual_lead_conversion() {
-  local controller_method controller_permission controller_post_guard controller_call model_convert model_readiness model_existing_link model_create_link model_context model_phone_match dashboard_form dashboard_escape dashboard_deferred destructive_sql
+  local controller_method controller_permission controller_post_guard controller_call controller_created controller_existing
+  local model_convert model_readiness model_existing_link model_create_link model_context model_phone_match model_candidate_helper model_ambiguous_branch model_already_converted model_existing_status model_ready_create model_recheck_helper
+  local dashboard_form dashboard_escape dashboard_deferred destructive_sql
   controller_method="$(first_match 'function[[:space:]]+convert_whatsapp_conversation' "$MARKETING_CONTROLLER_FILE")"
   controller_permission="$(first_fixed_match "staff_cant('settings', 'marketing')" "$MARKETING_CONTROLLER_FILE")"
   controller_post_guard="$(first_fixed_match "if (!\$this->input->post()) {" "$MARKETING_CONTROLLER_FILE")"
   controller_call="$(first_fixed_match "convert_whatsapp_conversation_to_lead(\$conversationId, get_staff_user_id())" "$MARKETING_CONTROLLER_FILE")"
+  controller_created="$(first_fixed_match "if ((\$result['action'] ?? '') === 'converted_created') {" "$MARKETING_CONTROLLER_FILE")"
+  controller_existing="$(first_fixed_match "} elseif ((\$result['action'] ?? '') === 'converted_existing' || (\$result['action'] ?? '') === 'already_converted') {" "$MARKETING_CONTROLLER_FILE")"
   model_convert="$(first_match 'function[[:space:]]+convert_whatsapp_conversation_to_lead' "modules/marketing/models/Marketing_reply_leads_model.php")"
   model_readiness="$(first_fixed_match "get_whatsapp_lead_conversion_readiness([" "modules/marketing/models/Marketing_reply_leads_model.php")"
   model_existing_link="$(first_fixed_match "link_whatsapp_conversation_to_lead(\$conversationId, (int) \$readiness['lead_id'])" "modules/marketing/models/Marketing_reply_leads_model.php")"
   model_create_link="$(first_fixed_match "link_whatsapp_conversation_to_lead(\$conversationId, \$leadId)" "modules/marketing/models/Marketing_reply_leads_model.php")"
   model_context="$(first_fixed_match "get_whatsapp_conversation_context(\$conversationId)" "modules/marketing/models/Marketing_reply_leads_model.php")"
   model_phone_match="$(first_fixed_match "find_safe_whatsapp_existing_lead(\$context)" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_candidate_helper="$(first_match 'function[[:space:]]+find_candidate_leads_for_whatsapp_conversation' "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_ambiguous_branch="$(first_fixed_match "if ((\$readiness['status'] ?? '') === 'ambiguous_match') {" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_already_converted="$(first_fixed_match "'action' => 'already_converted'," "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_existing_status="$(first_fixed_match "'action' => 'converted_existing'," "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_ready_create="$(first_fixed_match "'action' => 'converted_created'," "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_recheck_helper="$(first_fixed_match "\$candidateMatch = \$this->find_candidate_leads_for_whatsapp_conversation(\$context);" "modules/marketing/models/Marketing_reply_leads_model.php")"
   dashboard_form="$(first_fixed_match "form_open(admin_url('marketing/convert_whatsapp_conversation')" "$DASHBOARD_VIEW_FILE")"
   dashboard_escape="$(first_fixed_match "html_escape(\$conversionLabel)" "$DASHBOARD_VIEW_FILE")"
   dashboard_deferred="$(first_fixed_match '$conversionLabel = trim((string) ($leadConversion[' "$DASHBOARD_VIEW_FILE")"
   destructive_sql="$(grep -nE -- '\\b(DELETE|TRUNCATE|DROP|ALTER|CREATE)\\b' "$MARKETING_CONTROLLER_FILE" "modules/marketing/models/Marketing_reply_leads_model.php" "$DASHBOARD_VIEW_FILE" || true)"
 
-  if [[ -z "$controller_method" || -z "$controller_permission" || -z "$controller_post_guard" || -z "$controller_call" || -z "$model_convert" || -z "$model_readiness" || -z "$model_existing_link" || -z "$model_create_link" || -z "$model_context" || -z "$model_phone_match" || -z "$dashboard_form" || -z "$dashboard_escape" || -z "$dashboard_deferred" || -n "$destructive_sql" ]]; then
+  if [[ -z "$controller_method" || -z "$controller_permission" || -z "$controller_post_guard" || -z "$controller_call" || -z "$controller_created" || -z "$controller_existing" || -z "$model_convert" || -z "$model_readiness" || -z "$model_existing_link" || -z "$model_create_link" || -z "$model_context" || -z "$model_phone_match" || -z "$model_candidate_helper" || -z "$model_ambiguous_branch" || -z "$model_already_converted" || -z "$model_existing_status" || -z "$model_ready_create" || -z "$model_recheck_helper" || -z "$dashboard_form" || -z "$dashboard_escape" || -z "$dashboard_deferred" || -n "$destructive_sql" ]]; then
     fail \
       "manual WhatsApp lead conversion remains POST-only, duplicate-safe, and dashboard-bounded" \
-      "expected POST-only controller action in $MARKETING_CONTROLLER_FILE, explicit conversion helper in modules/marketing/models/Marketing_reply_leads_model.php, bounded dashboard form in $DASHBOARD_VIEW_FILE, and no destructive SQL; method=${controller_method:-missing}; permission=${controller_permission:-missing}; post=${controller_post_guard:-missing}; call=${controller_call:-missing}; model=${model_convert:-missing}; readiness=${model_readiness:-missing}; existing=${model_existing_link:-missing}; created=${model_create_link:-missing}; context=${model_context:-missing}; phone=${model_phone_match:-missing}; form=${dashboard_form:-missing}; escape=${dashboard_escape:-missing}; action_label=${dashboard_deferred:-missing}; destructive=${destructive_sql:-none}"
+      "expected POST-only controller action in $MARKETING_CONTROLLER_FILE, explicit conversion helper plus candidate/ambiguity/idempotency branches in modules/marketing/models/Marketing_reply_leads_model.php, bounded dashboard form in $DASHBOARD_VIEW_FILE, and no destructive SQL; method=${controller_method:-missing}; permission=${controller_permission:-missing}; post=${controller_post_guard:-missing}; call=${controller_call:-missing}; created_alert=${controller_created:-missing}; existing_alert=${controller_existing:-missing}; model=${model_convert:-missing}; readiness=${model_readiness:-missing}; existing=${model_existing_link:-missing}; created=${model_create_link:-missing}; context=${model_context:-missing}; phone=${model_phone_match:-missing}; candidate=${model_candidate_helper:-missing}; ambiguous=${model_ambiguous_branch:-missing}; already=${model_already_converted:-missing}; existing_status=${model_existing_status:-missing}; create_status=${model_ready_create:-missing}; recheck=${model_recheck_helper:-missing}; form=${dashboard_form:-missing}; escape=${dashboard_escape:-missing}; action_label=${dashboard_deferred:-missing}; destructive=${destructive_sql:-none}"
     return
   fi
 
   pass \
     "manual WhatsApp lead conversion remains POST-only, duplicate-safe, and dashboard-bounded" \
     "controller=$controller_method | model=$model_convert | form=$dashboard_form"
+}
+
+check_whatsapp_manual_lead_conversion_ambiguity() {
+  local model_email_candidates model_phone_candidates model_ambiguous_reason model_candidate_count model_existing_reason model_email_phone_reason
+  local model_create_gate model_description_source model_description_conversation model_description_channel model_description_provider model_description_contact model_description_preview
+  local controller_ambiguous_label controller_dashboard_email conversations_dashboard_email language_ambiguous language_helper
+
+  model_email_candidates="$(first_match 'function[[:space:]]+find_leads_by_email_candidates' "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_phone_candidates="$(first_match 'function[[:space:]]+find_leads_by_phone_candidates' "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_ambiguous_reason="$(first_fixed_match "'reason' => 'ambiguous_existing_leads'," "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_candidate_count="$(first_fixed_match "'candidate_count' => 0," "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_existing_reason="$(first_fixed_match "'email_phone' => 'existing_lead_by_email_phone'," "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_email_phone_reason="$model_existing_reason"
+  model_create_gate="$(first_fixed_match "if (\$count === 0) {" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_description_source="$(first_fixed_match "\$lines = ['Source: WhatsApp conversation'];" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_description_conversation="$(first_fixed_match "\$lines[] = 'Conversation ID: ' . (int) \$context['conversation_id'];" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_description_channel="$(first_fixed_match "\$lines[] = 'Channel: ' . trim((string) \$context['channel']);" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_description_provider="$(first_fixed_match "\$lines[] = 'Provider: ' . trim((string) \$context['provider']);" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_description_contact="$(first_fixed_match "\$lines[] = 'Marketing Contact ID: ' . (int) \$context['marketing_contact_id'];" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  model_description_preview="$(first_fixed_match "\$lines[] = 'Latest Preview: ' . trim((string) \$context['preview']);" "modules/marketing/models/Marketing_reply_leads_model.php")"
+  controller_ambiguous_label="$(first_fixed_match "_l('marketing_dashboard_whatsapp_convert_ambiguous')" "$MARKETING_CONTROLLER_FILE")"
+  controller_dashboard_email="$(first_fixed_match "'email' => \$item['email'] ?? ''," "$MARKETING_CONTROLLER_FILE")"
+  conversations_dashboard_email="$(first_fixed_match "'email' => trim((string) (\$row['email'] ?? ''))," "$CONVERSATIONS_FILE")"
+  language_ambiguous="$(first_fixed_match "\$lang['marketing_dashboard_whatsapp_convert_ambiguous']" "$LANGUAGE_FILE")"
+  language_helper="$(first_fixed_match "Ambiguous matches are blocked for operator review." "$LANGUAGE_FILE")"
+
+  if [[ -z "$model_email_candidates" || -z "$model_phone_candidates" || -z "$model_ambiguous_reason" || -z "$model_candidate_count" || -z "$model_email_phone_reason" || -z "$model_create_gate" || -z "$model_description_source" || -z "$model_description_conversation" || -z "$model_description_channel" || -z "$model_description_provider" || -z "$model_description_contact" || -z "$model_description_preview" || -z "$controller_ambiguous_label" || -z "$controller_dashboard_email" || -z "$conversations_dashboard_email" || -z "$language_ambiguous" || -z "$language_helper" ]]; then
+    fail \
+      "WhatsApp manual lead conversion blocks ambiguous matches, uses email-plus-phone context safely, and preserves source metadata on created leads" \
+      "expected bounded email/phone candidate helpers, ambiguous reason/count markers, create-only-when-none gate, enriched WhatsApp source description, dashboard email context propagation, and operator-visible ambiguous labels; email_candidates=${model_email_candidates:-missing}; phone_candidates=${model_phone_candidates:-missing}; ambiguous=${model_ambiguous_reason:-missing}; candidate_count=${model_candidate_count:-missing}; email_phone=${model_email_phone_reason:-missing}; create_gate=${model_create_gate:-missing}; desc_source=${model_description_source:-missing}; desc_conversation=${model_description_conversation:-missing}; desc_channel=${model_description_channel:-missing}; desc_provider=${model_description_provider:-missing}; desc_contact=${model_description_contact:-missing}; desc_preview=${model_description_preview:-missing}; controller_label=${controller_ambiguous_label:-missing}; dashboard_email=${controller_dashboard_email:-missing}; conversations_email=${conversations_dashboard_email:-missing}; lang_ambiguous=${language_ambiguous:-missing}; lang_helper=${language_helper:-missing}"
+    return
+  fi
+
+  pass \
+    "WhatsApp manual lead conversion blocks ambiguous matches, uses email-plus-phone context safely, and preserves source metadata on created leads" \
+    "candidate_email=$model_email_candidates | candidate_phone=$model_phone_candidates | ambiguous=$model_ambiguous_reason | label=$language_ambiguous"
 }
 
 check_whatsapp_mark_read_control() {
@@ -3585,6 +3631,7 @@ check_whatsapp_dashboard_visibility
 check_whatsapp_conversation_detail_view
 check_whatsapp_manual_reply_workflow
 check_whatsapp_manual_lead_conversion
+check_whatsapp_manual_lead_conversion_ambiguity
 check_whatsapp_mark_read_control
 check_no_facebook_linkedin_active_ui_or_release_docs
 check_release_validator_exists

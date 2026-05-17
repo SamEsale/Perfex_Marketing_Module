@@ -4,6 +4,9 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Marketing_reply_leads_model extends App_Model
 {
+    private const MAX_WHATSAPP_LEAD_CANDIDATES = 25;
+    private const MAX_WHATSAPP_PHONE_SCAN_ROWS = 5000;
+
     protected $ci;
     protected $leadsTable;
     protected $leadsStatusTable;
@@ -72,8 +75,19 @@ class Marketing_reply_leads_model extends App_Model
                 'success' => true,
                 'lead_id' => (int) $readiness['lead_id'],
                 'conversation_id' => $conversationId,
-                'action' => 'already_linked',
+                'action' => 'already_converted',
                 'message' => 'WhatsApp conversation is already linked to a lead.',
+                'readiness' => $readiness,
+            ];
+        }
+
+        if (($readiness['status'] ?? '') === 'ambiguous_match') {
+            return [
+                'success' => false,
+                'lead_id' => null,
+                'conversation_id' => $conversationId,
+                'action' => 'ambiguous_match',
+                'message' => $this->whatsapp_readiness_message($readiness),
                 'readiness' => $readiness,
             ];
         }
@@ -85,22 +99,33 @@ class Marketing_reply_leads_model extends App_Model
                 'success' => $linked,
                 'lead_id' => (int) $readiness['lead_id'],
                 'conversation_id' => $conversationId,
-                'action' => 'linked_existing',
+                'action' => 'converted_existing',
                 'message' => $linked ? 'Existing lead linked to WhatsApp conversation.' : 'Existing lead found but the conversation link could not be saved.',
                 'readiness' => $readiness,
             ];
         }
 
         if (!empty($readiness['ready']) && ($readiness['status'] ?? '') === 'ready_create') {
-            $existingLead = $this->find_safe_whatsapp_existing_lead($context);
-            if ($existingLead) {
+            $candidateMatch = $this->find_candidate_leads_for_whatsapp_conversation($context);
+            if (($candidateMatch['status'] ?? '') === 'ambiguous') {
+                return [
+                    'success' => false,
+                    'lead_id' => null,
+                    'conversation_id' => $conversationId,
+                    'action' => 'ambiguous_match',
+                    'message' => 'Multiple existing leads match this WhatsApp conversation. Review and link manually.',
+                    'readiness' => $readiness,
+                ];
+            }
+            if (!empty($candidateMatch['lead'])) {
+                $existingLead = $candidateMatch['lead'];
                 $linked = $this->link_whatsapp_conversation_to_lead($conversationId, (int) $existingLead['id']);
 
                 return [
                     'success' => $linked,
                     'lead_id' => (int) $existingLead['id'],
                     'conversation_id' => $conversationId,
-                    'action' => 'linked_existing',
+                    'action' => 'converted_existing',
                     'message' => $linked ? 'Existing lead linked to WhatsApp conversation.' : 'Existing lead found but the conversation link could not be saved.',
                     'readiness' => $readiness,
                 ];
@@ -131,8 +156,20 @@ class Marketing_reply_leads_model extends App_Model
                         'success' => $linked,
                         'lead_id' => (int) $existingLead['id'],
                         'conversation_id' => $conversationId,
-                        'action' => 'linked_existing',
+                        'action' => 'converted_existing',
                         'message' => $linked ? 'Existing lead linked to WhatsApp conversation.' : 'Existing lead found after insert contention but the conversation link could not be saved.',
+                        'readiness' => $readiness,
+                    ];
+                }
+
+                $candidateMatch = $this->find_candidate_leads_for_whatsapp_conversation($context);
+                if (($candidateMatch['status'] ?? '') === 'ambiguous') {
+                    return [
+                        'success' => false,
+                        'lead_id' => null,
+                        'conversation_id' => $conversationId,
+                        'action' => 'ambiguous_match',
+                        'message' => 'Multiple existing leads match this WhatsApp conversation. Review and link manually.',
                         'readiness' => $readiness,
                     ];
                 }
@@ -149,13 +186,13 @@ class Marketing_reply_leads_model extends App_Model
                 'success' => $linked,
                 'lead_id' => $leadId,
                 'conversation_id' => $conversationId,
-                'action' => 'created',
+                'action' => 'converted_created',
                 'message' => $linked ? 'New lead created from WhatsApp conversation.' : 'Lead created but the conversation link could not be saved.',
                 'readiness' => $readiness,
             ];
         }
 
-        $result['action'] = 'not_ready';
+        $result['action'] = ($readiness['reason'] ?? '') === 'phone_missing' ? 'missing_phone' : 'failed';
         $result['message'] = $this->whatsapp_readiness_message($readiness);
 
         return $result;
@@ -316,6 +353,7 @@ class Marketing_reply_leads_model extends App_Model
             'lead_id' => null,
             'matched_by' => null,
             'reason' => 'whatsapp_manual_conversion_deferred',
+            'candidate_count' => 0,
         ];
 
         $db = $this->getDb();
@@ -336,32 +374,28 @@ class Marketing_reply_leads_model extends App_Model
             return $result;
         }
 
-        $email = $this->normalize_email($context['email'] ?? '');
-        if ($email !== '') {
-            $existingLead = $this->find_lead_by_email($email);
-            if ($existingLead) {
-                $result['status'] = 'existing_lead';
-                $result['lead_id'] = (int) $existingLead['id'];
-                $result['matched_by'] = 'email';
-                $result['reason'] = 'existing_lead_by_email';
-
-                return $result;
-            }
-        }
-
-        $phoneMatch = $this->find_lead_by_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
-        if (!empty($phoneMatch['lead'])) {
-            $result['status'] = 'existing_lead';
-            $result['ready'] = true;
-            $result['lead_id'] = (int) ($phoneMatch['lead']['id'] ?? 0);
-            $result['matched_by'] = 'phone';
-            $result['reason'] = 'existing_lead_by_phone';
+        $candidateMatch = $this->find_candidate_leads_for_whatsapp_conversation($context);
+        $result['candidate_count'] = (int) ($candidateMatch['count'] ?? 0);
+        if (($candidateMatch['status'] ?? '') === 'ambiguous') {
+            $result['status'] = 'ambiguous_match';
+            $result['reason'] = 'ambiguous_existing_leads';
+            $result['matched_by'] = trim((string) ($candidateMatch['matched_by'] ?? 'multiple'));
 
             return $result;
         }
 
-        if (!empty($phoneMatch['reason'])) {
-            $result['reason'] = (string) $phoneMatch['reason'];
+        if (!empty($candidateMatch['lead'])) {
+            $result['status'] = 'existing_lead';
+            $result['ready'] = true;
+            $result['lead_id'] = (int) ($candidateMatch['lead']['id'] ?? 0);
+            $result['matched_by'] = trim((string) ($candidateMatch['matched_by'] ?? 'phone'));
+            $result['reason'] = trim((string) ($candidateMatch['reason'] ?? 'existing_lead_by_phone'));
+
+            return $result;
+        }
+
+        if (!empty($candidateMatch['reason'])) {
+            $result['reason'] = (string) $candidateMatch['reason'];
         }
 
         $normalizedPhone = $this->normalize_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
@@ -557,10 +591,26 @@ class Marketing_reply_leads_model extends App_Model
         if (!empty($context['conversation_id'])) {
             $lines[] = 'Conversation ID: ' . (int) $context['conversation_id'];
         }
+        if (!empty($context['channel'])) {
+            $lines[] = 'Channel: ' . trim((string) $context['channel']);
+        }
+        if (!empty($context['provider'])) {
+            $lines[] = 'Provider: ' . trim((string) $context['provider']);
+        }
+        if (!empty($context['marketing_contact_id'])) {
+            $lines[] = 'Marketing Contact ID: ' . (int) $context['marketing_contact_id'];
+        }
         if (!empty($context['phone'])) {
             $lines[] = 'Phone: ' . trim((string) $context['phone']);
         } elseif (!empty($context['normalized_phone'])) {
             $lines[] = 'Phone: ' . trim((string) $context['normalized_phone']);
+        }
+        $email = $this->normalize_email($context['email'] ?? '');
+        if ($email !== '') {
+            $lines[] = 'Email: ' . $email;
+        }
+        if (!empty($context['last_activity_at'])) {
+            $lines[] = 'Last Activity: ' . trim((string) $context['last_activity_at']);
         }
         if (!empty($context['preview'])) {
             $lines[] = 'Latest Preview: ' . trim((string) $context['preview']);
@@ -673,6 +723,33 @@ class Marketing_reply_leads_model extends App_Model
         return $query ? $query->row_array() : null;
     }
 
+    private function find_leads_by_email_candidates($email)
+    {
+        $db = $this->getDb();
+        $email = $this->normalize_email($email);
+        if ($db === null || !$this->leads_available() || $email === '') {
+            return [];
+        }
+
+        $select = ['id', 'email'];
+        $phoneField = $this->resolve_leads_phone_field();
+        if ($phoneField !== null) {
+            $select[] = $phoneField;
+        }
+        if ($db->field_exists('name', $this->leadsTable)) {
+            $select[] = 'name';
+        }
+
+        $query = $db->select(implode(', ', $select), false)
+            ->from($this->leadsTable)
+            ->where('email', $email)
+            ->order_by('id', 'DESC')
+            ->limit(self::MAX_WHATSAPP_LEAD_CANDIDATES)
+            ->get();
+
+        return $query ? $query->result_array() : [];
+    }
+
     private function get_leads_by_emails(array $emails)
     {
         $db = $this->getDb();
@@ -716,21 +793,12 @@ class Marketing_reply_leads_model extends App_Model
             ];
         }
 
-        $query = $db->select('id, ' . $phoneField)
-            ->from($this->leadsTable)
-            ->where($phoneField . ' IS NOT NULL', null, false)
-            ->where($phoneField . ' !=', '')
-            ->order_by('id', 'DESC')
-            ->get();
-
-        $rows = $query ? $query->result_array() : [];
-        foreach ($rows as $row) {
-            if ($this->normalize_phone($row[$phoneField] ?? '') === $normalizedPhone) {
-                return [
-                    'lead' => $row,
-                    'reason' => null,
-                ];
-            }
+        $rows = $this->find_leads_by_phone_candidates($normalizedPhone);
+        if (!empty($rows[0])) {
+            return [
+                'lead' => $rows[0],
+                'reason' => null,
+            ];
         }
 
         return [
@@ -739,19 +807,128 @@ class Marketing_reply_leads_model extends App_Model
         ];
     }
 
-    private function find_safe_whatsapp_existing_lead(array $context)
+    private function find_leads_by_phone_candidates($phone)
     {
-        $email = $this->normalize_email($context['email'] ?? '');
-        if ($email !== '') {
-            $existingLead = $this->find_lead_by_email($email);
-            if ($existingLead) {
-                return $existingLead;
+        $db = $this->getDb();
+        $normalizedPhone = $this->normalize_phone($phone);
+        if ($db === null || !$this->leads_available() || $normalizedPhone === '') {
+            return [];
+        }
+
+        $phoneField = $this->resolve_leads_phone_field();
+        if ($phoneField === null) {
+            return [];
+        }
+
+        $select = ['id', $phoneField];
+        if ($db->field_exists('email', $this->leadsTable)) {
+            $select[] = 'email';
+        }
+        if ($db->field_exists('name', $this->leadsTable)) {
+            $select[] = 'name';
+        }
+
+        $query = $db->select(implode(', ', $select), false)
+            ->from($this->leadsTable)
+            ->where($phoneField . ' IS NOT NULL', null, false)
+            ->where($phoneField . ' !=', '')
+            ->order_by('id', 'DESC')
+            ->limit(self::MAX_WHATSAPP_PHONE_SCAN_ROWS)
+            ->get();
+
+        $rows = $query ? $query->result_array() : [];
+        $matches = [];
+        foreach ($rows as $row) {
+            if ($this->normalize_phone($row[$phoneField] ?? '') !== $normalizedPhone) {
+                continue;
+            }
+            $leadId = (int) ($row['id'] ?? 0);
+            if ($leadId <= 0 || isset($matches[$leadId])) {
+                continue;
+            }
+            $matches[$leadId] = $row;
+            if (count($matches) >= self::MAX_WHATSAPP_LEAD_CANDIDATES) {
+                break;
             }
         }
 
-        $phoneMatch = $this->find_lead_by_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
+        return array_values($matches);
+    }
 
-        return !empty($phoneMatch['lead']) ? $phoneMatch['lead'] : null;
+    private function find_candidate_leads_for_whatsapp_conversation(array $context)
+    {
+        $email = $this->normalize_email($context['email'] ?? '');
+        $phone = $this->normalize_phone($context['normalized_phone'] ?? ($context['phone'] ?? ''));
+        $candidatesById = [];
+        $matchSourcesById = [];
+
+        foreach ($this->find_leads_by_email_candidates($email) as $lead) {
+            $leadId = (int) ($lead['id'] ?? 0);
+            if ($leadId <= 0) {
+                continue;
+            }
+            $candidatesById[$leadId] = $lead;
+            $matchSourcesById[$leadId]['email'] = true;
+        }
+
+        foreach ($this->find_leads_by_phone_candidates($phone) as $lead) {
+            $leadId = (int) ($lead['id'] ?? 0);
+            if ($leadId <= 0) {
+                continue;
+            }
+            if (!isset($candidatesById[$leadId])) {
+                $candidatesById[$leadId] = $lead;
+            }
+            $matchSourcesById[$leadId]['phone'] = true;
+        }
+
+        $count = count($candidatesById);
+        if ($count === 0) {
+            return [
+                'status' => 'none',
+                'count' => 0,
+                'lead' => null,
+                'matched_by' => null,
+                'reason' => 'no_existing_lead_match',
+            ];
+        }
+
+        if ($count > 1) {
+            return [
+                'status' => 'ambiguous',
+                'count' => $count,
+                'lead' => null,
+                'matched_by' => $email !== '' && $phone !== '' ? 'email_phone' : ($email !== '' ? 'email' : 'phone'),
+                'reason' => 'ambiguous_existing_leads',
+                'lead_ids' => array_keys($candidatesById),
+            ];
+        }
+
+        $leadId = (int) array_key_first($candidatesById);
+        $sources = array_keys($matchSourcesById[$leadId] ?? []);
+        $matchedBy = $sources === ['email', 'phone'] || $sources === ['phone', 'email']
+            ? 'email_phone'
+            : (!empty($sources[0]) ? $sources[0] : 'phone');
+        $reasonMap = [
+            'email' => 'existing_lead_by_email',
+            'phone' => 'existing_lead_by_phone',
+            'email_phone' => 'existing_lead_by_email_phone',
+        ];
+
+        return [
+            'status' => 'unique',
+            'count' => 1,
+            'lead' => $candidatesById[$leadId],
+            'matched_by' => $matchedBy,
+            'reason' => $reasonMap[$matchedBy] ?? 'existing_lead_by_phone',
+        ];
+    }
+
+    private function find_safe_whatsapp_existing_lead(array $context)
+    {
+        $candidateMatch = $this->find_candidate_leads_for_whatsapp_conversation($context);
+
+        return !empty($candidateMatch['lead']) ? $candidateMatch['lead'] : null;
     }
 
     private function get_reply_lead_event_map(array $emails, $campaignId = null)
@@ -981,8 +1158,11 @@ class Marketing_reply_leads_model extends App_Model
         switch ((string) ($readiness['reason'] ?? '')) {
             case 'conversation_already_linked':
                 return 'WhatsApp conversation is already linked to a lead.';
+            case 'ambiguous_existing_leads':
+                return 'Multiple existing leads match this WhatsApp conversation. Review and link manually.';
             case 'existing_lead_by_email':
             case 'existing_lead_by_phone':
+            case 'existing_lead_by_email_phone':
                 return 'An existing lead match is available for this WhatsApp conversation.';
             case 'phone_missing':
                 return 'Not enough phone identity is available for manual WhatsApp conversion.';

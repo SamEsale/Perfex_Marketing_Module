@@ -234,9 +234,9 @@ class Marketing extends AdminController
         }
 
         if (!empty($result['success'])) {
-            if (($result['action'] ?? '') === 'created') {
+            if (($result['action'] ?? '') === 'converted_created') {
                 set_alert('success', sprintf(_l('marketing_dashboard_whatsapp_convert_created'), $leadId, $conversationId));
-            } elseif (($result['action'] ?? '') === 'linked_existing' || ($result['action'] ?? '') === 'already_linked') {
+            } elseif (($result['action'] ?? '') === 'converted_existing' || ($result['action'] ?? '') === 'already_converted') {
                 set_alert('success', sprintf(_l('marketing_dashboard_whatsapp_convert_linked_existing'), $leadId, $conversationId));
             } else {
                 set_alert('success', $message);
@@ -463,6 +463,7 @@ class Marketing extends AdminController
             $readiness = $this->marketing_reply_leads_model->get_whatsapp_lead_conversion_readiness([
                 'conversation_lead_id' => $item['lead_id'] ?? null,
                 'lead_id' => $item['lead_id'] ?? null,
+                'email' => $item['email'] ?? '',
                 'normalized_phone' => $item['normalized_phone'] ?? '',
                 'phone' => $item['contact_phone'] ?? '',
             ]);
@@ -498,6 +499,14 @@ class Marketing extends AdminController
                 'actionable' => true,
                 'label' => _l('marketing_dashboard_whatsapp_convert_action'),
                 'status' => 'ready_create',
+            ];
+        }
+
+        if (($readiness['status'] ?? '') === 'ambiguous_match') {
+            return [
+                'actionable' => false,
+                'label' => _l('marketing_dashboard_whatsapp_convert_ambiguous'),
+                'status' => 'ambiguous_match',
             ];
         }
 
