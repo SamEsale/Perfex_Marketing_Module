@@ -168,8 +168,6 @@ if ($hasUnsubscribeSaveError) {
             || strpos($candidate, 'href=&quot;{{unsubscribe_url}}&quot;') !== false
             || strpos($candidate, 'href=&#39;{{unsubscribe_url}}&#39;') !== false
             || strpos($candidate, '/marketing/unsubscribe/') !== false
-            || strpos($candidate, '>unsubscribe<') !== false
-            || strpos($candidate, 'unsubscribe here') !== false
         ) {
             $hasUnsubscribeSaveError = false;
             break;

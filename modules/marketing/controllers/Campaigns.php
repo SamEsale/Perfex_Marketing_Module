@@ -1191,8 +1191,6 @@ class Campaigns extends AdminController
                 || strpos($haystack, 'href=&quot;{{unsubscribe_url}}&quot;') !== false
                 || strpos($haystack, 'href=&#39;{{unsubscribe_url}}&#39;') !== false
                 || strpos($haystack, '/marketing/unsubscribe/') !== false
-                || strpos($haystack, '>unsubscribe<') !== false
-                || strpos($haystack, 'unsubscribe here') !== false
             ) {
                 return true;
             }

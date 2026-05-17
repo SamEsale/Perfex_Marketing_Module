@@ -376,23 +376,39 @@ class Marketing_campaigns_model extends App_Model
 
     public function create($data)
     {
+        $operation = 'create';
         $data['created_by'] = get_staff_user_id();
         $data = $this->filter_existing_columns($this->table, $data);
 
-        $this->db->insert($this->table, $data);
+        $inserted = $this->db->insert($this->table, $data);
+        if (!$inserted) {
+            $this->log_campaign_persistence_error($operation, null);
+            return 0;
+        }
 
-        return $this->db->insert_id();
+        $insertId = (int) $this->db->insert_id();
+        if ($insertId <= 0) {
+            $this->log_campaign_persistence_error($operation, null, 'insert_id_missing');
+        }
+
+        return $insertId;
     }
 
     public function update($id, $data)
     {
+        $campaignId = (int) $id;
+        $operation = 'update';
         $data['updated_by'] = get_staff_user_id();
         $data = $this->filter_existing_columns($this->table, $data);
 
-        $this->db->where('id', (int) $id);
-        $this->db->update($this->table, $data);
+        $this->db->where('id', $campaignId);
+        $updated = $this->db->update($this->table, $data);
+        if (!$updated) {
+            $this->log_campaign_persistence_error($operation, $campaignId);
+            return false;
+        }
 
-        return $this->db->affected_rows() !== 0;
+        return true;
     }
 
     public function delete($id)
@@ -3634,7 +3650,7 @@ class Marketing_campaigns_model extends App_Model
                 $messages[] = _l('marketing_campaign_html_required');
             }
 
-            if (strpos((string) $campaign['html_content'], '{{unsubscribe_url}}') === false) {
+            if (!$this->campaign_has_unsubscribe_token((string) $campaign['html_content'])) {
                 $missingFields[] = 'unsubscribe_url';
                 $messages[] = _l('marketing_campaign_unsubscribe_required');
             }
@@ -4246,6 +4262,60 @@ class Marketing_campaigns_model extends App_Model
     private function log_safe_queue_error($message)
     {
         log_message('error', $this->sanitize_failure_reason($message));
+    }
+
+    private function log_campaign_persistence_error($operation, $campaignId = null, $fallbackReason = '')
+    {
+        $dbError = is_object($this->db) && method_exists($this->db, 'error')
+            ? (array) $this->db->error()
+            : [];
+        $errorCode = isset($dbError['code']) ? (int) $dbError['code'] : 0;
+        $errorMessage = $this->sanitize_failure_reason($dbError['message'] ?? '');
+        $reason = $errorMessage !== '' && $errorMessage !== 'send_failed'
+            ? $errorMessage
+            : ($fallbackReason !== '' ? $fallbackReason : 'database_write_failed');
+
+        log_message(
+            'error',
+            'Marketing campaign persistence failed: operation=' . trim((string) $operation)
+            . ' campaign_id=' . (int) $campaignId
+            . ' db_code=' . $errorCode
+            . ' reason=' . $reason
+        );
+    }
+
+    private function campaign_has_unsubscribe_token($value)
+    {
+        $value = (string) $value;
+        $candidates = [$value];
+        $decoded = rawurldecode($value);
+        if ($decoded !== $value) {
+            $candidates[] = $decoded;
+        }
+
+        $entityDecoded = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($entityDecoded !== $value) {
+            $candidates[] = $entityDecoded;
+        }
+
+        foreach ($candidates as $candidate) {
+            $haystack = strtolower((string) $candidate);
+            if (strpos($haystack, '{{unsubscribe_url}}') !== false
+                || strpos($haystack, '%7b%7bunsubscribe_url%7d%7d') !== false
+                || strpos($haystack, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
+                || strpos($haystack, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false
+                || strpos($haystack, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false
+                || strpos($haystack, 'href="{{unsubscribe_url}}"') !== false
+                || strpos($haystack, "href='{{unsubscribe_url}}'") !== false
+                || strpos($haystack, 'href=&quot;{{unsubscribe_url}}&quot;') !== false
+                || strpos($haystack, 'href=&#39;{{unsubscribe_url}}&#39;') !== false
+                || strpos($haystack, '/marketing/unsubscribe/') !== false
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function mark_recipient_suppressed(array $campaign, array $recipient, $eventProvider, $deliveryChannel, array $suppressionMatch, $workerLeaseToken = '')
