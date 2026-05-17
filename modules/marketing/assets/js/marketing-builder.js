@@ -2351,6 +2351,20 @@
             return blocks;
         }
 
+        function getCanvasRootBlocks() {
+            return Array.prototype.slice.call(canvas.querySelectorAll('.mb-block')).filter(function (block) {
+                var parentBlock;
+
+                if (!block || !canvas.contains(block)) {
+                    return false;
+                }
+
+                parentBlock = block.parentNode ? block.parentNode.closest('.mb-block') : null;
+
+                return !parentBlock || !canvas.contains(parentBlock);
+            });
+        }
+
         function syncSocialBlockTree(sourceRoot, targetRoot) {
             var sourceBlocks = getSocialBlocksForTree(sourceRoot);
             var targetBlocks = getSocialBlocksForTree(targetRoot);
@@ -2373,6 +2387,19 @@
             Array.prototype.forEach.call(canvas.querySelectorAll('.mb-block[data-builder-block="social"]'), function (block) {
                 syncSocialBlockPersistence(block);
             });
+        }
+
+        function flushActiveBlockDerivedState() {
+            var socialMeta;
+
+            if (!state.activeBlock || !canvas.contains(state.activeBlock)) {
+                return;
+            }
+
+            if (state.activeBlock.dataset.builderBlock === 'social') {
+                socialMeta = ensureSocialBlockStructure(state.activeBlock);
+                updateSocialLinks(state.activeBlock, getPersistedSocialValues(state.activeBlock, socialMeta));
+            }
         }
 
         function clearDropIndicator() {
@@ -2404,7 +2431,7 @@
 
         function ensureCanvasPlaceholder() {
             var emptyState = canvas.querySelector('[data-empty-canvas="1"]');
-            var hasBlocks = !!canvas.querySelector(':scope > .mb-block');
+            var hasBlocks = getCanvasRootBlocks().length > 0;
 
             if (!hasBlocks && !emptyState) {
                 canvas.appendChild(createElement('<div class="marketing-builder-canvas-dropzone" data-empty-canvas="1">' + escapeHtml(strings.dropHere || 'Drop a block here') + '</div>'));
@@ -2805,7 +2832,7 @@
 
         function renderEmailHtml() {
             var blockHtml = '';
-            Array.prototype.forEach.call(canvas.querySelectorAll(':scope > .mb-block'), function (block) {
+            Array.prototype.forEach.call(getCanvasRootBlocks(), function (block) {
                 blockHtml += serializeBlock(block);
             });
 
@@ -2822,7 +2849,7 @@
         function serializeBuilderState() {
             var holder = document.createElement('div');
 
-            Array.prototype.forEach.call(canvas.querySelectorAll(':scope > .mb-block'), function (block) {
+            Array.prototype.forEach.call(getCanvasRootBlocks(), function (block) {
                 var clone = block.cloneNode(true);
 
                 syncSocialBlockTree(block, clone);
@@ -2853,6 +2880,7 @@
         function syncFields() {
             var html = renderEmailHtml();
             var generatedText;
+            flushActiveBlockDerivedState();
             syncCanvasDerivedBlockState();
             html = renderEmailHtml();
             htmlField.value = html;
