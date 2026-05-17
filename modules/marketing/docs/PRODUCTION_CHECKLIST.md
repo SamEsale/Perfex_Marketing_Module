@@ -9,6 +9,7 @@ This checklist is for commercial packaging, deployment review, and operator hand
 - Confirm the package came from the standalone module root
 - Confirm backups exist for the database and the previous module ZIP
 - Confirm the target Perfex CRM version matches the supported baseline
+- Confirm the upgrade plan uses ZIP replacement plus activation/reload, not uninstall/reinstall
 - Run from the standalone module root:
   - `bash scripts/build_release_package.sh`
   - `bash scripts/verify_phase2_regressions.sh`
@@ -114,6 +115,7 @@ This checklist is for commercial packaging, deployment review, and operator hand
 - Keep the previous known-good module ZIP
 - Keep a matching database backup
 - Roll back the module ZIP and database together when reversing a release
+- Do not use uninstall as a rollback shortcut; uninstall clears module-owned options and is separate from the supported upgrade path
 - Do not rely on cleanup tools or retention cleanup as rollback substitutes
 
 ## Support Handoff Checklist

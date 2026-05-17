@@ -68,7 +68,9 @@
   "security_notes": [
     "no_secrets_included",
     "no_perfex_core_modifications",
-    "release_docs_are_read_only_operational_guidance"
+    "release_docs_are_read_only_operational_guidance",
+    "activation_upgrade_add_only_repairs",
+    "uninstall_clears_options_without_dropping_tables"
   ],
   "browser_smoke_checks": [
     "company_address_builder_round_trip",

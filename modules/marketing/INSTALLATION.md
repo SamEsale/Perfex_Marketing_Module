@@ -44,6 +44,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 2. Replace the module ZIP with the new package.
 3. Activate or reload the module.
    Missing module-owned options are repaired idempotently during activation and admin bootstrap without overwriting existing saved values.
+   Do not uninstall the module as part of a normal upgrade or rollback. Upgrade is a ZIP replacement plus activation/reload path, not an uninstall/reinstall path.
 4. Review `Schema Health`.
    Use `Repair Marketing Schema` only for idempotent reconciliation of missing module-owned schema.
    If duplicate historical tables are reported, resolve them manually on staging first; the module does not rename or drop them.
@@ -54,6 +55,7 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 1. Disable sending and finish any active operational review first.
 2. Back up the database.
 3. Remove the module through the normal Perfex module workflow.
+   Uninstall clears module-owned options but does not automatically drop buyer data or module tables.
 4. Confirm no environment-specific webhooks or external jobs still point to the old module install.
 
 ## Troubleshooting

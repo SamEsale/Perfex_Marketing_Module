@@ -18,6 +18,7 @@ WEBHOOKS_FILE="modules/marketing/controllers/Webhooks.php"
 SES_SNS_FILE="modules/marketing/libraries/Marketing_ses_sns.php"
 INSTALL_FILE="modules/marketing/install.php"
 UNINSTALL_FILE="modules/marketing/uninstall.php"
+MIGRATION_FILE="modules/marketing/migrations/001_initial_schema.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
 WHATSAPP_FILE="modules/marketing/libraries/Marketing_whatsapp.php"
 SUBSCRIPTIONS_CONTROLLER_FILE="modules/marketing/controllers/Subscriptions.php"
@@ -3192,6 +3193,36 @@ check_option_repair_idempotence() {
     "defaults=$defaults_helper_line | install=$install_usage_line | uninstall=$uninstall_usage_line"
 }
 
+check_upgrade_uninstall_safety_contract() {
+  local activation_install_line uninstall_require_line activation_force_schema_line install_add_only_line uninstall_option_delete_line migration_down_note installation_upgrade_note installation_uninstall_note operations_upgrade_note operations_uninstall_note checklist_upgrade_note checklist_rollback_note manifest_upgrade_note manifest_uninstall_note destructive_down_sql
+  activation_install_line="$(first_fixed_match "require_once __DIR__ . '/install.php';" "$BOOTSTRAP_FILE")"
+  uninstall_require_line="$(first_fixed_match "require_once __DIR__ . '/uninstall.php';" "$BOOTSTRAP_FILE")"
+  activation_force_schema_line="$(first_fixed_match 'marketing_bootstrap_safe_schema(true);' "$BOOTSTRAP_FILE")"
+  install_add_only_line="$(first_fixed_match "if (get_option(\$name) === false) {" "$INSTALL_FILE")"
+  uninstall_option_delete_line="$(first_fixed_match 'delete_option($option);' "$UNINSTALL_FILE")"
+  migration_down_note="$(first_fixed_match 'Intentional no-op. Uninstall must not drop buyer data automatically.' "$MIGRATION_FILE")"
+  installation_upgrade_note="$(first_fixed_match 'Do not uninstall the module as part of a normal upgrade or rollback.' "$INSTALLATION_FILE")"
+  installation_uninstall_note="$(first_fixed_match 'Uninstall clears module-owned options but does not automatically drop buyer data or module tables.' "$INSTALLATION_FILE")"
+  operations_upgrade_note="$(first_fixed_match 'Upgrade safety depends on ZIP replacement and add-only bootstrap, not uninstall/reinstall.' "$OPERATIONS_FILE")"
+  operations_uninstall_note="$(first_fixed_match 'Uninstall clears module-owned options but does not automatically drop buyer data or module tables' "$OPERATIONS_FILE")"
+  checklist_upgrade_note="$(first_fixed_match 'Confirm the upgrade plan uses ZIP replacement plus activation/reload, not uninstall/reinstall' "$PRODUCTION_CHECKLIST_FILE")"
+  checklist_rollback_note="$(first_fixed_match 'Do not use uninstall as a rollback shortcut; uninstall clears module-owned options and is separate from the supported upgrade path' "$PRODUCTION_CHECKLIST_FILE")"
+  manifest_upgrade_note="$(first_fixed_match 'Activation and upgrade use add-only option/schema repair' "$RELEASE_MANIFEST_DOC_FILE")"
+  manifest_uninstall_note="$(first_fixed_match 'Uninstall is distinct from upgrade and clears module-owned options without automatically dropping buyer data or module tables' "$RELEASE_MANIFEST_DOC_FILE")"
+  destructive_down_sql="$(sed -n '/function down()/,/^}/p' "$MIGRATION_FILE" | grep -nE '\b(DROP|TRUNCATE|DELETE|ALTER)\b' || true)"
+
+  if [[ -z "$activation_install_line" || -z "$uninstall_require_line" || -z "$activation_force_schema_line" || -z "$install_add_only_line" || -z "$uninstall_option_delete_line" || -z "$migration_down_note" || -z "$installation_upgrade_note" || -z "$installation_uninstall_note" || -z "$operations_upgrade_note" || -z "$operations_uninstall_note" || -z "$checklist_upgrade_note" || -z "$checklist_rollback_note" || -z "$manifest_upgrade_note" || -z "$manifest_uninstall_note" || -n "$destructive_down_sql" ]]; then
+    fail \
+      "install, upgrade, and uninstall safety contract stays explicit and non-destructive" \
+      "expected activation/install separation, uninstall-only option cleanup, no-op migration down path, and release docs distinguishing upgrade from uninstall/rollback; activation=${activation_install_line:-missing}; uninstall=${uninstall_require_line:-missing}; force_schema=${activation_force_schema_line:-missing}; install_add_only=${install_add_only_line:-missing}; uninstall_delete=${uninstall_option_delete_line:-missing}; migration_down=${migration_down_note:-missing}; installation_upgrade=${installation_upgrade_note:-missing}; installation_uninstall=${installation_uninstall_note:-missing}; operations_upgrade=${operations_upgrade_note:-missing}; operations_uninstall=${operations_uninstall_note:-missing}; checklist_upgrade=${checklist_upgrade_note:-missing}; checklist_rollback=${checklist_rollback_note:-missing}; manifest_upgrade=${manifest_upgrade_note:-missing}; manifest_uninstall=${manifest_uninstall_note:-missing}; destructive_down=${destructive_down_sql:-none}"
+    return
+  fi
+
+  pass \
+    "install, upgrade, and uninstall safety contract stays explicit and non-destructive" \
+    "activation=$activation_install_line | uninstall=$uninstall_require_line | migration_down=$migration_down_note | checklist=$checklist_upgrade_note"
+}
+
 check_release_forbidden_artifact_detection() {
   local source_check_line zip_check_line readme_line install_line operations_line
   source_check_line="$(first_fixed_match 'forbidden release artifacts detected in source tree' "$RELEASE_VALIDATOR_FILE")"
@@ -3663,6 +3694,7 @@ check_required_config_and_public_endpoints
 check_confirmed_unsubscribe_flow
 check_false_unsubscribe_repair_script_safety
 check_option_repair_idempotence
+check_upgrade_uninstall_safety_contract
 check_release_forbidden_artifact_detection
 check_release_packaging_docs_hardening
 check_release_handoff_manifest_assets

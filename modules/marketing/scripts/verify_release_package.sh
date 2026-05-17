@@ -132,6 +132,15 @@ fi
 if ! grep -qF "marketing_get_option_names()" "$MODULE_DIR/uninstall.php"; then
   fail "uninstall option list not centralized" "expected uninstall.php to use marketing_get_option_names()"
 fi
+if ! grep -qF "require_once __DIR__ . '/install.php';" "$MODULE_DIR/marketing.php"; then
+  fail "activation install path missing" "expected activation hook to require install.php"
+fi
+if ! grep -qF "require_once __DIR__ . '/uninstall.php';" "$MODULE_DIR/marketing.php"; then
+  fail "uninstall path missing" "expected uninstall hook to require uninstall.php"
+fi
+if ! grep -qF 'Intentional no-op. Uninstall must not drop buyer data automatically.' "$MODULE_DIR/migrations/001_initial_schema.php"; then
+  fail "destructive uninstall guard missing" "expected no-op uninstall migration note in migrations/001_initial_schema.php"
+fi
 pass "install and uninstall option handling is centralized and idempotent" "missing options are repaired without overwriting saved values"
 
 for doc_file in "$MODULE_DIR/README.md" "$MODULE_DIR/INSTALLATION.md" "$MODULE_DIR/docs/OPERATIONS.md" "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md" "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; do
@@ -189,6 +198,15 @@ if ! grep -qF 'No secrets included' "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; then
 fi
 if ! grep -qF 'No Perfex core modifications' "$MODULE_DIR/docs/RELEASE_MANIFEST.md"; then
   fail "no-core-modification release statement missing" "expected No Perfex core modifications in docs/RELEASE_MANIFEST.md"
+fi
+if ! grep -qF 'Upgrade safety depends on ZIP replacement and add-only bootstrap, not uninstall/reinstall' "$MODULE_DIR/docs/OPERATIONS.md"; then
+  fail "upgrade path distinction missing" "expected uninstall-vs-upgrade distinction in docs/OPERATIONS.md"
+fi
+if ! grep -qF 'Uninstall clears module-owned options but does not automatically drop buyer data or module tables.' "$MODULE_DIR/INSTALLATION.md"; then
+  fail "uninstall safety note missing" "expected uninstall option/data distinction in INSTALLATION.md"
+fi
+if ! grep -qF 'Do not use uninstall as a rollback shortcut; uninstall clears module-owned options and is separate from the supported upgrade path' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
+  fail "rollback uninstall distinction missing" "expected uninstall-vs-rollback distinction in docs/PRODUCTION_CHECKLIST.md"
 fi
 if ! grep -qF 'Meta approval' "$MODULE_DIR/docs/PRODUCTION_CHECKLIST.md"; then
   fail "Meta approval caveat missing" "expected Meta approval caveat in docs/PRODUCTION_CHECKLIST.md"

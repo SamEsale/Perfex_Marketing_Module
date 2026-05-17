@@ -43,6 +43,7 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 1. Back up the database and current module package.
 2. Replace the module with the new ZIP.
 3. Activate or reload the module.
+   Do not use uninstall as part of the normal upgrade path. Upgrade safety depends on ZIP replacement and add-only bootstrap, not uninstall/reinstall.
 4. Review `Schema Health`.
    If legacy duplicate tables such as accidental double-prefix `tbltblmarketing_*` tables are reported, treat them as manual review items only.
    Use schema repair only for idempotent reconciliation of missing module-owned schema.
@@ -99,6 +100,8 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 ## Uninstall Notes
 
 - Module uninstall must not be used as a substitute for a backup
+- Module uninstall is separate from upgrade and rollback workflows
+- Uninstall clears module-owned options but does not automatically drop buyer data or module tables
 - Uninstall should be tested on staging first
 - License state does not block uninstall
 - Core Perfex files remain untouched

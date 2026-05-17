@@ -91,3 +91,5 @@
 
 - No secrets included in distributed release artifacts
 - No Perfex core modifications required by this module
+- Activation and upgrade use add-only option/schema repair
+- Uninstall is distinct from upgrade and clears module-owned options without automatically dropping buyer data or module tables
