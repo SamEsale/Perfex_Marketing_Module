@@ -1452,38 +1452,22 @@ class Campaigns extends AdminController
     private function get_builder_company_address_config()
     {
         $lines = [];
-        $getOptionFallback = static function (array $keys) {
-            foreach ($keys as $key) {
-                $value = trim((string) get_option($key));
-                if ($value !== '') {
-                    return $value;
-                }
-            }
+        $perfexCompanyName = $this->get_first_non_empty_option(['companyname', 'company_name']);
+        $perfexCompanyAddress = $this->get_first_non_empty_option(['companyaddress', 'company_address', 'address', 'companyinfo_address', 'street']);
+        $perfexCity = $this->get_first_non_empty_option(['companycity', 'company_city', 'city']);
+        $perfexState = $this->get_first_non_empty_option(['companystate', 'company_state', 'state', 'company_state_region']);
+        $perfexZip = $this->get_first_non_empty_option(['companyzip', 'company_zip', 'zip_code', 'zipcode', 'postal_code', 'company_zip_code', 'company_postal_code']);
+        $perfexCountry = $this->get_first_non_empty_option(['company_country_code', 'companycountry', 'company_country', 'country_code', 'country']);
+        $perfexPhone = $this->get_first_non_empty_option(['company_phone', 'company_phonenumber', 'companyphone', 'phonenumber', 'phone']);
+        $perfexVat = $this->get_first_non_empty_option(['company_vat', 'companyvat', 'company_vat_number', 'vat_number', 'vatnumber']);
+        $perfexCompanyInfoFormat = $this->get_first_non_empty_option(['company_info_format', 'company_info']);
 
-            return '';
-        };
-
-        $perfexCompanyName = $getOptionFallback(['companyname', 'company_name']);
-        $perfexCompanyAddress = $getOptionFallback(['company_address', 'address', 'companyinfo_address', 'street']);
-        $perfexCity = $getOptionFallback(['company_city', 'city']);
-        $perfexState = $getOptionFallback(['company_state', 'state', 'company_state_region']);
-        $perfexZip = $getOptionFallback(['company_zip', 'zip_code', 'zipcode', 'postal_code', 'company_zip_code', 'company_postal_code']);
-        $perfexCountry = $getOptionFallback(['company_country_code', 'country_code', 'company_country', 'country']);
-        $perfexPhone = $getOptionFallback(['company_phonenumber', 'company_phone', 'phonenumber', 'phone']);
-        $perfexVat = $getOptionFallback(['company_vat', 'company_vat_number', 'vat_number', 'vatnumber']);
-        $perfexCompanyInfoFormat = $getOptionFallback(['company_info_format', 'company_info']);
-
-        if ($perfexCompanyName !== '') {
-            $lines[] = $perfexCompanyName;
-        }
+        $this->append_unique_company_line($lines, $perfexCompanyName);
 
         if ($perfexCompanyAddress !== '') {
             $addrParts = preg_split('/\r?\n/', $perfexCompanyAddress);
             foreach ($addrParts as $part) {
-                $part = trim((string) $part);
-                if ($part !== '') {
-                    $lines[] = $part;
-                }
+                $this->append_unique_company_line($lines, $part);
             }
         }
 
@@ -1496,20 +1480,12 @@ class Campaigns extends AdminController
         }));
 
         if (!empty($localityParts)) {
-            $lines[] = implode(', ', $localityParts);
+            $this->append_unique_company_line($lines, implode(', ', $localityParts));
         }
 
-        if ($perfexCountry !== '') {
-            $lines[] = $perfexCountry;
-        }
-
-        if ($perfexPhone !== '') {
-            $lines[] = 'Phone: ' . $perfexPhone;
-        }
-
-        if ($perfexVat !== '') {
-            $lines[] = 'VAT: ' . $perfexVat;
-        }
+        $this->append_unique_company_line($lines, $perfexCountry);
+        $this->append_unique_company_line($lines, $perfexPhone !== '' ? 'Phone: ' . $perfexPhone : '');
+        $this->append_unique_company_line($lines, $perfexVat !== '' ? 'VAT: ' . $perfexVat : '');
 
         if ($perfexCompanyInfoFormat !== '') {
             $formattedInfo = strtr($perfexCompanyInfoFormat, [
@@ -1529,10 +1505,7 @@ class Campaigns extends AdminController
             $formattedLines = preg_split('/\r?\n/', html_entity_decode(strip_tags((string) $formattedInfo), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
 
             foreach ((array) $formattedLines as $formattedLine) {
-                $formattedLine = trim((string) $formattedLine);
-                if ($formattedLine !== '' && !in_array($formattedLine, $lines, true)) {
-                    $lines[] = $formattedLine;
-                }
+                $this->append_unique_company_line($lines, $formattedLine);
             }
         }
 
@@ -1550,6 +1523,28 @@ class Campaigns extends AdminController
             'configured' => (bool) $configured,
             'source' => 'perfex_company_settings',
         ];
+    }
+
+    private function get_first_non_empty_option(array $keys)
+    {
+        foreach ($keys as $key) {
+            $value = trim((string) get_option($key));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function append_unique_company_line(array &$lines, $line)
+    {
+        $line = trim((string) $line);
+        if ($line === '' || in_array($line, $lines, true)) {
+            return;
+        }
+
+        $lines[] = $line;
     }
 
     private function is_unsafe_default_plain_text($text)
