@@ -911,7 +911,7 @@
 
 .marketing-builder-layout {
     display: grid;
-    grid-template-columns: minmax(560px, 620px) minmax(0, 1fr);
+    grid-template-columns: minmax(420px, 465px) minmax(0, 1fr);
     min-height: 920px;
     height: clamp(640px, calc(100vh - 220px), 1200px);
     max-width: 100%;
@@ -1855,7 +1855,7 @@
 
 @media (max-width: 1439px) {
     .marketing-builder-layout {
-        grid-template-columns: minmax(460px, 520px) minmax(0, 1fr);
+        grid-template-columns: minmax(345px, 390px) minmax(0, 1fr);
     }
 }
 
