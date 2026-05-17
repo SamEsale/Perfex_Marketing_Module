@@ -2115,6 +2115,45 @@
             ];
         }
 
+        function getSocialDataAttributeName(key) {
+            return 'data-social-' + key;
+        }
+
+        function getPersistedSocialValues(block, meta) {
+            var values = {};
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var rootValue = block ? String(block.getAttribute(getSocialDataAttributeName(definition.key)) || '').trim() : '';
+                var metaValue = meta ? String(meta.getAttribute('data-' + definition.key) || '').trim() : '';
+                var link = block ? block.querySelector(definition.selector) : null;
+                var linkValue = link ? String(link.getAttribute('href') || '').trim() : '';
+                var resolvedValue = rootValue || metaValue;
+
+                if (!resolvedValue && linkValue !== '' && linkValue !== '#') {
+                    resolvedValue = linkValue;
+                }
+
+                values[definition.key] = resolvedValue;
+            });
+
+            return values;
+        }
+
+        function persistSocialValues(block, meta, values) {
+            if (!block) {
+                return;
+            }
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var resolvedValue = String((values && values[definition.key]) || '').trim();
+
+                block.setAttribute(getSocialDataAttributeName(definition.key), resolvedValue);
+                if (meta) {
+                    meta.setAttribute('data-' + definition.key, resolvedValue);
+                }
+            });
+        }
+
         function getSocialIconSvg(channel) {
             var icons = {
                 facebook: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.5 8.25V6.5c0-.83.67-1.5 1.5-1.5h1.5V2h-2.25A4.75 4.75 0 0 0 9.5 6.75v1.5H7v3h2.5V22h4v-10.75H16l.5-3z"></path></svg>',
@@ -2145,6 +2184,7 @@
         function ensureSocialBlockStructure(block) {
             var surface;
             var meta;
+            var persistedValues;
 
             if (!block || block.dataset.builderBlock !== 'social') {
                 return null;
@@ -2160,6 +2200,9 @@
                 meta = createElement('<div class="mb-social-meta hide" data-facebook="" data-instagram="https://instagram.com" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>');
                 surface.appendChild(meta);
             }
+
+            persistedValues = getPersistedSocialValues(block, meta);
+            persistSocialValues(block, meta, persistedValues);
 
             getSocialLinkDefinitions().forEach(function (definition) {
                 var link = block.querySelector(definition.selector);
@@ -2196,10 +2239,11 @@
                 return;
             }
 
+            persistSocialValues(block, meta, values);
+
             getSocialLinkDefinitions().forEach(function (item) {
-                var value = String(values[item.key] || '').trim();
+                var value = String(block.getAttribute(getSocialDataAttributeName(item.key)) || '').trim();
                 var link = block.querySelector(item.selector);
-                meta.setAttribute('data-' + item.key, value);
                 if (!link) {
                     return;
                 }
@@ -2272,12 +2316,12 @@
             if (block.dataset.builderBlock === 'social') {
                 socialMeta = ensureSocialBlockStructure(block);
                 updateSocialLinks(block, {
-                    facebook: socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : '',
-                    instagram: socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : '',
-                    twitter: socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : '',
-                    youtube: socialMeta ? (socialMeta.getAttribute('data-youtube') || '') : '',
-                    linkedin: socialMeta ? (socialMeta.getAttribute('data-linkedin') || '') : '',
-                    website: socialMeta ? (socialMeta.getAttribute('data-website') || '') : ''
+                    facebook: block.getAttribute(getSocialDataAttributeName('facebook')) || (socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : ''),
+                    instagram: block.getAttribute(getSocialDataAttributeName('instagram')) || (socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : ''),
+                    twitter: block.getAttribute(getSocialDataAttributeName('twitter')) || (socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : ''),
+                    youtube: block.getAttribute(getSocialDataAttributeName('youtube')) || (socialMeta ? (socialMeta.getAttribute('data-youtube') || '') : ''),
+                    linkedin: block.getAttribute(getSocialDataAttributeName('linkedin')) || (socialMeta ? (socialMeta.getAttribute('data-linkedin') || '') : ''),
+                    website: block.getAttribute(getSocialDataAttributeName('website')) || (socialMeta ? (socialMeta.getAttribute('data-website') || '') : '')
                 });
             }
 
@@ -3202,12 +3246,12 @@
             }
             if (type === 'social') {
                 var socialMeta = ensureSocialBlockStructure(block);
-                contentTab += '<div class="form-group"><label>Facebook URL</label><input type="text" class="form-control" data-control="social-facebook" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>Instagram URL</label><input type="text" class="form-control" data-control="social-instagram" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>X / Twitter URL</label><input type="text" class="form-control" data-control="social-twitter" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>YouTube URL</label><input type="text" class="form-control" data-control="social-youtube" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-youtube') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>LinkedIn URL</label><input type="text" class="form-control" data-control="social-linkedin" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-linkedin') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>Website URL</label><input type="text" class="form-control" data-control="social-website" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-website') || '') : '') + '"></div>';
+                contentTab += '<div class="form-group"><label>Facebook URL</label><input type="text" class="form-control" data-control="social-facebook" value="' + escapeHtml(block.getAttribute(getSocialDataAttributeName('facebook')) || (socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : '')) + '"></div>';
+                contentTab += '<div class="form-group"><label>Instagram URL</label><input type="text" class="form-control" data-control="social-instagram" value="' + escapeHtml(block.getAttribute(getSocialDataAttributeName('instagram')) || (socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : '')) + '"></div>';
+                contentTab += '<div class="form-group"><label>X / Twitter URL</label><input type="text" class="form-control" data-control="social-twitter" value="' + escapeHtml(block.getAttribute(getSocialDataAttributeName('twitter')) || (socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : '')) + '"></div>';
+                contentTab += '<div class="form-group"><label>YouTube URL</label><input type="text" class="form-control" data-control="social-youtube" value="' + escapeHtml(block.getAttribute(getSocialDataAttributeName('youtube')) || (socialMeta ? (socialMeta.getAttribute('data-youtube') || '') : '')) + '"></div>';
+                contentTab += '<div class="form-group"><label>LinkedIn URL</label><input type="text" class="form-control" data-control="social-linkedin" value="' + escapeHtml(block.getAttribute(getSocialDataAttributeName('linkedin')) || (socialMeta ? (socialMeta.getAttribute('data-linkedin') || '') : '')) + '"></div>';
+                contentTab += '<div class="form-group"><label>Website URL</label><input type="text" class="form-control" data-control="social-website" value="' + escapeHtml(block.getAttribute(getSocialDataAttributeName('website')) || (socialMeta ? (socialMeta.getAttribute('data-website') || '') : '')) + '"></div>';
             }
             if (type === 'icon') {
                 var iconLink = getIconLinkNode(block);
@@ -3578,12 +3622,12 @@
                 }
                 var socialMeta = ensureSocialBlockStructure(block);
                 updateSocialLinks(block, {
-                    facebook: control === 'social-facebook' ? target.value : (socialMeta ? socialMeta.getAttribute('data-facebook') : ''),
-                    instagram: control === 'social-instagram' ? target.value : (socialMeta ? socialMeta.getAttribute('data-instagram') : ''),
-                    twitter: control === 'social-twitter' ? target.value : (socialMeta ? socialMeta.getAttribute('data-twitter') : ''),
-                    youtube: control === 'social-youtube' ? target.value : (socialMeta ? socialMeta.getAttribute('data-youtube') : ''),
-                    linkedin: control === 'social-linkedin' ? target.value : (socialMeta ? socialMeta.getAttribute('data-linkedin') : ''),
-                    website: control === 'social-website' ? target.value : (socialMeta ? socialMeta.getAttribute('data-website') : '')
+                    facebook: control === 'social-facebook' ? target.value : (block.getAttribute(getSocialDataAttributeName('facebook')) || (socialMeta ? socialMeta.getAttribute('data-facebook') : '')),
+                    instagram: control === 'social-instagram' ? target.value : (block.getAttribute(getSocialDataAttributeName('instagram')) || (socialMeta ? socialMeta.getAttribute('data-instagram') : '')),
+                    twitter: control === 'social-twitter' ? target.value : (block.getAttribute(getSocialDataAttributeName('twitter')) || (socialMeta ? socialMeta.getAttribute('data-twitter') : '')),
+                    youtube: control === 'social-youtube' ? target.value : (block.getAttribute(getSocialDataAttributeName('youtube')) || (socialMeta ? socialMeta.getAttribute('data-youtube') : '')),
+                    linkedin: control === 'social-linkedin' ? target.value : (block.getAttribute(getSocialDataAttributeName('linkedin')) || (socialMeta ? socialMeta.getAttribute('data-linkedin') : '')),
+                    website: control === 'social-website' ? target.value : (block.getAttribute(getSocialDataAttributeName('website')) || (socialMeta ? socialMeta.getAttribute('data-website') : ''))
                 });
             } else if (control === 'inline-image-url') {
                 if (currentImageNode) {
