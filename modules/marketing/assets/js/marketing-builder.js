@@ -320,6 +320,38 @@
             return String(companyAddressConfig.text || 'Your Company\n123 Market Street\nCity, State');
         }
 
+        function getSavedCompanyAddressPayload() {
+            var html = String(companyAddressConfig.html || '').trim();
+            var text = String(companyAddressConfig.text || '').trim();
+            var fallbackText;
+
+            if (!html && text) {
+                html = text.split(/\r?\n/).map(function (line) {
+                    return escapeHtml(line);
+                }).join('<br>');
+            }
+
+            if (!text && html) {
+                text = htmlToFallbackPlainText(html);
+            }
+
+            if (!html) {
+                html = 'Your Company<br>123 Market Street<br>City, State';
+            }
+
+            if (!text) {
+                fallbackText = htmlToFallbackPlainText(html);
+                text = fallbackText || 'Your Company\n123 Market Street\nCity, State';
+            }
+
+            return {
+                html: html,
+                text: text,
+                configured: !!companyAddressConfig.configured,
+                source: String(companyAddressConfig.source || 'marketing_module_fallback')
+            };
+        }
+
         function hasConfiguredCompanyAddress() {
             return !!companyAddressConfig.configured;
         }
@@ -1086,18 +1118,43 @@
         }
 
         function applySavedCompanyAddress(block) {
+            var payload;
+            var sanitizedHtml;
+            var textValue;
+            var surfaceNode;
+            var sidebarEditorNode;
+
             if (!block) {
                 return;
             }
 
+            payload = getSavedCompanyAddressPayload();
+            sanitizedHtml = sanitizeEditableHtml(payload.html || '');
+            textValue = String(payload.text || '');
             var addressNode = block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text');
             if (!addressNode) {
                 return;
             }
 
-            addressNode.innerHTML = getSavedCompanyAddressHtml();
+            addressNode.innerHTML = sanitizedHtml || '<p><br></p>';
+            addressNode.setAttribute('data-saved-company-address-source', payload.source);
+            addressNode.setAttribute('data-saved-company-address-text', textValue);
+
+            surfaceNode = getSurface(block);
+            if (surfaceNode) {
+                surfaceNode.setAttribute('data-company-address-source', payload.source);
+            }
+
+            sidebarEditorNode = getSidebarTextEditableNode(block);
+            if (state.sidebarEditor && state.sidebarEditor.block === block && sidebarEditorNode) {
+                state.sidebarEditor.node = sidebarEditorNode;
+                syncSidebarEditorFromBlock();
+            }
+
             syncFields();
-            renderProperties();
+            if (state.activeBlock === block) {
+                renderProperties();
+            }
         }
 
         function findExistingFooterBlock() {
@@ -1451,9 +1508,11 @@
         }
 
         function createCompanyAddressBlock() {
+            var savedCompanyAddress = getSavedCompanyAddressPayload();
+
             return blockShell('company_address', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;color:#64748b;font-family:Arial, sans-serif;font-size:13px;line-height:1.7;font-weight:400;') + '">'
-                + '<div class="mb-company-address-text" contenteditable="true">' + getSavedCompanyAddressHtml() + '</div>'
+                + '<div class="mb-company-address-text" contenteditable="true" data-saved-company-address-source="' + escapeHtml(savedCompanyAddress.source) + '" data-saved-company-address-text="' + escapeHtml(savedCompanyAddress.text) + '">' + savedCompanyAddress.html + '</div>'
                 + '</td></tr></table>');
         }
 
@@ -1505,17 +1564,22 @@
         function createSocialBlock() {
             return blockShell('social', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;') + '">'
+                + '<a href="" class="mb-social-link mb-social-facebook" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Facebook</a>'
                 + '<a href="https://instagram.com" class="mb-social-link mb-social-instagram" style="color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Instagram</a>'
                 + '<a href="" class="mb-social-link mb-social-twitter" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">X</a>'
+                + '<a href="" class="mb-social-link mb-social-youtube" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">YouTube</a>'
+                + '<a href="" class="mb-social-link mb-social-linkedin" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">LinkedIn</a>'
                 + '<a href="" class="mb-social-link mb-social-website" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Website</a>'
-                + '<div class="mb-social-meta hide" data-instagram="https://instagram.com" data-twitter="" data-website=""></div>'
+                + '<div class="mb-social-meta hide" data-facebook="" data-instagram="https://instagram.com" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>'
                 + '</td></tr></table>');
         }
 
         function createFooterBlock() {
+            var savedCompanyAddress = getSavedCompanyAddressPayload();
+
             return blockShell('footer', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#0f172a;padding:' + DEFAULT_PADDING + 'px;border-radius:16px;text-align:center;color:#cbd5e1;font-family:Arial, sans-serif;font-size:13px;line-height:1.7;font-weight:400;">'
-                + '<div class="mb-footer-text" contenteditable="true">' + getSavedCompanyAddressHtml() + '</div>'
+                + '<div class="mb-footer-text" contenteditable="true" data-saved-company-address-source="' + escapeHtml(savedCompanyAddress.source) + '" data-saved-company-address-text="' + escapeHtml(savedCompanyAddress.text) + '">' + savedCompanyAddress.html + '</div>'
                 + '<div style="margin-top:12px;"><a href="{{unsubscribe_url}}" style="color:#93c5fd;text-decoration:underline;">Unsubscribe</a></div>'
                 + '</td></tr></table>');
         }
@@ -1890,8 +1954,11 @@
             }
 
             [
+                ['facebook', '.mb-social-facebook'],
                 ['instagram', '.mb-social-instagram'],
                 ['twitter', '.mb-social-twitter'],
+                ['youtube', '.mb-social-youtube'],
+                ['linkedin', '.mb-social-linkedin'],
                 ['website', '.mb-social-website']
             ].forEach(function (item) {
                 var value = String(values[item[0]] || '').trim();
@@ -2824,8 +2891,11 @@
             }
             if (type === 'social') {
                 var socialMeta = block.querySelector('.mb-social-meta');
+                contentTab += '<div class="form-group"><label>Facebook URL</label><input type="text" class="form-control" data-control="social-facebook" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : '') + '"></div>';
                 contentTab += '<div class="form-group"><label>Instagram URL</label><input type="text" class="form-control" data-control="social-instagram" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : '') + '"></div>';
                 contentTab += '<div class="form-group"><label>X / Twitter URL</label><input type="text" class="form-control" data-control="social-twitter" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : '') + '"></div>';
+                contentTab += '<div class="form-group"><label>YouTube URL</label><input type="text" class="form-control" data-control="social-youtube" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-youtube') || '') : '') + '"></div>';
+                contentTab += '<div class="form-group"><label>LinkedIn URL</label><input type="text" class="form-control" data-control="social-linkedin" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-linkedin') || '') : '') + '"></div>';
                 contentTab += '<div class="form-group"><label>Website URL</label><input type="text" class="form-control" data-control="social-website" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-website') || '') : '') + '"></div>';
             }
             if (type === 'icon') {
@@ -3190,15 +3260,18 @@
                 block.querySelector('.mb-icon-symbol').style.fontSize = clampNumber(target.value, 12, 96, 42) + 'px';
             } else if (control === 'icon-color') {
                 block.querySelector('.mb-icon-symbol').style.color = target.value;
-            } else if (control === 'social-instagram' || control === 'social-twitter' || control === 'social-website') {
+            } else if (control === 'social-facebook' || control === 'social-instagram' || control === 'social-twitter' || control === 'social-youtube' || control === 'social-linkedin' || control === 'social-website') {
                 if (target.value && !isValidLink(target.value)) {
                     window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
                     return;
                 }
                 var socialMeta = block.querySelector('.mb-social-meta');
                 updateSocialLinks(block, {
+                    facebook: control === 'social-facebook' ? target.value : (socialMeta ? socialMeta.getAttribute('data-facebook') : ''),
                     instagram: control === 'social-instagram' ? target.value : (socialMeta ? socialMeta.getAttribute('data-instagram') : ''),
                     twitter: control === 'social-twitter' ? target.value : (socialMeta ? socialMeta.getAttribute('data-twitter') : ''),
+                    youtube: control === 'social-youtube' ? target.value : (socialMeta ? socialMeta.getAttribute('data-youtube') : ''),
+                    linkedin: control === 'social-linkedin' ? target.value : (socialMeta ? socialMeta.getAttribute('data-linkedin') : ''),
                     website: control === 'social-website' ? target.value : (socialMeta ? socialMeta.getAttribute('data-website') : '')
                 });
             } else if (control === 'inline-image-url') {
