@@ -1157,6 +1157,16 @@
             }
         }
 
+        function isSavedCompanyAddressTargetBlock(block) {
+            if (!block || !block.dataset) {
+                return false;
+            }
+
+            return block.dataset.builderBlock === 'company_address'
+                || block.dataset.builderBlock === 'footer'
+                || block.dataset.builderBlock === 'email_footer';
+        }
+
         function findExistingFooterBlock() {
             return canvas.querySelector('.mb-block[data-builder-block="footer"], .mb-block[data-builder-block="email_footer"]');
         }
@@ -1197,11 +1207,7 @@
                 });
             }
 
-            if (companyAddressConfig.configured) {
-                applySavedCompanyAddress(footerBlock);
-            } else {
-                syncFields();
-            }
+            applySavedCompanyAddress(footerBlock);
             setActiveBlock(footerBlock);
         }
 
@@ -1375,7 +1381,7 @@
             cta.querySelector('.mb-button-label').textContent = 'Register now';
             cta.querySelector('.mb-button-link').setAttribute('href', 'https://example.com/register');
 
-            footer.querySelector('.mb-footer-text').innerHTML = getSavedCompanyAddressHtml();
+            applySavedCompanyAddress(footer);
 
             blocks.push(hero, intro, details, agenda, cta, footer);
 
@@ -1971,6 +1977,8 @@
                     link = createElement('<a href="" class="mb-social-link ' + definition.selector.replace('.', '') + '" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">' + escapeHtml(definition.label) + '</a>');
                     surface.insertBefore(link, meta);
                 }
+
+                link.textContent = definition.label;
 
                 if (!meta.hasAttribute('data-' + definition.key)) {
                     meta.setAttribute('data-' + definition.key, '');
@@ -3810,28 +3818,12 @@
                 } else if (action === 'insert-company-address') {
                     insertOrFocusCompanyAddressBlock();
                 } else if (action === 'use-saved-company-address') {
-                    insertOrFocusCompanyAddressBlock();
-                    try {
-                        var targetBlock = null;
-                        if (state.activeBlock && state.activeBlock.dataset && state.activeBlock.dataset.builderBlock === 'company_address') {
-                            targetBlock = state.activeBlock;
-                        } else {
-                            targetBlock = canvas.querySelector('.mb-block[data-builder-block="company_address"]');
-                        }
-
-                        if (typeof applySavedCompanyAddress === 'function' && targetBlock) {
-                            if (typeof companyAddressConfig !== 'undefined' && companyAddressConfig && companyAddressConfig.configured) {
-                                applySavedCompanyAddress(targetBlock);
-                                setActiveBlock(targetBlock);
-                                syncFields();
-                            } else {
-                                window.alert(strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet.');
-                                setActiveBlock(targetBlock);
-                                syncFields();
-                            }
-                        }
-                    } catch (err) {
-                        console.error('use-saved-company-address handler failed:', err);
+                    if (isSavedCompanyAddressTargetBlock(state.activeBlock)) {
+                        applySavedCompanyAddress(state.activeBlock);
+                        setActiveBlock(state.activeBlock);
+                        syncFields();
+                    } else {
+                        insertOrFocusCompanyAddressBlock();
                     }
                 } else if (action === 'insert-email-footer') {
                     insertOrFocusEmailFooterBlock();
