@@ -344,8 +344,12 @@
             return '<div class="mb-column-slot mb-dropzone" data-dropzone-slot="1"></div>';
         }
 
-        function createRichText(text) {
-            return '<div class="mb-richtext" contenteditable="true"><p style="margin:0;">' + escapeHtml(text) + '</p></div>';
+        function getMinimumContentPaddingStyle(extraStyle) {
+            return 'padding-left:10px;padding-right:10px;box-sizing:border-box;' + (extraStyle || '');
+        }
+
+        function createRichText(text, extraStyle) {
+            return '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle(extraStyle) + '"><p style="margin:0;">' + escapeHtml(text) + '</p></div>';
         }
 
         function getSavedCompanyAddressHtml() {
@@ -444,7 +448,9 @@
                 color: true,
                 'background-color': true,
                 'text-align': true,
-                'padding-left': true
+                'padding-left': true,
+                'padding-right': true,
+                'box-sizing': true
             };
 
             function cleanInlineStyle(styleValue) {
@@ -470,11 +476,19 @@
                         return;
                     }
 
+                    if (property === 'padding-right' && !/^\d+(px|em|rem|%)$/.test(value)) {
+                        return;
+                    }
+
                     if ((property === 'color' || property === 'background-color') && /expression|url\s*\(|javascript:/i.test(value)) {
                         return;
                     }
 
                     if (property === 'text-align' && ['left', 'center', 'right', 'justify'].indexOf(value.toLowerCase()) === -1) {
+                        return;
+                    }
+
+                    if (property === 'box-sizing' && value.toLowerCase() !== 'border-box') {
                         return;
                     }
 
@@ -1241,6 +1255,41 @@
                 || isLegacyCompanyAddressPlaceholderValue(currentText);
         }
 
+        function ensureMinimumContentPadding(node) {
+            var currentLeft;
+            var currentRight;
+
+            if (!node || !node.style) {
+                return;
+            }
+
+            currentLeft = parseInt(node.style.paddingLeft, 10) || 0;
+            currentRight = parseInt(node.style.paddingRight, 10) || 0;
+
+            if (currentLeft < 10) {
+                node.style.paddingLeft = '10px';
+            }
+
+            if (currentRight < 10) {
+                node.style.paddingRight = '10px';
+            }
+
+            if (!node.style.boxSizing) {
+                node.style.boxSizing = 'border-box';
+            }
+        }
+
+        function normalizeBlockContentPadding(block) {
+            if (!block) {
+                return;
+            }
+
+            Array.prototype.forEach.call(
+                block.querySelectorAll('.mb-richtext, .mb-heading-text, .mb-image-caption, .mb-icon-title, .mb-icon-description, .mb-hero-headline, .mb-hero-subheadline, .mb-qr-caption'),
+                ensureMinimumContentPadding
+            );
+        }
+
         function isSavedCompanyAddressTargetBlock(block) {
             if (!block || !block.dataset) {
                 return false;
@@ -1482,8 +1531,8 @@
                 + '<a href="" class="mb-hero-image-link" data-hero-part="image" style="display:block;text-decoration:none;">'
                 + '<img src="' + heroPlaceholderDataUri() + '" alt="' + escapeHtml(strings.optionalImage || 'Optional image') + '" class="mb-hero-image" style="display:block;margin:0 auto 18px;max-width:100%;width:320px;height:auto;border-radius:18px;">'
                 + '</a>'
-                + '<h1 class="mb-hero-headline" data-hero-part="headline" contenteditable="true" style="margin:0 0 14px;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#ffffff;">Your headline goes here</h1>'
-                + '<p class="mb-hero-subheadline" data-hero-part="subheadline" contenteditable="true" style="margin:0 0 24px;font-family:Arial, sans-serif;font-size:16px;line-height:1.7;font-weight:400;color:#dbeafe;">Introduce the offer, explain the value, and set up the email.</p>'
+                + '<h1 class="mb-hero-headline" data-hero-part="headline" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 14px;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#ffffff;') + '">Your headline goes here</h1>'
+                + '<p class="mb-hero-subheadline" data-hero-part="subheadline" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 24px;font-family:Arial, sans-serif;font-size:16px;line-height:1.7;font-weight:400;color:#dbeafe;') + '">Introduce the offer, explain the value, and set up the email.</p>'
                 + '<a href="https://example.com" class="mb-cta-link" data-hero-part="button" target="_blank" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 26px;border-radius:999px;font-family:Arial, sans-serif;font-size:16px;line-height:1.2;font-weight:700;"><span class="mb-cta-label" contenteditable="true">Call to Action</span></a>'
                 + '</td></tr></table>');
         }
@@ -1506,7 +1555,7 @@
         function createHeadingBlock() {
             return blockShell('heading', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('color:#0f172a;') + '">'
-                + '<h2 class="mb-heading-text" contenteditable="true" style="margin:0;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#0f172a;">Add a strong heading</h2>'
+                + '<h2 class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#0f172a;') + '">Add a strong heading</h2>'
                 + '</td></tr></table>');
         }
 
@@ -1514,8 +1563,8 @@
             return blockShell('icon', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;color:#2563eb;') + '">'
                 + '<div class="mb-icon-symbol" contenteditable="true" style="font-size:42px;line-height:1;">&#9733;</div>'
-                + '<div class="mb-icon-title" contenteditable="true" style="margin-top:10px;font-family:Arial, sans-serif;font-size:20px;font-weight:700;line-height:1.3;color:#0f172a;">Icon title</div>'
-                + '<div class="mb-icon-description" contenteditable="true" style="margin-top:8px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;">Highlight one key point.</div>'
+                + '<div class="mb-icon-title" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:10px;font-family:Arial, sans-serif;font-size:20px;font-weight:700;line-height:1.3;color:#0f172a;') + '">Icon title</div>'
+                + '<div class="mb-icon-description" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:8px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;') + '">Highlight one key point.</div>'
                 + '<a href="" class="mb-icon-link" style="display:none;color:#2563eb;text-decoration:none;margin-top:10px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Learn more</a>'
                 + '</td></tr></table>');
         }
@@ -1526,7 +1575,7 @@
                 + '<a href="" class="mb-image-link" style="text-decoration:none;">'
                 + '<img src="https://via.placeholder.com/640x320?text=Image" alt="" class="mb-image" style="display:inline-block;width:320px;max-width:100%;height:auto;border-radius:12px;">'
                 + '</a>'
-                + '<div class="mb-image-caption" contenteditable="true" style="margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:400;line-height:1.7;color:#64748b;">Optional caption</div>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:400;line-height:1.7;color:#64748b;') + '">Optional caption</div>'
                 + '</td></tr></table>');
         }
 
@@ -1549,8 +1598,8 @@
             return blockShell('image_box', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('') + '">'
                 + '<div style="text-align:center;"><a href="" class="mb-image-link" style="text-decoration:none;"><img src="https://via.placeholder.com/520x220?text=Feature" alt="" class="mb-image" style="display:inline-block;width:280px;max-width:100%;height:auto;border-radius:12px;"></a></div>'
-                + '<h3 class="mb-heading-text" contenteditable="true" style="margin:18px 0 8px;font-family:Arial, sans-serif;font-size:24px;line-height:1.3;font-weight:700;color:#0f172a;">Feature spotlight</h3>'
-                + '<div class="mb-image-caption" contenteditable="true" style="font-family:Arial, sans-serif;font-size:15px;font-weight:400;color:#64748b;line-height:1.7;">Pair a visual with a short supporting explanation.</div>'
+                + '<h3 class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:18px 0 8px;font-family:Arial, sans-serif;font-size:24px;line-height:1.3;font-weight:700;color:#0f172a;') + '">Feature spotlight</h3>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Arial, sans-serif;font-size:15px;font-weight:400;color:#64748b;line-height:1.7;') + '">Pair a visual with a short supporting explanation.</div>'
                 + '</td></tr></table>');
         }
 
@@ -1567,8 +1616,8 @@
         function createCtaBlock() {
             return blockShell('cta', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#eff6ff;padding:' + DEFAULT_PADDING + 'px;border-radius:18px;text-align:center;">'
-                + '<div class="mb-heading-text" contenteditable="true" style="margin:0 0 10px;font-family:Arial, sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0f172a;">Ready to take the next step?</div>'
-                + '<div class="mb-richtext" contenteditable="true" style="margin:0 0 18px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;">Use this call-to-action block for urgent or conversion-focused messages.</div>'
+                + '<div class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 10px;font-family:Arial, sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0f172a;') + '">Ready to take the next step?</div>'
+                + '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 18px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;') + '">Use this call-to-action block for urgent or conversion-focused messages.</div>'
                 + '<a href="https://example.com" class="mb-button-link" target="_blank" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-family:Arial, sans-serif;font-size:16px;font-weight:700;line-height:1.2;"><span class="mb-button-label" contenteditable="true">Book now</span></a>'
                 + '</td></tr></table>');
         }
@@ -1576,24 +1625,24 @@
         function createFeatureListBlock() {
             return blockShell('feature_list', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('color:#0f172a;') + '">'
-                + '<div class="mb-heading-text" contenteditable="true" style="margin:0 0 10px;font-family:Arial, sans-serif;font-size:26px;line-height:1.2;font-weight:700;">Top reasons to choose this offer</div>'
-                + '<div class="mb-richtext" contenteditable="true" style="font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.8;"><ul style="margin:0;padding-left:20px;line-height:1.8;"><li>Benefit one with a short explanation</li><li>Benefit two with a short explanation</li><li>Benefit three with a short explanation</li></ul></div>'
+                + '<div class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 10px;font-family:Arial, sans-serif;font-size:26px;line-height:1.2;font-weight:700;') + '">Top reasons to choose this offer</div>'
+                + '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.8;') + '"><ul style="margin:0;padding-left:20px;line-height:1.8;"><li>Benefit one with a short explanation</li><li>Benefit two with a short explanation</li><li>Benefit three with a short explanation</li></ul></div>'
                 + '</td></tr></table>');
         }
 
         function createTestimonialBlock() {
             return blockShell('testimonial', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#ffffff;padding:' + DEFAULT_PADDING + 'px;border-radius:16px;border:1px solid #e2e8f0;color:#0f172a;">'
-                + '<div class="mb-richtext" contenteditable="true" style="font-family:Georgia, serif;font-size:20px;font-weight:400;line-height:1.6;color:#0f172a;">“This email builder helped us launch polished campaigns much faster.”</div>'
-                + '<div class="mb-image-caption" contenteditable="true" style="margin-top:14px;font-family:Arial, sans-serif;font-size:14px;font-weight:500;color:#64748b;line-height:1.6;">Customer Name, Role</div>'
+                + '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Georgia, serif;font-size:20px;font-weight:400;line-height:1.6;color:#0f172a;') + '">“This email builder helped us launch polished campaigns much faster.”</div>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:14px;font-family:Arial, sans-serif;font-size:14px;font-weight:500;color:#64748b;line-height:1.6;') + '">Customer Name, Role</div>'
                 + '</td></tr></table>');
         }
 
         function createCouponBlock() {
             return blockShell('coupon', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#fff7ed;padding:' + DEFAULT_PADDING + 'px;border:1px dashed #fb923c;border-radius:18px;text-align:center;color:#9a3412;">'
-                + '<div class="mb-heading-text" contenteditable="true" style="font-family:Arial, sans-serif;font-size:30px;line-height:1.1;font-weight:800;">SAVE20</div>'
-                + '<div class="mb-image-caption" contenteditable="true" style="margin-top:10px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.7;">Use this code to unlock your offer before it expires.</div>'
+                + '<div class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Arial, sans-serif;font-size:30px;line-height:1.1;font-weight:800;') + '">SAVE20</div>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:10px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.7;') + '">Use this code to unlock your offer before it expires.</div>'
                 + '</td></tr></table>');
         }
 
@@ -1639,7 +1688,7 @@
             return blockShell('qr', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#ffffff;padding:' + DEFAULT_PADDING + 'px;border-radius:18px;text-align:center;border:1px solid #e2e8f0;box-shadow:0 10px 24px rgba(15,23,42,.06);">'
                 + '<img src="' + qrSvgDataUri('https://example.com', 180, strings.qrFallbackNote || 'QR preview', '#111827', '#ffffff') + '" alt="QR Code" class="mb-qr-image" style="display:inline-block;width:180px;max-width:100%;height:auto;border-radius:16px;">'
-                + '<div class="mb-qr-caption" contenteditable="true" style="margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:500;line-height:1.6;color:#475569;">Scan to visit the linked page.</div>'
+                + '<div class="mb-qr-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:500;line-height:1.6;color:#475569;') + '">Scan to visit the linked page.</div>'
                 + '<div class="mb-qr-meta hide" data-qr-target="https://example.com" data-qr-size="180" data-qr-align="center" data-qr-foreground="#111827" data-qr-background="#ffffff" data-qr-padding="' + DEFAULT_PADDING + '" data-qr-margin-bottom="16" data-qr-radius="16"></div>'
                 + '</td></tr></table>');
         }
@@ -2215,6 +2264,7 @@
             if (block.dataset.builderBlock === 'hero') {
                 normalizeHeroBlock(block);
             }
+            normalizeBlockContentPadding(block);
             if (shouldNormalizeSavedCompanyAddressBlock(block)) {
                 applySavedCompanyAddress(block, { skipSync: true, skipRender: true });
             }
