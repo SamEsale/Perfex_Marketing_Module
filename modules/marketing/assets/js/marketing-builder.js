@@ -25,6 +25,22 @@
         return holder.firstElementChild;
     }
 
+    function getElementClassName(element) {
+        if (!element || element.nodeType !== 1 || typeof element.getAttribute !== 'function') {
+            return '';
+        }
+
+        return String(element.getAttribute('class') || '');
+    }
+
+    function setElementClassName(element, classValue) {
+        if (!element || element.nodeType !== 1 || typeof element.setAttribute !== 'function') {
+            return;
+        }
+
+        element.setAttribute('class', String(classValue || ''));
+    }
+
     function clampNumber(value, min, max, fallback) {
         var parsed = parseInt(value, 10);
         if (isNaN(parsed)) {
@@ -2754,7 +2770,7 @@
             }
 
             unsubscribeStatus.textContent = hasToken ? (strings.unsubscribePresent || 'Unsubscribe link included') : (strings.unsubscribeMissing || 'Missing unsubscribe link');
-            unsubscribeStatus.className = 'marketing-builder-status-chip ' + (hasToken ? 'marketing-builder-status-chip--ok' : 'marketing-builder-status-chip--missing');
+            setElementClassName(unsubscribeStatus, 'marketing-builder-status-chip ' + (hasToken ? 'marketing-builder-status-chip--ok' : 'marketing-builder-status-chip--missing'));
         }
 
         function serializeBlock(block) {
@@ -2786,6 +2802,12 @@
             });
 
             Array.prototype.forEach.call(clone.querySelectorAll('*'), function (node) {
+                var currentClassName;
+
+                if (!node || node.nodeType !== 1) {
+                    return;
+                }
+
                 node.removeAttribute('contenteditable');
                 node.removeAttribute('draggable');
 
@@ -2807,8 +2829,9 @@
                     node.removeAttribute(name);
                 });
 
-                if (node.className) {
-                    node.className = String(node.className)
+                currentClassName = getElementClassName(node);
+                if (currentClassName !== '') {
+                    setElementClassName(node, currentClassName
                         .split(/\s+/)
                         .filter(function (className) {
                             return className
@@ -2818,14 +2841,14 @@
                                         && className !== 'is-active'
                                         && className !== 'is-over'));
                         })
-                        .join(' ');
+                        .join(' '));
                 }
             });
 
             clone.removeAttribute('draggable');
             clone.removeAttribute('data-builder-block');
             clone.removeAttribute('data-bound-block');
-            clone.className = '';
+            setElementClassName(clone, '');
 
             return clone.innerHTML;
         }
@@ -3986,7 +4009,7 @@
                 return;
             }
 
-            imageModalFields.status.className = 'alert marketing-builder-modal-status alert-' + type;
+            setElementClassName(imageModalFields.status, 'alert marketing-builder-modal-status alert-' + type);
             imageModalFields.status.textContent = message;
             imageModalFields.status.classList.remove('hide');
         }
@@ -3996,7 +4019,7 @@
                 return;
             }
 
-            imageModalFields.status.className = 'alert marketing-builder-modal-status hide';
+            setElementClassName(imageModalFields.status, 'alert marketing-builder-modal-status hide');
             imageModalFields.status.textContent = '';
         }
 
@@ -4166,11 +4189,11 @@
 
         function openPreview(mode) {
             state.previewMode = mode === 'mobile' ? 'mobile' : 'desktop';
-            previewShell.className = 'marketing-builder-preview-shell marketing-builder-preview-shell--' + state.previewMode;
+            setElementClassName(previewShell, 'marketing-builder-preview-shell marketing-builder-preview-shell--' + state.previewMode);
             previewFrame.srcdoc = renderEmailHtml();
 
             if (canvasFrame) {
-                canvasFrame.className = 'marketing-builder-canvas-frame marketing-builder-canvas-frame--' + state.previewMode;
+                setElementClassName(canvasFrame, 'marketing-builder-canvas-frame marketing-builder-canvas-frame--' + state.previewMode);
                 canvasModeLabel.textContent = state.previewMode === 'mobile'
                     ? (strings.mobileCanvas || 'Mobile preview')
                     : (strings.desktopCanvas || 'Desktop preview');
