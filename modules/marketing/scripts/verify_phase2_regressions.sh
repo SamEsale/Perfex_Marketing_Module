@@ -2558,6 +2558,54 @@ check_whatsapp_media_metadata_allowlist() {
     "parser=$parser_media_helper | webhook=$webhook_media_helper | model=$model_media_summary | view=$view_media_escape"
 }
 
+check_whatsapp_status_reconciliation() {
+  local parser_status_raw parser_status_error parser_sent parser_delivered parser_read parser_failed parser_error_code parser_error_title parser_error_message parser_error_details
+  local webhook_status_route webhook_status_store webhook_reconcile_call webhook_status_payload webhook_status_error_details
+  local model_reconcile model_match model_transition model_meta_merge model_status_error_code model_status_error_details model_summary_error model_unread_guard
+  local view_status_line view_media_escape status_block reconcile_block status_add_message status_touch
+
+  parser_status_raw="$(first_match 'function[[:space:]]+extractSafeStatusRaw' "$WHATSAPP_FILE")"
+  parser_status_error="$(first_match 'function[[:space:]]+extractSafeStatusErrorMetadata' "$WHATSAPP_FILE")"
+  parser_sent="$(first_fixed_match "case 'sent':" "$WHATSAPP_FILE")"
+  parser_delivered="$(first_fixed_match "case 'delivered':" "$WHATSAPP_FILE")"
+  parser_read="$(first_fixed_match "case 'read':" "$WHATSAPP_FILE")"
+  parser_failed="$(first_fixed_match "case 'failed':" "$WHATSAPP_FILE")"
+  parser_error_code="$(first_fixed_match "\$meta['error_code'] = \$errorCode;" "$WHATSAPP_FILE")"
+  parser_error_title="$(first_fixed_match "\$meta['error_title'] = \$errorTitle;" "$WHATSAPP_FILE")"
+  parser_error_message="$(first_fixed_match "\$meta['error_message'] = \$errorMessage;" "$WHATSAPP_FILE")"
+  parser_error_details="$(first_fixed_match "\$meta['error_details'] = \$errorDetails;" "$WHATSAPP_FILE")"
+  webhook_status_route="$(first_fixed_match "storeWhatsappStatusEvent(\$statusEvent)" "$WEBHOOKS_FILE")"
+  webhook_status_store="$(first_fixed_match "\$this->marketing_events_model->add_event_idempotent([" "$WEBHOOKS_FILE")"
+  webhook_reconcile_call="$(first_fixed_match "\$reconcileResult = \$this->marketing_conversations_model->reconcile_whatsapp_status_update(\$statusEvent);" "$WEBHOOKS_FILE")"
+  webhook_status_payload="$(first_match 'function[[:space:]]+buildWhatsappStatusPayload' "$WEBHOOKS_FILE")"
+  webhook_status_error_details="$(first_fixed_match "'error_details' => 280," "$WEBHOOKS_FILE")"
+  model_reconcile="$(first_match 'function[[:space:]]+reconcile_whatsapp_status_update' "$CONVERSATIONS_FILE")"
+  model_match="$(first_fixed_match "find_message_by_provider_message_id(\$providerMessageId, 'whatsapp_cloud')" "$CONVERSATIONS_FILE")"
+  model_transition="$(first_match 'function[[:space:]]+should_apply_whatsapp_status_transition' "$CONVERSATIONS_FILE")"
+  model_meta_merge="$(first_match 'function[[:space:]]+merge_whatsapp_status_media_meta_json' "$CONVERSATIONS_FILE")"
+  model_status_error_code="$(first_fixed_match "'status_error_code' => ['key' => 'error_code', 'length' => 32]," "$CONVERSATIONS_FILE")"
+  model_status_error_details="$(first_fixed_match "'status_error_details' => ['key' => 'error_details', 'length' => 280]," "$CONVERSATIONS_FILE")"
+  model_summary_error="$(first_fixed_match "\$parts[] = 'Error: ' . mb_substr(preg_replace('/\s+/', ' ', \$statusErrorTitle), 0, 120);" "$CONVERSATIONS_FILE")"
+  model_unread_guard="$(first_fixed_match "\$shouldIncrementUnread = \$direction === 'inbound' && \$this->db->field_exists('unread_count', \$this->conversationsTable);" "$CONVERSATIONS_FILE")"
+  view_status_line="$(first_fixed_match "<?= _l('marketing_status'); ?>: <?= html_escape((string) \$message['provider_status']); ?>" "modules/marketing/views/whatsapp_conversation.php")"
+  view_media_escape="$(first_fixed_match '<div class="marketing-whatsapp-message-foot"><?= html_escape($mediaSummary); ?></div>' "modules/marketing/views/whatsapp_conversation.php")"
+  status_block="$(sed -n '/protected function storeWhatsappStatusEvent/,/protected function hasStableDedupeCriteria/p' "$WEBHOOKS_FILE")"
+  reconcile_block="$(sed -n '/public function reconcile_whatsapp_status_update/,/private function touch_conversation/p' "$CONVERSATIONS_FILE")"
+  status_add_message="$(printf '%s\n' "$status_block" | grep -nF 'add_message_idempotent(' || true)"
+  status_touch="$(printf '%s\n' "$reconcile_block" | grep -nF 'touch_conversation(' | grep -v 'private function touch_conversation' || true)"
+
+  if [[ -z "$parser_status_raw" || -z "$parser_status_error" || -z "$parser_sent" || -z "$parser_delivered" || -z "$parser_read" || -z "$parser_failed" || -z "$parser_error_code" || -z "$parser_error_title" || -z "$parser_error_message" || -z "$parser_error_details" || -z "$webhook_status_route" || -z "$webhook_status_store" || -z "$webhook_reconcile_call" || -z "$webhook_status_payload" || -z "$webhook_status_error_details" || -z "$model_reconcile" || -z "$model_match" || -z "$model_transition" || -z "$model_meta_merge" || -z "$model_status_error_code" || -z "$model_status_error_details" || -z "$model_summary_error" || -z "$model_unread_guard" || -z "$view_status_line" || -z "$view_media_escape" || -n "$status_add_message" || -n "$status_touch" ]]; then
+    fail \
+      "WhatsApp status webhooks reconcile safely into persisted message state without duplicating messages or unread counts" \
+      "expected status parser helpers and sent/delivered/read/failed mapping in $WHATSAPP_FILE, event-only webhook routing plus explicit reconcile call and bounded status payload in $WEBHOOKS_FILE, provider_message_id matching and bounded failure metadata merge in $CONVERSATIONS_FILE, escaped provider status/media summary rendering in modules/marketing/views/whatsapp_conversation.php, no add_message_idempotent() inside storeWhatsappStatusEvent(), and no touch_conversation() unread mutation inside reconcile_whatsapp_status_update(); parser_raw=${parser_status_raw:-missing}; parser_error=${parser_status_error:-missing}; sent=${parser_sent:-missing}; delivered=${parser_delivered:-missing}; read=${parser_read:-missing}; failed=${parser_failed:-missing}; error_code=${parser_error_code:-missing}; error_title=${parser_error_title:-missing}; error_message=${parser_error_message:-missing}; error_details=${parser_error_details:-missing}; route=${webhook_status_route:-missing}; store=${webhook_status_store:-missing}; reconcile=${webhook_reconcile_call:-missing}; payload=${webhook_status_payload:-missing}; payload_details=${webhook_status_error_details:-missing}; model=${model_reconcile:-missing}; match=${model_match:-missing}; transition=${model_transition:-missing}; merge=${model_meta_merge:-missing}; status_code=${model_status_error_code:-missing}; status_details=${model_status_error_details:-missing}; summary=${model_summary_error:-missing}; unread=${model_unread_guard:-missing}; view_status=${view_status_line:-missing}; view_escape=${view_media_escape:-missing}; status_add_message=${status_add_message:-none}; status_touch=${status_touch:-none}"
+    return
+  fi
+
+  pass \
+    "WhatsApp status webhooks reconcile safely into persisted message state without duplicating messages or unread counts" \
+    "parser=$parser_status_raw | webhook=$webhook_reconcile_call | model=$model_reconcile | view=$view_status_line"
+}
+
 check_whatsapp_lead_conversion_deferred() {
   local whatsapp_block route_line csrf_line readiness_helper phone_helper
   whatsapp_block="$(sed -n '/protected function storeWhatsappInboundMessage/,/protected function storeWhatsappStatusEvent/p' "$WEBHOOKS_FILE")"
@@ -3531,6 +3579,7 @@ check_whatsapp_conversation_schema_readiness
 check_conversation_model_optional_column_guards
 check_whatsapp_inbound_conversation_metadata
 check_whatsapp_media_metadata_allowlist
+check_whatsapp_status_reconciliation
 check_whatsapp_lead_conversion_deferred
 check_whatsapp_dashboard_visibility
 check_whatsapp_conversation_detail_view

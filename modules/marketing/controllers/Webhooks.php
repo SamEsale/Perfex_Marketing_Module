@@ -1325,6 +1325,7 @@ class Webhooks extends CI_Controller
         $eventAt = $statusEvent['timestamp'] ?? date('Y-m-d H:i:s');
         $eventType = trim((string) ($statusEvent['event_type'] ?? 'whatsapp_status'));
         $providerEventId = $this->buildWhatsappStatusProviderEventId($statusEvent, $phone, $providerMessageId, $eventAt, $eventType);
+        $reconcileResult = $this->marketing_conversations_model->reconcile_whatsapp_status_update($statusEvent);
 
         $dedupeCriteria = [
             'provider' => 'whatsapp_business',
@@ -1354,20 +1355,17 @@ class Webhooks extends CI_Controller
                 'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
                 'email' => $phone !== '' ? $phone : null,
                 'event_at' => $eventAt,
-                'payload_json' => json_encode([
-                    'status' => $statusEvent['status'] ?? '',
-                    'conversation_id' => $statusEvent['conversation_id'] ?? '',
-                ]),
+                'payload_json' => $this->safeJsonEncode($this->buildWhatsappStatusPayload($statusEvent)),
             ]);
 
             if (!empty($storeResult['duplicate'])) {
                 log_message('info', 'Marketing WhatsApp duplicate status skipped: event=' . $eventType . ' phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
-                return false;
+                return !empty($reconcileResult['updated']);
             }
 
             log_message('info', 'Marketing WhatsApp status stored: event=' . $eventType . ' phone=' . $phone);
 
-            return !empty($storeResult['success']);
+            return !empty($storeResult['success']) || !empty($reconcileResult['updated']);
         } finally {
             if ($eventLockKey !== '') {
                 $this->marketing_events_model->release_event_lock($eventLockKey);
@@ -1595,6 +1593,37 @@ class Webhooks extends CI_Controller
         }
 
         return $meta;
+    }
+
+    protected function buildWhatsappStatusPayload(array $statusEvent)
+    {
+        $payload = [
+            'status' => trim((string) ($statusEvent['status'] ?? '')),
+            'conversation_id' => trim((string) ($statusEvent['conversation_id'] ?? '')),
+        ];
+        $allowedRawKeys = [
+            'error_code' => 32,
+            'error_title' => 180,
+            'error_message' => 280,
+            'error_details' => 280,
+        ];
+        $raw = !empty($statusEvent['raw']) && is_array($statusEvent['raw']) ? $statusEvent['raw'] : [];
+        foreach ($allowedRawKeys as $key => $maxLength) {
+            if (!array_key_exists($key, $raw)) {
+                continue;
+            }
+
+            $value = $this->scalarString($raw[$key], '');
+            $value = trim(strip_tags($value));
+            $value = preg_replace('/\s+/', ' ', $value);
+            if ($value !== '') {
+                $payload[$key] = mb_substr($value, 0, $maxLength);
+            }
+        }
+
+        return array_filter($payload, static function ($value) {
+            return trim((string) $value) !== '';
+        });
     }
 
     protected function buildWhatsappInboundMessageDedupeKey(array $message, $phone, $providerMessageId, $eventAt, $messageType, $contextProviderMessageId)

@@ -873,6 +873,126 @@ class Marketing_conversations_model extends App_Model
         ];
     }
 
+    public function reconcile_whatsapp_status_update(array $statusUpdate)
+    {
+        if (!$this->tables_available() || !$this->db->field_exists('id', $this->messagesTable)) {
+            return [
+                'success' => false,
+                'matched' => false,
+                'updated' => false,
+                'message' => 'WhatsApp message status persistence is unavailable.',
+            ];
+        }
+
+        $providerMessageId = trim((string) ($statusUpdate['message_id'] ?? ''));
+        $providerStatus = $this->normalize_whatsapp_provider_status($statusUpdate['status'] ?? '');
+        if ($providerMessageId === '' || $providerStatus === '') {
+            return [
+                'success' => false,
+                'matched' => false,
+                'updated' => false,
+                'message' => 'WhatsApp status update is missing provider message identity.',
+            ];
+        }
+
+        $message = $this->find_message_by_provider_message_id($providerMessageId, 'whatsapp_cloud');
+        if (empty($message)) {
+            return [
+                'success' => true,
+                'matched' => false,
+                'updated' => false,
+                'provider_message_id' => $providerMessageId,
+                'provider_status' => $providerStatus,
+                'message' => 'No persisted WhatsApp message matched this status update.',
+            ];
+        }
+
+        $messageId = (int) ($message['id'] ?? 0);
+        if ($messageId <= 0) {
+            return [
+                'success' => false,
+                'matched' => false,
+                'updated' => false,
+                'provider_message_id' => $providerMessageId,
+                'provider_status' => $providerStatus,
+                'message' => 'Matched WhatsApp message row is invalid.',
+            ];
+        }
+
+        $messageUpdate = [];
+        $currentStatus = $this->normalize_whatsapp_provider_status($message['provider_status'] ?? '');
+        if ($this->db->field_exists('provider_status', $this->messagesTable)
+            && $this->should_apply_whatsapp_status_transition($currentStatus, $providerStatus)) {
+            $messageUpdate['provider_status'] = $providerStatus;
+        }
+
+        $providerThreadId = trim((string) ($statusUpdate['conversation_id'] ?? ''));
+        if ($providerThreadId !== '' && $this->db->field_exists('provider_thread_id', $this->messagesTable)) {
+            $existingThreadId = trim((string) ($message['provider_thread_id'] ?? ''));
+            if ($existingThreadId !== $providerThreadId) {
+                $messageUpdate['provider_thread_id'] = $providerThreadId;
+            }
+        }
+
+        if ($this->db->field_exists('media_meta_json', $this->messagesTable)) {
+            $mergedMetaJson = $this->merge_whatsapp_status_media_meta_json($message['media_meta_json'] ?? null, $statusUpdate);
+            $currentMetaJson = $this->encode_media_meta_json($message['media_meta_json'] ?? null);
+            if ($mergedMetaJson !== $currentMetaJson) {
+                $messageUpdate['media_meta_json'] = $mergedMetaJson;
+            }
+        }
+
+        $messageUpdated = false;
+        if (!empty($messageUpdate)) {
+            if ($this->db->field_exists('dateupdated', $this->messagesTable)) {
+                $messageUpdate['dateupdated'] = date('Y-m-d H:i:s');
+            }
+            $messageUpdate = $this->filter_existing_columns($this->messagesTable, $messageUpdate);
+            if (!empty($messageUpdate)) {
+                $this->db->where('id', $messageId);
+                if ($this->db->field_exists('provider', $this->messagesTable)) {
+                    $this->db->where('provider', 'whatsapp_cloud');
+                }
+                $messageUpdated = (bool) $this->db->update($this->messagesTable, $messageUpdate);
+            }
+        }
+
+        $conversationUpdated = false;
+        $conversationId = (int) ($message['conversation_id'] ?? 0);
+        if ($conversationId > 0 && $providerThreadId !== '' && $this->db->table_exists($this->conversationsTable)) {
+            $conversationUpdate = [];
+            if ($this->db->field_exists('provider_thread_id', $this->conversationsTable)) {
+                $conversationUpdate['provider_thread_id'] = $providerThreadId;
+            }
+            if ($this->db->field_exists('dateupdated', $this->conversationsTable)) {
+                $conversationUpdate['dateupdated'] = date('Y-m-d H:i:s');
+            }
+            $conversationUpdate = $this->filter_existing_columns($this->conversationsTable, $conversationUpdate);
+            if (!empty($conversationUpdate)) {
+                $this->db->where('id', $conversationId);
+                if ($this->db->field_exists('channel', $this->conversationsTable)) {
+                    $this->db->where('channel', 'whatsapp');
+                }
+                if ($this->db->field_exists('provider', $this->conversationsTable)) {
+                    $this->db->where('provider', 'whatsapp_cloud');
+                }
+                $conversationUpdated = (bool) $this->db->update($this->conversationsTable, $conversationUpdate);
+            }
+        }
+
+        return [
+            'success' => true,
+            'matched' => true,
+            'updated' => $messageUpdated || $conversationUpdated,
+            'message_updated' => $messageUpdated,
+            'conversation_updated' => $conversationUpdated,
+            'message_id' => $messageId,
+            'conversation_id' => $conversationId > 0 ? $conversationId : null,
+            'provider_message_id' => $providerMessageId,
+            'provider_status' => $providerStatus,
+        ];
+    }
+
     private function touch_conversation($conversationId, array $data = [])
     {
         if (!$this->db->table_exists($this->conversationsTable)) {
@@ -1006,10 +1126,16 @@ class Marketing_conversations_model extends App_Model
         $filename = trim((string) ($decoded['filename'] ?? ''));
         $caption = trim((string) ($decoded['caption'] ?? ''));
         $providerMediaId = trim((string) ($decoded['id'] ?? ''));
+        $statusErrorTitle = trim((string) ($decoded['status_error_title'] ?? ($decoded['error_title'] ?? '')));
+        $statusErrorMessage = trim((string) ($decoded['status_error_message'] ?? ($decoded['error_message'] ?? '')));
+        $statusErrorCode = trim((string) ($decoded['status_error_code'] ?? ($decoded['error_code'] ?? '')));
+        $statusErrorDetails = trim((string) ($decoded['status_error_details'] ?? ($decoded['error_details'] ?? '')));
 
         $parts = [];
         if ($type !== '') {
             $parts[] = ucfirst(str_replace('_', ' ', $type));
+        } elseif ($statusErrorTitle !== '' || $statusErrorMessage !== '' || $statusErrorDetails !== '' || $statusErrorCode !== '') {
+            $parts[] = 'Delivery issue';
         } else {
             $parts[] = 'Media';
         }
@@ -1024,6 +1150,18 @@ class Marketing_conversations_model extends App_Model
         }
         if ($providerMediaId !== '') {
             $parts[] = 'ID: ' . mb_substr($providerMediaId, 0, 24) . (mb_strlen($providerMediaId) > 24 ? '...' : '');
+        }
+        if ($statusErrorTitle !== '') {
+            $parts[] = 'Error: ' . mb_substr(preg_replace('/\s+/', ' ', $statusErrorTitle), 0, 120);
+        }
+        if ($statusErrorMessage !== '') {
+            $parts[] = 'Message: ' . mb_substr(preg_replace('/\s+/', ' ', $statusErrorMessage), 0, 140);
+        }
+        if ($statusErrorDetails !== '') {
+            $parts[] = 'Details: ' . mb_substr(preg_replace('/\s+/', ' ', $statusErrorDetails), 0, 140);
+        }
+        if ($statusErrorCode !== '') {
+            $parts[] = 'Code: ' . mb_substr($statusErrorCode, 0, 32);
         }
 
         return implode(' · ', array_filter($parts, static function ($part) {
@@ -1053,6 +1191,93 @@ class Marketing_conversations_model extends App_Model
         $digits = preg_replace('/[^0-9]/', '', $phone);
 
         return $digits === '' ? '' : $prefix . $digits;
+    }
+
+    private function normalize_whatsapp_provider_status($status)
+    {
+        $status = strtolower(trim((string) $status));
+        if ($status === '') {
+            return '';
+        }
+
+        return preg_replace('/[^a-z0-9_]+/', '_', $status);
+    }
+
+    private function should_apply_whatsapp_status_transition($currentStatus, $incomingStatus)
+    {
+        $currentStatus = $this->normalize_whatsapp_provider_status($currentStatus);
+        $incomingStatus = $this->normalize_whatsapp_provider_status($incomingStatus);
+        if ($incomingStatus === '') {
+            return false;
+        }
+        if ($currentStatus === '') {
+            return true;
+        }
+        if ($currentStatus === $incomingStatus) {
+            return false;
+        }
+        if ($currentStatus === 'read' && $incomingStatus !== 'read') {
+            return false;
+        }
+        if ($currentStatus === 'failed' && $incomingStatus !== 'failed') {
+            return false;
+        }
+        if ($incomingStatus === 'failed') {
+            return $currentStatus !== 'read';
+        }
+
+        $statusRank = [
+            'accepted' => 0,
+            'sent' => 10,
+            'delivered' => 20,
+            'read' => 30,
+            'failed' => 40,
+        ];
+        if (!isset($statusRank[$currentStatus]) || !isset($statusRank[$incomingStatus])) {
+            return true;
+        }
+
+        return $statusRank[$incomingStatus] >= $statusRank[$currentStatus];
+    }
+
+    private function merge_whatsapp_status_media_meta_json($currentValue, array $statusUpdate)
+    {
+        $meta = [];
+        if (is_string($currentValue) && trim($currentValue) !== '') {
+            $decoded = json_decode($currentValue, true);
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        } elseif (is_array($currentValue)) {
+            $meta = $currentValue;
+        }
+
+        $status = $this->normalize_whatsapp_provider_status($statusUpdate['status'] ?? '');
+        $raw = !empty($statusUpdate['raw']) && is_array($statusUpdate['raw']) ? $statusUpdate['raw'] : [];
+        $errorMap = [
+            'status_error_code' => ['key' => 'error_code', 'length' => 32],
+            'status_error_title' => ['key' => 'error_title', 'length' => 180],
+            'status_error_message' => ['key' => 'error_message', 'length' => 280],
+            'status_error_details' => ['key' => 'error_details', 'length' => 280],
+        ];
+
+        if ($status === 'failed') {
+            foreach ($errorMap as $targetKey => $definition) {
+                $value = trim(strip_tags((string) ($raw[$definition['key']] ?? '')));
+                $value = preg_replace('/\s+/', ' ', $value);
+                if ($value !== '') {
+                    $meta[$targetKey] = mb_substr($value, 0, (int) $definition['length']);
+                } else {
+                    unset($meta[$targetKey]);
+                }
+            }
+        } else {
+            foreach (array_keys($errorMap) as $targetKey) {
+                unset($meta[$targetKey]);
+            }
+        }
+
+        return $this->encode_media_meta_json($meta);
     }
 
     private function encode_media_meta_json($value)

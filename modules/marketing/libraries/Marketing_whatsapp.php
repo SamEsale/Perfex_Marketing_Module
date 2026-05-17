@@ -485,9 +485,7 @@ class Marketing_whatsapp
                         'event_type' => $this->map_status_to_event_type($status),
                         'timestamp' => $this->normalizeTimestamp($statusItem['timestamp'] ?? null),
                         'conversation_id' => trim((string) ($statusItem['conversation']['id'] ?? '')),
-                        'raw' => [
-                            'status' => $status,
-                        ],
+                        'raw' => $this->extractSafeStatusRaw($statusItem, $status),
                     ];
                 }
             }
@@ -526,6 +524,21 @@ class Marketing_whatsapp
         }
 
         return $raw;
+    }
+
+    protected function extractSafeStatusRaw(array $statusItem, $status)
+    {
+        $meta = [];
+        $status = trim((string) $status);
+        if ($status !== '') {
+            $meta['status'] = $status;
+        }
+
+        foreach ($this->extractSafeStatusErrorMetadata($statusItem) as $key => $value) {
+            $meta[$key] = $value;
+        }
+
+        return $meta;
     }
 
     protected function extractSafeMessageMediaMetadata(array $message, $messageType)
@@ -601,6 +614,38 @@ class Marketing_whatsapp
         $errorMessage = $this->sanitizeMetadataScalar($error['message'] ?? '', 280);
         if ($errorMessage !== '') {
             $meta['error_message'] = $errorMessage;
+        }
+
+        return $meta;
+    }
+
+    protected function extractSafeStatusErrorMetadata(array $statusItem)
+    {
+        $errors = isset($statusItem['errors']) && is_array($statusItem['errors']) ? $statusItem['errors'] : [];
+        $error = !empty($errors[0]) && is_array($errors[0]) ? $errors[0] : [];
+        if (empty($error)) {
+            return [];
+        }
+
+        $meta = [];
+        $errorCode = $this->sanitizeMetadataScalar($error['code'] ?? '', 32);
+        if ($errorCode !== '') {
+            $meta['error_code'] = $errorCode;
+        }
+
+        $errorTitle = $this->sanitizeMetadataScalar($error['title'] ?? '', 180);
+        if ($errorTitle !== '') {
+            $meta['error_title'] = $errorTitle;
+        }
+
+        $errorMessage = $this->sanitizeMetadataScalar($error['message'] ?? '', 280);
+        if ($errorMessage !== '') {
+            $meta['error_message'] = $errorMessage;
+        }
+
+        $errorDetails = $this->sanitizeMetadataScalar($error['details'] ?? ($error['error_data']['details'] ?? ''), 280);
+        if ($errorDetails !== '') {
+            $meta['error_details'] = $errorDetails;
         }
 
         return $meta;
