@@ -1487,7 +1487,7 @@ class Campaigns extends AdminController
         $this->append_unique_company_line($lines, $perfexPhone !== '' ? 'Phone: ' . $perfexPhone : '');
         $this->append_unique_company_line($lines, $perfexVat !== '' ? 'VAT: ' . $perfexVat : '');
 
-        if ($perfexCompanyInfoFormat !== '') {
+        if ($perfexCompanyInfoFormat !== '' && empty($lines)) {
             $formattedInfo = strtr($perfexCompanyInfoFormat, [
                 '{company_name}' => $perfexCompanyName,
                 '{address}' => $perfexCompanyAddress,

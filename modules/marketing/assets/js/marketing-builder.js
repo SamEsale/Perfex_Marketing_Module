@@ -1935,6 +1935,51 @@
             block.classList.toggle('mb-block--compact-toolbar', block.offsetWidth > 0 && block.offsetWidth < 260);
         }
 
+        function getSocialLinkDefinitions() {
+            return [
+                { key: 'facebook', selector: '.mb-social-facebook', label: 'Facebook' },
+                { key: 'instagram', selector: '.mb-social-instagram', label: 'Instagram' },
+                { key: 'twitter', selector: '.mb-social-twitter', label: 'X' },
+                { key: 'youtube', selector: '.mb-social-youtube', label: 'YouTube' },
+                { key: 'linkedin', selector: '.mb-social-linkedin', label: 'LinkedIn' },
+                { key: 'website', selector: '.mb-social-website', label: 'Website' }
+            ];
+        }
+
+        function ensureSocialBlockStructure(block) {
+            var surface;
+            var meta;
+
+            if (!block || block.dataset.builderBlock !== 'social') {
+                return null;
+            }
+
+            surface = getSurface(block);
+            if (!surface) {
+                return null;
+            }
+
+            meta = block.querySelector('.mb-social-meta');
+            if (!meta) {
+                meta = createElement('<div class="mb-social-meta hide" data-facebook="" data-instagram="https://instagram.com" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>');
+                surface.appendChild(meta);
+            }
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var link = block.querySelector(definition.selector);
+                if (!link) {
+                    link = createElement('<a href="" class="mb-social-link ' + definition.selector.replace('.', '') + '" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">' + escapeHtml(definition.label) + '</a>');
+                    surface.insertBefore(link, meta);
+                }
+
+                if (!meta.hasAttribute('data-' + definition.key)) {
+                    meta.setAttribute('data-' + definition.key, '');
+                }
+            });
+
+            return meta;
+        }
+
         function getInspectorLabel(block) {
             if (!block) {
                 return strings.blockSettings || 'Block Settings';
@@ -1948,22 +1993,15 @@
         }
 
         function updateSocialLinks(block, values) {
-            var meta = block ? block.querySelector('.mb-social-meta') : null;
+            var meta = ensureSocialBlockStructure(block);
             if (!block || !meta) {
                 return;
             }
 
-            [
-                ['facebook', '.mb-social-facebook'],
-                ['instagram', '.mb-social-instagram'],
-                ['twitter', '.mb-social-twitter'],
-                ['youtube', '.mb-social-youtube'],
-                ['linkedin', '.mb-social-linkedin'],
-                ['website', '.mb-social-website']
-            ].forEach(function (item) {
-                var value = String(values[item[0]] || '').trim();
-                var link = block.querySelector(item[1]);
-                meta.setAttribute('data-' + item[0], value);
+            getSocialLinkDefinitions().forEach(function (item) {
+                var value = String(values[item.key] || '').trim();
+                var link = block.querySelector(item.selector);
+                meta.setAttribute('data-' + item.key, value);
                 if (!link) {
                     return;
                 }
@@ -2022,10 +2060,23 @@
                 return;
             }
 
+            var socialMeta;
+
             if (block.dataset.builderBlock === 'hero') {
                 normalizeHeroBlock(block);
             }
             ensureFooterUnsubscribeToken(block);
+            if (block.dataset.builderBlock === 'social') {
+                socialMeta = ensureSocialBlockStructure(block);
+                updateSocialLinks(block, {
+                    facebook: socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : '',
+                    instagram: socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : '',
+                    twitter: socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : '',
+                    youtube: socialMeta ? (socialMeta.getAttribute('data-youtube') || '') : '',
+                    linkedin: socialMeta ? (socialMeta.getAttribute('data-linkedin') || '') : '',
+                    website: socialMeta ? (socialMeta.getAttribute('data-website') || '') : ''
+                });
+            }
 
             block.dataset.boundBlock = '1';
             block.setAttribute('draggable', 'true');
@@ -2890,7 +2941,7 @@
                 contentTab += renderHeroContentTab(block);
             }
             if (type === 'social') {
-                var socialMeta = block.querySelector('.mb-social-meta');
+                var socialMeta = ensureSocialBlockStructure(block);
                 contentTab += '<div class="form-group"><label>Facebook URL</label><input type="text" class="form-control" data-control="social-facebook" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : '') + '"></div>';
                 contentTab += '<div class="form-group"><label>Instagram URL</label><input type="text" class="form-control" data-control="social-instagram" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : '') + '"></div>';
                 contentTab += '<div class="form-group"><label>X / Twitter URL</label><input type="text" class="form-control" data-control="social-twitter" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : '') + '"></div>';
@@ -3265,7 +3316,7 @@
                     window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
                     return;
                 }
-                var socialMeta = block.querySelector('.mb-social-meta');
+                var socialMeta = ensureSocialBlockStructure(block);
                 updateSocialLinks(block, {
                     facebook: control === 'social-facebook' ? target.value : (socialMeta ? socialMeta.getAttribute('data-facebook') : ''),
                     instagram: control === 'social-instagram' ? target.value : (socialMeta ? socialMeta.getAttribute('data-instagram') : ''),
