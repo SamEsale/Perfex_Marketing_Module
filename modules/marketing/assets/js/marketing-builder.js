@@ -2526,6 +2526,28 @@
             });
         }
 
+        function normalizeLegacySocialHtml(rawHtml) {
+            var html = String(rawHtml || '');
+            var holder;
+            var changed = false;
+
+            if (html.trim() === '') {
+                return '';
+            }
+
+            holder = document.createElement('div');
+            holder.innerHTML = html;
+
+            getSocialBlocksForTree(holder).forEach(function (block) {
+                var sourceMeta = ensureSocialBlockStructure(block);
+
+                renderSocialBlockForEmail(block, getPersistedSocialValues(block, sourceMeta));
+                changed = true;
+            });
+
+            return changed ? holder.innerHTML : html;
+        }
+
         function syncCanvasDerivedBlockState() {
             Array.prototype.forEach.call(canvas.querySelectorAll('.mb-block[data-builder-block="social"]'), function (block) {
                 syncSocialBlockPersistence(block);
@@ -2906,7 +2928,7 @@
             }
 
             if (block.dataset.builderBlock === 'legacy') {
-                return String(block.dataset.rawHtml || '');
+                return normalizeLegacySocialHtml(block.dataset.rawHtml || '');
             }
 
             var clone = block.cloneNode(true);
