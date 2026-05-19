@@ -46,7 +46,7 @@
 
     function getSocialLinkStyle(isVisible) {
         return 'display:' + (isVisible ? 'inline-flex' : 'none')
-            + ';align-items:center;justify-content:center;width:34px;height:34px;margin:0 6px;border-radius:999px;vertical-align:middle;color:#2563eb;text-decoration:none;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1;';
+            + ';align-items:center;justify-content:center;width:34px;height:34px;margin:0 6px;border-radius:999px;vertical-align:middle;color:#2563eb;text-decoration:none;line-height:1;';
     }
 
     function normalizeSocialLinkPresentation(link, isVisible) {
@@ -1822,6 +1822,7 @@
 
         function createLegacyBlock(rawHtml) {
             var preview = String(rawHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            var normalizedRawHtml = normalizeLegacySocialHtml(rawHtml || '');
             if (preview.length > 120) {
                 preview = preview.slice(0, 117) + '...';
             }
@@ -1832,7 +1833,7 @@
                 + '<p class="no-margin mtop10">' + escapeHtml(preview || 'Legacy HTML preserved.') + '</p>'
                 + '</td></tr></table>');
 
-            block.dataset.rawHtml = String(rawHtml || '');
+            block.dataset.rawHtml = normalizedRawHtml;
             return block;
         }
 
@@ -4695,6 +4696,7 @@
             insertBlockAtPlacement(createLegacyBlock(config.initialHtml), { container: canvas, beforeNode: null });
             setActiveBlock(null);
             renderProperties();
+            syncFields();
             state.suppressAutoSelect = false;
         } else if (config.isNewCampaign) {
             state.suppressAutoSelect = true;

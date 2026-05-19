@@ -9,10 +9,17 @@ $builderCssUrl  = module_dir_url('marketing', 'assets/css/marketing-builder.css'
 $builderJsUrl   = module_dir_url('marketing', 'assets/js/marketing-builder.js');
 $quillCssUrl    = module_dir_url('marketing', 'assets/vendor/quill/quill.snow.css');
 $quillJsUrl     = module_dir_url('marketing', 'assets/vendor/quill/quill.js');
-$builderCssVer  = is_file($builderCssPath) ? (string) filemtime($builderCssPath) : '1';
-$builderJsVer   = is_file($builderJsPath) ? (string) filemtime($builderJsPath) : '1';
-$quillCssVer    = is_file($quillCssPath) ? (string) filemtime($quillCssPath) : '1';
-$quillJsVer     = is_file($quillJsPath) ? (string) filemtime($quillJsPath) : '1';
+$assetVersion = static function ($path) {
+    if (!is_file($path)) {
+        return '1';
+    }
+
+    return (string) filemtime($path) . '-' . (string) filesize($path);
+};
+$builderCssVer  = $assetVersion($builderCssPath);
+$builderJsVer   = $assetVersion($builderJsPath);
+$quillCssVer    = $assetVersion($quillCssPath);
+$quillJsVer     = $assetVersion($quillJsPath);
 $socialIconUrls = [
     'facebook' => module_dir_url('marketing', 'assets/img/social/facebook.png'),
     'instagram' => module_dir_url('marketing', 'assets/img/social/instagram.png'),
