@@ -25,8 +25,8 @@
         return holder.firstElementChild;
     }
 
-    var EMAIL_SOCIAL_ICON_SIZE = 28;
-    var EMAIL_SOCIAL_ICON_MARGIN = 7;
+    var EMAIL_SOCIAL_ICON_SIZE = 40;
+    var EMAIL_SOCIAL_ICON_MARGIN = 6;
 
     function getElementClassName(element) {
         if (!element || element.nodeType !== 1 || typeof element.getAttribute !== 'function') {
@@ -2286,7 +2286,7 @@
                 return '';
             }
 
-            return '<img src="' + escapeHtml(src) + '" width="' + EMAIL_SOCIAL_ICON_SIZE + '" height="' + EMAIL_SOCIAL_ICON_SIZE + '" alt="' + escapeHtml(definition.label) + '" style="display:block;border:0;outline:none;text-decoration:none;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;">';
+            return '<img src="' + escapeHtml(src) + '" width="' + EMAIL_SOCIAL_ICON_SIZE + '" height="' + EMAIL_SOCIAL_ICON_SIZE + '" alt="' + escapeHtml(definition.label) + '" style="display:block;border:0;outline:none;text-decoration:none;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;border-radius:50%;">';
         }
 
         function setSocialLinkIcon(link, definition) {
@@ -2501,7 +2501,7 @@
                 link.setAttribute('href', value);
                 link.setAttribute('target', '_blank');
                 link.setAttribute('rel', 'noopener noreferrer');
-                link.setAttribute('style', 'display:inline-block;vertical-align:middle;margin:0 ' + EMAIL_SOCIAL_ICON_MARGIN + 'px;text-decoration:none;line-height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;');
+                link.setAttribute('style', 'display:inline-block;vertical-align:middle;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;line-height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;margin:0 ' + EMAIL_SOCIAL_ICON_MARGIN + 'px;text-align:center;text-decoration:none;border-radius:50%;');
             });
         }
 
