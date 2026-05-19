@@ -3591,6 +3591,60 @@ check_social_icons_persisted_round_trip() {
     "template=$template_block_line | safe_class_helper=$safe_class_helper_line | preview_open=$preview_open_line | preview_srcdoc=$preview_srcdoc_line | root_blocks=$root_blocks_helper_line | flush=$flush_active_social_line | meta_seed=$meta_seed_line | meta_write=$meta_write_line | meta_read=$meta_read_line | root_mirror=$root_mirror_line | recursive_tree=$recursive_tree_line | tree_sync_count=$tree_sync_count | sync=$sync_line | html=$html_line | builder=$builder_line"
 }
 
+check_social_icons_email_export_safety() {
+  local form_social_urls_line social_url_facebook_line social_url_instagram_line social_url_twitter_line social_url_youtube_line social_url_linkedin_line social_url_website_line email_asset_lookup_line email_icon_helper_line email_block_helper_line email_export_helper_line email_export_call_line email_use_persisted_line email_img_src_line email_img_size_line email_img_style_line email_link_style_line email_target_line email_rel_line email_remove_empty_line email_remove_meta_line email_twitter_fallback_line no_inline_svg_img_line asset_facebook asset_instagram asset_x asset_twitter asset_youtube asset_linkedin asset_website asset_facebook_status asset_instagram_status asset_x_status asset_twitter_status asset_youtube_status asset_linkedin_status asset_website_status
+
+  form_social_urls_line="$(first_fixed_match 'socialIconUrls: <?= json_encode($socialIconUrls); ?>,' "$CAMPAIGN_FORM_VIEW_FILE")"
+  social_url_facebook_line="$(first_fixed_match "'facebook' => module_dir_url('marketing', 'assets/img/social/facebook.png')" "$CAMPAIGN_FORM_VIEW_FILE")"
+  social_url_instagram_line="$(first_fixed_match "'instagram' => module_dir_url('marketing', 'assets/img/social/instagram.png')" "$CAMPAIGN_FORM_VIEW_FILE")"
+  social_url_twitter_line="$(first_fixed_match "'twitter' => module_dir_url('marketing', 'assets/img/social/x.png')" "$CAMPAIGN_FORM_VIEW_FILE")"
+  social_url_youtube_line="$(first_fixed_match "'youtube' => module_dir_url('marketing', 'assets/img/social/youtube.png')" "$CAMPAIGN_FORM_VIEW_FILE")"
+  social_url_linkedin_line="$(first_fixed_match "'linkedin' => module_dir_url('marketing', 'assets/img/social/linkedin.png')" "$CAMPAIGN_FORM_VIEW_FILE")"
+  social_url_website_line="$(first_fixed_match "'website' => module_dir_url('marketing', 'assets/img/social/website.png')" "$CAMPAIGN_FORM_VIEW_FILE")"
+  email_asset_lookup_line="$(first_match 'function[[:space:]]+getSocialIconAssetUrl' "$BUILDER_JS_ASSET_FILE")"
+  email_icon_helper_line="$(first_match 'function[[:space:]]+renderSocialIconEmailHtml' "$BUILDER_JS_ASSET_FILE")"
+  email_block_helper_line="$(first_match 'function[[:space:]]+renderSocialBlockForEmail' "$BUILDER_JS_ASSET_FILE")"
+  email_export_helper_line="$(first_match 'function[[:space:]]+prepareSocialBlockTreeForEmailExport' "$BUILDER_JS_ASSET_FILE")"
+  email_export_call_line="$(first_fixed_match 'prepareSocialBlockTreeForEmailExport(block, clone);' "$BUILDER_JS_ASSET_FILE")"
+  email_use_persisted_line="$(first_fixed_match 'renderSocialBlockForEmail(targetBlock, getPersistedSocialValues(sourceBlock, sourceMeta));' "$BUILDER_JS_ASSET_FILE")"
+  email_img_src_line="$(first_fixed_match "return '<img src=\"' + escapeHtml(src) +" "$BUILDER_JS_ASSET_FILE")"
+  email_img_size_line="$(first_fixed_match "'\" width=\"18\" height=\"18\" alt=\"' + escapeHtml(definition.label)" "$BUILDER_JS_ASSET_FILE")"
+  email_img_style_line="$(first_fixed_match 'style="display:block;border:0;outline:none;text-decoration:none;width:18px;height:18px;">' "$BUILDER_JS_ASSET_FILE")"
+  email_link_style_line="$(first_fixed_match "link.setAttribute('style', 'display:inline-block;vertical-align:middle;margin:0 6px;text-decoration:none;');" "$BUILDER_JS_ASSET_FILE")"
+  email_target_line="$(first_fixed_match "link.setAttribute('target', '_blank');" "$BUILDER_JS_ASSET_FILE")"
+  email_rel_line="$(first_fixed_match "link.setAttribute('rel', 'noopener noreferrer');" "$BUILDER_JS_ASSET_FILE")"
+  email_remove_empty_line="$(first_fixed_match 'link.parentNode.removeChild(link);' "$BUILDER_JS_ASSET_FILE")"
+  email_remove_meta_line="$(first_fixed_match "meta.parentNode.removeChild(meta);" "$BUILDER_JS_ASSET_FILE")"
+  email_twitter_fallback_line="$(first_fixed_match "if (resolved === '' && channel === 'twitter') {" "$BUILDER_JS_ASSET_FILE")"
+  no_inline_svg_img_line="$(grep -nF '<img src="' "$BUILDER_JS_ASSET_FILE" | grep -F 'svg' || true)"
+
+  asset_facebook="modules/marketing/assets/img/social/facebook.png"
+  asset_instagram="modules/marketing/assets/img/social/instagram.png"
+  asset_x="modules/marketing/assets/img/social/x.png"
+  asset_twitter="modules/marketing/assets/img/social/twitter.png"
+  asset_youtube="modules/marketing/assets/img/social/youtube.png"
+  asset_linkedin="modules/marketing/assets/img/social/linkedin.png"
+  asset_website="modules/marketing/assets/img/social/website.png"
+  asset_facebook_status="$(test -f "$asset_facebook" && printf present || printf missing)"
+  asset_instagram_status="$(test -f "$asset_instagram" && printf present || printf missing)"
+  asset_x_status="$(test -f "$asset_x" && printf present || printf missing)"
+  asset_twitter_status="$(test -f "$asset_twitter" && printf present || printf missing)"
+  asset_youtube_status="$(test -f "$asset_youtube" && printf present || printf missing)"
+  asset_linkedin_status="$(test -f "$asset_linkedin" && printf present || printf missing)"
+  asset_website_status="$(test -f "$asset_website" && printf present || printf missing)"
+
+  if [[ -z "$form_social_urls_line" || -z "$social_url_facebook_line" || -z "$social_url_instagram_line" || -z "$social_url_twitter_line" || -z "$social_url_youtube_line" || -z "$social_url_linkedin_line" || -z "$social_url_website_line" || -z "$email_asset_lookup_line" || -z "$email_icon_helper_line" || -z "$email_block_helper_line" || -z "$email_export_helper_line" || -z "$email_export_call_line" || -z "$email_use_persisted_line" || -z "$email_img_src_line" || -z "$email_img_size_line" || -z "$email_img_style_line" || -z "$email_link_style_line" || -z "$email_target_line" || -z "$email_rel_line" || -z "$email_remove_empty_line" || -z "$email_remove_meta_line" || -z "$email_twitter_fallback_line" || -n "$no_inline_svg_img_line" || ! -f "$asset_facebook" || ! -f "$asset_instagram" || ! -f "$asset_x" || ! -f "$asset_twitter" || ! -f "$asset_youtube" || ! -f "$asset_linkedin" || ! -f "$asset_website" ]]; then
+    fail \
+      "social icon email export is email-client safe" \
+      "expected absolute module socialIconUrls config in form.php, six packaged PNG assets plus twitter alias, builder helpers for asset lookup and email export rewrite, img-only social markup with width/height/alt and inline styles, target/rel on exported anchors, empty channels removed from export, social metadata removed from sent html, x/twitter asset fallback, and no svg-based img export; social_config=${form_social_urls_line:-missing}; facebook=${social_url_facebook_line:-missing}; instagram=${social_url_instagram_line:-missing}; twitter=${social_url_twitter_line:-missing}; youtube=${social_url_youtube_line:-missing}; linkedin=${social_url_linkedin_line:-missing}; website=${social_url_website_line:-missing}; asset_lookup=${email_asset_lookup_line:-missing}; icon_helper=${email_icon_helper_line:-missing}; block_helper=${email_block_helper_line:-missing}; export_helper=${email_export_helper_line:-missing}; export_call=${email_export_call_line:-missing}; use_persisted=${email_use_persisted_line:-missing}; img_src=${email_img_src_line:-missing}; img_size=${email_img_size_line:-missing}; img_style=${email_img_style_line:-missing}; link_style=${email_link_style_line:-missing}; target=${email_target_line:-missing}; rel=${email_rel_line:-missing}; remove_empty=${email_remove_empty_line:-missing}; remove_meta=${email_remove_meta_line:-missing}; twitter_fallback=${email_twitter_fallback_line:-missing}; inline_svg_img=${no_inline_svg_img_line:-none}; asset_facebook=${asset_facebook_status}; asset_instagram=${asset_instagram_status}; asset_x=${asset_x_status}; asset_twitter=${asset_twitter_status}; asset_youtube=${asset_youtube_status}; asset_linkedin=${asset_linkedin_status}; asset_website=${asset_website_status}"
+    return
+  fi
+
+  pass \
+    "social icon email export is email-client safe" \
+    "social_config=$form_social_urls_line | asset_lookup=$email_asset_lookup_line | icon_helper=$email_icon_helper_line | block_helper=$email_block_helper_line | export_helper=$email_export_helper_line | export_call=$email_export_call_line | img_src=$email_img_src_line"
+}
+
 check_duplicate_redirect_metric_gate
 check_campaign_eligibility_semantics
 check_processing_recovery_timeout
@@ -3643,6 +3697,7 @@ check_campaign_plain_text_placeholder_safety
 check_campaign_builder_workspace_layout
 check_campaign_duplicate_builder_personalization_features
 check_social_icons_persisted_round_trip
+check_social_icons_email_export_safety
 check_campaign_show_command_center
 check_campaign_send_schedule_guidance
 check_campaign_reprepare_recipients_workflow

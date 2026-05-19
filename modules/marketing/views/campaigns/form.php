@@ -13,6 +13,14 @@ $builderCssVer  = is_file($builderCssPath) ? (string) filemtime($builderCssPath)
 $builderJsVer   = is_file($builderJsPath) ? (string) filemtime($builderJsPath) : '1';
 $quillCssVer    = is_file($quillCssPath) ? (string) filemtime($quillCssPath) : '1';
 $quillJsVer     = is_file($quillJsPath) ? (string) filemtime($quillJsPath) : '1';
+$socialIconUrls = [
+    'facebook' => module_dir_url('marketing', 'assets/img/social/facebook.png'),
+    'instagram' => module_dir_url('marketing', 'assets/img/social/instagram.png'),
+    'twitter' => module_dir_url('marketing', 'assets/img/social/x.png'),
+    'youtube' => module_dir_url('marketing', 'assets/img/social/youtube.png'),
+    'linkedin' => module_dir_url('marketing', 'assets/img/social/linkedin.png'),
+    'website' => module_dir_url('marketing', 'assets/img/social/website.png'),
+];
 ?>
 <link rel="stylesheet" href="<?= html_escape($quillCssUrl . '?v=' . $quillCssVer); ?>">
 <link rel="stylesheet" href="<?= html_escape($builderCssUrl . '?v=' . $builderCssVer); ?>">
@@ -883,6 +891,7 @@ if ($hasUnsubscribeSaveError) {
             source: <?= json_encode(!empty($builderCompanyAddress['source']) ? $builderCompanyAddress['source'] : 'marketing_module_fallback'); ?>
         },
         mergeTags: <?= json_encode(array_values($builderMergeTags)); ?>,
+        socialIconUrls: <?= json_encode($socialIconUrls); ?>,
         strings: {
             selectBlock: <?= json_encode(_l('marketing_builder_select_block')); ?>,
             uploadImage: <?= json_encode(_l('marketing_builder_upload_image')); ?>,

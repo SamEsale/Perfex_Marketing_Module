@@ -2257,12 +2257,33 @@
             return icons[channel] || icons.website;
         }
 
+        function getSocialIconAssetUrl(channel) {
+            var iconUrls = config.socialIconUrls || {};
+            var resolved = String(iconUrls[channel] || '').trim();
+
+            if (resolved === '' && channel === 'twitter') {
+                resolved = String(iconUrls.x || '').trim();
+            }
+
+            return resolved;
+        }
+
         function renderSocialIconHtml(definition) {
             return String(definition && definition.key ? getSocialIconSvg(definition.key) : getSocialIconSvg('website'))
                 .replace(
                     '<svg ',
                     '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" style="display:block;width:18px;height:18px;vertical-align:middle;flex:0 0 18px;" '
                 );
+        }
+
+        function renderSocialIconEmailHtml(definition) {
+            var src = getSocialIconAssetUrl(definition && definition.key ? definition.key : 'website');
+
+            if (src === '') {
+                return '';
+            }
+
+            return '<img src="' + escapeHtml(src) + '" width="18" height="18" alt="' + escapeHtml(definition.label) + '" style="display:block;border:0;outline:none;text-decoration:none;width:18px;height:18px;">';
         }
 
         function setSocialLinkIcon(link, definition) {
@@ -2273,6 +2294,20 @@
             link.innerHTML = renderSocialIconHtml(definition);
             link.setAttribute('title', definition.label);
             link.setAttribute('aria-label', definition.label);
+        }
+
+        function setSocialLinkEmailIcon(link, definition) {
+            if (!link || !definition) {
+                return false;
+            }
+
+            link.innerHTML = renderSocialIconEmailHtml(definition);
+            if (link.innerHTML === '') {
+                return false;
+            }
+            link.setAttribute('title', definition.label);
+            link.setAttribute('aria-label', definition.label);
+            return true;
         }
 
         function ensureSocialBlockStructure(block) {
@@ -2423,6 +2458,64 @@
                 syncSocialBlockPersistence(sourceBlock);
                 sourceMeta = ensureSocialBlockStructure(sourceBlock);
                 updateSocialLinks(targetBlock, getPersistedSocialValues(sourceBlock, sourceMeta));
+            });
+        }
+
+        function renderSocialBlockForEmail(block, values) {
+            if (!block || block.dataset.builderBlock !== 'social') {
+                return;
+            }
+
+            Array.prototype.forEach.call(block.querySelectorAll('.mb-social-meta'), function (meta) {
+                if (meta && meta.parentNode) {
+                    meta.parentNode.removeChild(meta);
+                }
+            });
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var link = block.querySelector(definition.selector);
+                var value = String((values && values[definition.key]) || '').trim();
+
+                if (!link) {
+                    return;
+                }
+
+                if (value === '') {
+                    if (link.parentNode) {
+                        link.parentNode.removeChild(link);
+                    }
+
+                    return;
+                }
+
+                if (!setSocialLinkEmailIcon(link, definition)) {
+                    if (link.parentNode) {
+                        link.parentNode.removeChild(link);
+                    }
+
+                    return;
+                }
+                link.setAttribute('href', value);
+                link.setAttribute('target', '_blank');
+                link.setAttribute('rel', 'noopener noreferrer');
+                link.setAttribute('style', 'display:inline-block;vertical-align:middle;margin:0 6px;text-decoration:none;');
+            });
+        }
+
+        function prepareSocialBlockTreeForEmailExport(sourceRoot, targetRoot) {
+            var sourceBlocks = getSocialBlocksForTree(sourceRoot);
+            var targetBlocks = getSocialBlocksForTree(targetRoot);
+
+            sourceBlocks.forEach(function (sourceBlock, index) {
+                var targetBlock = targetBlocks[index];
+                var sourceMeta;
+
+                if (!targetBlock) {
+                    return;
+                }
+
+                sourceMeta = ensureSocialBlockStructure(sourceBlock);
+                renderSocialBlockForEmail(targetBlock, getPersistedSocialValues(sourceBlock, sourceMeta));
             });
         }
 
@@ -2812,6 +2905,7 @@
             var clone = block.cloneNode(true);
 
             syncSocialBlockTree(block, clone);
+            prepareSocialBlockTreeForEmailExport(block, clone);
 
             Array.prototype.forEach.call(clone.querySelectorAll('.mb-block-toolbar'), function (node) {
                 node.parentNode.removeChild(node);
