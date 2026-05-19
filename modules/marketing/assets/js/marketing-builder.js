@@ -2268,38 +2268,29 @@
                 );
         }
 
-        function getSocialEmailIconPresentation(definition) {
-            var key = String(definition && definition.key ? definition.key : 'website');
-            var presentations = {
-                facebook: { glyph: 'f', background: '#1877F2', fontSize: 14, fontWeight: 700 },
-                instagram: { glyph: 'IG', background: '#E4405F', fontSize: 14, fontWeight: 700 },
-                twitter: { glyph: 'X', background: '#000000', fontSize: 14, fontWeight: 700 },
-                youtube: { glyph: 'YT', background: '#FF0000', fontSize: 14, fontWeight: 700 },
-                linkedin: { glyph: 'in', background: '#0A66C2', fontSize: 14, fontWeight: 700 },
-                website: { glyph: 'www', background: '#475569', fontSize: 12, fontWeight: 700 }
-            };
+        function getSocialIconAssetUrl(channel) {
+            var iconUrls = config.socialIconUrls || {};
+            var resolved = String(iconUrls[channel] || '').trim();
 
-            return presentations[key] || presentations.website;
+            if (resolved === '' && channel === 'twitter') {
+                resolved = String(iconUrls.x || '').trim();
+            }
+
+            return resolved;
         }
 
         function renderSocialIconEmailHtml(definition) {
-            var presentation = getSocialEmailIconPresentation(definition);
+            var src = getSocialIconAssetUrl(definition && definition.key ? definition.key : 'website');
 
-            if (!presentation || !presentation.glyph) {
+            if (src === '') {
                 return '';
             }
 
-            return escapeHtml(presentation.glyph);
+            return '<img src="' + escapeHtml(src) + '" width="' + EMAIL_SOCIAL_ICON_SIZE + '" height="' + EMAIL_SOCIAL_ICON_SIZE + '" alt="' + escapeHtml(definition.label) + '" style="display:block;border:0;outline:none;text-decoration:none;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;border-radius:50%;">';
         }
 
         function getSocialLinkEmailStyle(definition) {
-            var presentation = getSocialEmailIconPresentation(definition);
-
-            if (!presentation) {
-                return '';
-            }
-
-            return 'display:inline-block;vertical-align:middle;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;line-height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;margin:0 ' + EMAIL_SOCIAL_ICON_MARGIN + 'px;text-align:center;text-decoration:none;border-radius:50%;background:' + presentation.background + ';color:#ffffff;font-size:' + presentation.fontSize + 'px;font-weight:' + presentation.fontWeight + ';font-family:Arial,Helvetica,sans-serif;';
+            return 'display:inline-block;vertical-align:middle;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;line-height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;margin:0 ' + EMAIL_SOCIAL_ICON_MARGIN + 'px;text-align:center;text-decoration:none;border-radius:50%;';
         }
 
         function setSocialLinkIcon(link, definition) {
