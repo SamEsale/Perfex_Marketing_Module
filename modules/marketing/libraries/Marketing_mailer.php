@@ -22,16 +22,20 @@ class Marketing_mailer
     protected function normalize_campaign_html_for_send(array &$campaign)
     {
         $originalHtml = (string) ($campaign['html_content'] ?? '');
-        $normalizedHtml = $this->normalize_social_icon_email_html($originalHtml);
+        $normalizedHtml = $this->normalize_unsubscribe_token_markup($originalHtml);
+        $normalizedHtml = $this->normalize_social_icon_email_html($normalizedHtml);
 
         if ($normalizedHtml !== $originalHtml) {
             $campaign['html_content'] = $normalizedHtml;
             $campaignId = (int) ($campaign['id'] ?? 0);
             if ($campaignId > 0) {
                 $this->ci->db->where('id', $campaignId);
-                $this->ci->db->update(db_prefix() . 'marketing_campaigns', [
+                $updated = $this->ci->db->update(db_prefix() . 'marketing_campaigns', [
                     'html_content' => $normalizedHtml,
                 ]);
+                if (!$updated) {
+                    log_message('warning', 'Marketing campaign html_content normalization could not be persisted: campaign_id=' . $campaignId);
+                }
             }
         }
 
@@ -40,68 +44,77 @@ class Marketing_mailer
 
     protected function normalize_social_icon_email_html($html)
     {
+        $originalHtml = (string) $html;
         $html = (string) $html;
         if (trim($html) === '' || !class_exists('DOMDocument')) {
             return $html;
         }
 
-        $builderStateMetadata = '';
-        if (preg_match(self::BUILDER_STATE_METADATA_PATTERN, $html, $matches)) {
-            $builderStateMetadata = (string) $matches[0];
-            $html = preg_replace(self::BUILDER_STATE_METADATA_PATTERN, '', $html, 1);
-        }
-
-        $dom = new DOMDocument('1.0', 'UTF-8');
-        $wrapperId = 'marketing-social-normalizer-root';
-        $encoded = mb_convert_encoding('<div id="' . $wrapperId . '">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8');
-        $flags = 0;
-        if (defined('LIBXML_HTML_NOIMPLIED')) {
-            $flags |= LIBXML_HTML_NOIMPLIED;
-        }
-        if (defined('LIBXML_HTML_NODEFDTD')) {
-            $flags |= LIBXML_HTML_NODEFDTD;
-        }
-
-        $previousErrors = libxml_use_internal_errors(true);
-        $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
-        libxml_clear_errors();
-        libxml_use_internal_errors($previousErrors);
-
-        if (!$loaded) {
-            return $builderStateMetadata . $html;
-        }
-
-        $root = $dom->getElementById($wrapperId);
-        if (!$root) {
-            return $builderStateMetadata . $html;
-        }
-
-        $changed = false;
-        $links = [];
-        foreach ($dom->getElementsByTagName('a') as $link) {
-            $links[] = $link;
-        }
-
-        foreach ($links as $link) {
-            $channel = $this->detect_social_icon_channel($link);
-            if ($channel === null) {
-                continue;
+        try {
+            $builderStateMetadata = '';
+            if (preg_match(self::BUILDER_STATE_METADATA_PATTERN, $html, $matches)) {
+                $builderStateMetadata = (string) $matches[0];
+                $html = preg_replace(self::BUILDER_STATE_METADATA_PATTERN, '', $html, 1);
             }
 
-            $href = trim((string) $link->getAttribute('href'));
-            if ($href === '' || $href === '#') {
-                if ($link->parentNode) {
-                    $link->parentNode->removeChild($link);
-                    $changed = true;
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $wrapperId = 'marketing-social-normalizer-root';
+            $encoded = function_exists('mb_convert_encoding')
+                ? mb_convert_encoding('<div id="' . $wrapperId . '">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8')
+                : '<div id="' . $wrapperId . '">' . $html . '</div>';
+            $flags = 0;
+            if (defined('LIBXML_HTML_NOIMPLIED')) {
+                $flags |= LIBXML_HTML_NOIMPLIED;
+            }
+            if (defined('LIBXML_HTML_NODEFDTD')) {
+                $flags |= LIBXML_HTML_NODEFDTD;
+            }
+
+            $previousErrors = libxml_use_internal_errors(true);
+            $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousErrors);
+
+            if (!$loaded) {
+                return $builderStateMetadata . $html;
+            }
+
+            $root = $dom->getElementById($wrapperId);
+            if (!$root) {
+                return $builderStateMetadata . $html;
+            }
+
+            $changed = false;
+            $links = [];
+            foreach ($dom->getElementsByTagName('a') as $link) {
+                $links[] = $link;
+            }
+
+            foreach ($links as $link) {
+                $channel = $this->detect_social_icon_channel($link);
+                if ($channel === null) {
+                    continue;
                 }
-                continue;
+
+                $href = trim((string) $link->getAttribute('href'));
+                if ($href === '' || $href === '#') {
+                    if ($link->parentNode) {
+                        $link->parentNode->removeChild($link);
+                        $changed = true;
+                    }
+                    continue;
+                }
+
+                $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
+                $changed = true;
             }
 
-            $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
-            $changed = true;
-        }
+            return $builderStateMetadata . ($changed ? $this->get_dom_inner_html($root) : $html);
+        } catch (Throwable $exception) {
+            log_message('warning', 'Marketing social icon normalization fallback used in mailer: ' . $this->sanitize_failure_reason($exception->getMessage()));
 
-        return $builderStateMetadata . ($changed ? $this->get_dom_inner_html($root) : $html);
+            return $originalHtml;
+        }
     }
 
     protected function detect_social_icon_channel(DOMElement $link)
@@ -784,7 +797,63 @@ class Marketing_mailer
             return (string) $content;
         }
 
+        $content = $this->normalize_unsubscribe_token_markup($content);
+
         return strtr($content, $replacements);
+    }
+
+    protected function campaign_has_unsubscribe_token($content)
+    {
+        $content = (string) $content;
+        $candidates = [$content];
+        $decoded = rawurldecode($content);
+
+        if ($decoded !== $content) {
+            $candidates[] = $decoded;
+        }
+
+        $entityDecoded = html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($entityDecoded !== $content) {
+            $candidates[] = $entityDecoded;
+        }
+
+        foreach ($candidates as $candidate) {
+            $haystack = strtolower((string) $candidate);
+
+            if (strpos($haystack, '{{unsubscribe_url}}') !== false
+                || strpos($haystack, '%7b%7bunsubscribe_url%7d%7d') !== false
+                || strpos($haystack, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
+                || strpos($haystack, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false
+                || strpos($haystack, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false
+                || strpos($haystack, 'href="{{unsubscribe_url}}"') !== false
+                || strpos($haystack, "href='{{unsubscribe_url}}'") !== false
+                || strpos($haystack, 'href=&quot;{{unsubscribe_url}}&quot;') !== false
+                || strpos($haystack, 'href=&#39;{{unsubscribe_url}}&#39;') !== false
+                || strpos($haystack, '/marketing/unsubscribe/') !== false
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function normalize_unsubscribe_token_markup($content)
+    {
+        if (!is_string($content) || $content === '') {
+            return (string) $content;
+        }
+
+        return str_ireplace(
+            [
+                '%7B%7Bunsubscribe_url%7D%7D',
+                '&#123;&#123;unsubscribe_url&#125;&#125;',
+                '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
+                '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
+            ],
+            '{{unsubscribe_url}}',
+            $content
+        );
     }
 
     protected function get_recipient_contact_profile(array $recipient)
@@ -845,7 +914,7 @@ class Marketing_mailer
             ];
         }
 
-        if (strpos($campaignHtmlContent, '{{unsubscribe_url}}') === false) {
+        if (!$this->campaign_has_unsubscribe_token($campaignHtmlContent)) {
             return [
                 'success' => false,
                 'error' => 'missing_unsubscribe_url',

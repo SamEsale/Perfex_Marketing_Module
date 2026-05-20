@@ -1199,6 +1199,24 @@ class Campaigns extends AdminController
         return false;
     }
 
+    private function normalize_unsubscribe_token_markup($content)
+    {
+        if (!is_string($content) || $content === '') {
+            return (string) $content;
+        }
+
+        return str_ireplace(
+            [
+                '%7B%7Bunsubscribe_url%7D%7D',
+                '&#123;&#123;unsubscribe_url&#125;&#125;',
+                '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
+                '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
+            ],
+            '{{unsubscribe_url}}',
+            $content
+        );
+    }
+
     protected function get_default_campaign()
     {
         return [
@@ -1417,68 +1435,78 @@ class Campaigns extends AdminController
         $html = preg_replace('#on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html);
         $html = preg_replace('#(href|src)\s*=\s*("|\')?\s*javascript:[^"\'>\s]+#i', '$1="#"', $html);
         $html = preg_replace('#(href|src)\s*=\s*("|\')?\s*vbscript:[^"\'>\s]+#i', '$1="#"', $html);
+        $html = $this->normalize_unsubscribe_token_markup($html);
 
         return $this->normalize_social_icon_email_html($html);
     }
 
     private function normalize_social_icon_email_html($html)
     {
+        $originalHtml = (string) $html;
         $html = (string) $html;
         if (trim($html) === '' || !class_exists('DOMDocument')) {
             return $html;
         }
 
-        $dom = new DOMDocument('1.0', 'UTF-8');
-        $wrapperId = 'marketing-social-normalizer-root';
-        $encoded = mb_convert_encoding('<div id="' . $wrapperId . '">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8');
-        $flags = 0;
-        if (defined('LIBXML_HTML_NOIMPLIED')) {
-            $flags |= LIBXML_HTML_NOIMPLIED;
-        }
-        if (defined('LIBXML_HTML_NODEFDTD')) {
-            $flags |= LIBXML_HTML_NODEFDTD;
-        }
-
-        $previousErrors = libxml_use_internal_errors(true);
-        $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
-        libxml_clear_errors();
-        libxml_use_internal_errors($previousErrors);
-
-        if (!$loaded) {
-            return $html;
-        }
-
-        $root = $dom->getElementById($wrapperId);
-        if (!$root) {
-            return $html;
-        }
-
-        $changed = false;
-        $links = [];
-        foreach ($dom->getElementsByTagName('a') as $link) {
-            $links[] = $link;
-        }
-
-        foreach ($links as $link) {
-            $channel = $this->detect_social_icon_channel($link);
-            if ($channel === null) {
-                continue;
+        try {
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $wrapperId = 'marketing-social-normalizer-root';
+            $encoded = function_exists('mb_convert_encoding')
+                ? mb_convert_encoding('<div id="' . $wrapperId . '">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8')
+                : '<div id="' . $wrapperId . '">' . $html . '</div>';
+            $flags = 0;
+            if (defined('LIBXML_HTML_NOIMPLIED')) {
+                $flags |= LIBXML_HTML_NOIMPLIED;
+            }
+            if (defined('LIBXML_HTML_NODEFDTD')) {
+                $flags |= LIBXML_HTML_NODEFDTD;
             }
 
-            $href = trim((string) $link->getAttribute('href'));
-            if ($href === '' || $href === '#') {
-                if ($link->parentNode) {
-                    $link->parentNode->removeChild($link);
-                    $changed = true;
+            $previousErrors = libxml_use_internal_errors(true);
+            $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousErrors);
+
+            if (!$loaded) {
+                return $html;
+            }
+
+            $root = $dom->getElementById($wrapperId);
+            if (!$root) {
+                return $html;
+            }
+
+            $changed = false;
+            $links = [];
+            foreach ($dom->getElementsByTagName('a') as $link) {
+                $links[] = $link;
+            }
+
+            foreach ($links as $link) {
+                $channel = $this->detect_social_icon_channel($link);
+                if ($channel === null) {
+                    continue;
                 }
-                continue;
+
+                $href = trim((string) $link->getAttribute('href'));
+                if ($href === '' || $href === '#') {
+                    if ($link->parentNode) {
+                        $link->parentNode->removeChild($link);
+                        $changed = true;
+                    }
+                    continue;
+                }
+
+                $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
+                $changed = true;
             }
 
-            $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
-            $changed = true;
-        }
+            return $changed ? $this->get_dom_inner_html($root) : $html;
+        } catch (Throwable $exception) {
+            log_message('warning', 'Marketing social icon normalization fallback used in campaign controller: ' . $exception->getMessage());
 
-        return $changed ? $this->get_dom_inner_html($root) : $html;
+            return $originalHtml;
+        }
     }
 
     private function detect_social_icon_channel(DOMElement $link)
