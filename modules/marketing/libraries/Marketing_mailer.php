@@ -5,6 +5,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 class Marketing_mailer
 {
     protected $ci;
+    private const BUILDER_STATE_METADATA_PATTERN = '/<!--marketing_builder_state:[A-Za-z0-9+\/=]+-->\s*/i';
 
     public function __construct()
     {
@@ -16,6 +17,203 @@ class Marketing_mailer
         $this->ci->load->helper('func');
         $this->ci->load->library('email');
         $this->ci->load->library('marketing/Marketing_unsubscribe');
+    }
+
+    protected function normalize_campaign_html_for_send(array &$campaign)
+    {
+        $originalHtml = (string) ($campaign['html_content'] ?? '');
+        $normalizedHtml = $this->normalize_social_icon_email_html($originalHtml);
+
+        if ($normalizedHtml !== $originalHtml) {
+            $campaign['html_content'] = $normalizedHtml;
+            $campaignId = (int) ($campaign['id'] ?? 0);
+            if ($campaignId > 0) {
+                $this->ci->db->where('id', $campaignId);
+                $this->ci->db->update(db_prefix() . 'marketing_campaigns', [
+                    'html_content' => $normalizedHtml,
+                ]);
+            }
+        }
+
+        return $normalizedHtml;
+    }
+
+    protected function normalize_social_icon_email_html($html)
+    {
+        $html = (string) $html;
+        if (trim($html) === '' || !class_exists('DOMDocument')) {
+            return $html;
+        }
+
+        $builderStateMetadata = '';
+        if (preg_match(self::BUILDER_STATE_METADATA_PATTERN, $html, $matches)) {
+            $builderStateMetadata = (string) $matches[0];
+            $html = preg_replace(self::BUILDER_STATE_METADATA_PATTERN, '', $html, 1);
+        }
+
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $wrapperId = 'marketing-social-normalizer-root';
+        $encoded = mb_convert_encoding('<div id="' . $wrapperId . '">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8');
+        $flags = 0;
+        if (defined('LIBXML_HTML_NOIMPLIED')) {
+            $flags |= LIBXML_HTML_NOIMPLIED;
+        }
+        if (defined('LIBXML_HTML_NODEFDTD')) {
+            $flags |= LIBXML_HTML_NODEFDTD;
+        }
+
+        $previousErrors = libxml_use_internal_errors(true);
+        $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousErrors);
+
+        if (!$loaded) {
+            return $builderStateMetadata . $html;
+        }
+
+        $root = $dom->getElementById($wrapperId);
+        if (!$root) {
+            return $builderStateMetadata . $html;
+        }
+
+        $changed = false;
+        $links = [];
+        foreach ($dom->getElementsByTagName('a') as $link) {
+            $links[] = $link;
+        }
+
+        foreach ($links as $link) {
+            $channel = $this->detect_social_icon_channel($link);
+            if ($channel === null) {
+                continue;
+            }
+
+            $href = trim((string) $link->getAttribute('href'));
+            if ($href === '' || $href === '#') {
+                if ($link->parentNode) {
+                    $link->parentNode->removeChild($link);
+                    $changed = true;
+                }
+                continue;
+            }
+
+            $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
+            $changed = true;
+        }
+
+        return $builderStateMetadata . ($changed ? $this->get_dom_inner_html($root) : $html);
+    }
+
+    protected function detect_social_icon_channel(DOMElement $link)
+    {
+        if (!$this->looks_like_social_icon_link($link)) {
+            return null;
+        }
+
+        $className = ' ' . preg_replace('/\s+/', ' ', strtolower((string) $link->getAttribute('class'))) . ' ';
+        foreach ($this->get_social_icon_email_definitions() as $channel => $definition) {
+            foreach ($definition['classes'] as $class) {
+                if (strpos($className, ' ' . strtolower($class) . ' ') !== false) {
+                    return $channel;
+                }
+            }
+        }
+
+        foreach ([
+            (string) $link->getAttribute('aria-label'),
+            (string) $link->getAttribute('title'),
+            (string) $link->textContent,
+        ] as $value) {
+            $channel = $this->map_social_icon_channel_token($value);
+            if ($channel !== null) {
+                return $channel;
+            }
+        }
+
+        return null;
+    }
+
+    protected function looks_like_social_icon_link(DOMElement $link)
+    {
+        $className = strtolower((string) $link->getAttribute('class'));
+        $style = strtolower((string) $link->getAttribute('style'));
+
+        return strpos($className, 'mb-social-') !== false
+            || (strpos($style, 'border-radius:50%') !== false
+                && strpos($style, 'width:40px') !== false
+                && strpos($style, 'height:40px') !== false);
+    }
+
+    protected function map_social_icon_channel_token($value)
+    {
+        $normalized = strtolower(preg_replace('/[^a-z0-9]+/', '', trim((string) $value)));
+        $map = [
+            'facebook' => 'facebook',
+            'f' => 'facebook',
+            'instagram' => 'instagram',
+            'ig' => 'instagram',
+            'x' => 'twitter',
+            'twitter' => 'twitter',
+            'twitterx' => 'twitter',
+            'youtube' => 'youtube',
+            'yt' => 'youtube',
+            'linkedin' => 'linkedin',
+            'in' => 'linkedin',
+            'website' => 'website',
+            'www' => 'website',
+        ];
+
+        return $map[$normalized] ?? null;
+    }
+
+    protected function rewrite_social_icon_anchor(DOMDocument $dom, DOMElement $link, $channel, $href)
+    {
+        $definitions = $this->get_social_icon_email_definitions();
+        if (!isset($definitions[$channel])) {
+            return;
+        }
+
+        $definition = $definitions[$channel];
+        while ($link->firstChild) {
+            $link->removeChild($link->firstChild);
+        }
+
+        $img = $dom->createElement('img');
+        $img->setAttribute('src', $definition['url']);
+        $img->setAttribute('width', '40');
+        $img->setAttribute('height', '40');
+        $img->setAttribute('alt', $definition['label']);
+        $img->setAttribute('style', 'display:block;border:0;outline:none;text-decoration:none;width:40px;height:40px;border-radius:50%;');
+        $link->appendChild($img);
+
+        $link->setAttribute('href', $href);
+        $link->setAttribute('target', '_blank');
+        $link->setAttribute('rel', 'noopener noreferrer');
+        $link->setAttribute('title', $definition['label']);
+        $link->setAttribute('aria-label', $definition['label']);
+        $link->setAttribute('style', 'display:inline-block;vertical-align:middle;width:40px;height:40px;line-height:40px;margin:0 6px;text-align:center;text-decoration:none;border-radius:50%;');
+    }
+
+    protected function get_social_icon_email_definitions()
+    {
+        return [
+            'facebook' => ['label' => 'Facebook', 'url' => module_dir_url('marketing', 'assets/img/social/facebook.png'), 'classes' => ['mb-social-facebook']],
+            'instagram' => ['label' => 'Instagram', 'url' => module_dir_url('marketing', 'assets/img/social/instagram.png'), 'classes' => ['mb-social-instagram']],
+            'twitter' => ['label' => 'X', 'url' => module_dir_url('marketing', 'assets/img/social/x.png'), 'classes' => ['mb-social-twitter', 'mb-social-x']],
+            'youtube' => ['label' => 'YouTube', 'url' => module_dir_url('marketing', 'assets/img/social/youtube.png'), 'classes' => ['mb-social-youtube']],
+            'linkedin' => ['label' => 'LinkedIn', 'url' => module_dir_url('marketing', 'assets/img/social/linkedin.png'), 'classes' => ['mb-social-linkedin']],
+            'website' => ['label' => 'Website', 'url' => module_dir_url('marketing', 'assets/img/social/website.png'), 'classes' => ['mb-social-website']],
+        ];
+    }
+
+    protected function get_dom_inner_html(DOMNode $node)
+    {
+        $html = '';
+        foreach ($node->childNodes as $childNode) {
+            $html .= $node->ownerDocument->saveHTML($childNode);
+        }
+
+        return $html;
     }
 
     protected function get_marketing_smtp_config()
@@ -638,15 +836,16 @@ class Marketing_mailer
         $fromName = $campaign['from_name'] ?: get_option('marketing_smtp_from_name') ?: get_option('marketing_default_from_name') ?: get_option('companyname');
         $replyTo = $campaign['reply_to_email'] ?: get_option('marketing_smtp_reply_to') ?: get_option('marketing_default_reply_to_email');
         $recipientEmail = $recipient['email'];
+        $campaignHtmlContent = trim($this->normalize_campaign_html_for_send($campaign));
 
-        if (trim((string) ($campaign['subject'] ?? '')) === '' || trim((string) ($campaign['html_content'] ?? '')) === '') {
+        if (trim((string) ($campaign['subject'] ?? '')) === '' || $campaignHtmlContent === '') {
             return [
                 'success' => false,
                 'error' => 'campaign_not_ready',
             ];
         }
 
-        if (strpos((string) ($campaign['html_content'] ?? ''), '{{unsubscribe_url}}') === false) {
+        if (strpos($campaignHtmlContent, '{{unsubscribe_url}}') === false) {
             return [
                 'success' => false,
                 'error' => 'missing_unsubscribe_url',
@@ -681,7 +880,7 @@ class Marketing_mailer
 
         $personalization = $this->build_personalization_replacements($recipient, $unsubscribeUrl);
         $subject = $this->apply_personalization_replacements((string) ($campaign['subject'] ?? ''), $personalization);
-        $htmlContent = $this->apply_personalization_replacements((string) $campaign['html_content'], $personalization);
+        $htmlContent = $this->apply_personalization_replacements($campaignHtmlContent, $personalization);
         $textContent = $this->apply_personalization_replacements((string) ($campaign['text_content'] ?? ''), $personalization);
         $replyTracking = $this->append_reply_tracking_markup($htmlContent, $textContent, $campaign, $recipient);
         $htmlContent = $replyTracking['html'];

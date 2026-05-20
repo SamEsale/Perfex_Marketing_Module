@@ -1331,7 +1331,7 @@ class Campaigns extends AdminController
         $sanitized = preg_replace('#(href|src)\s*=\s*("|\')?\s*javascript:[^"\'>\s]+#i', '$1="#"', $sanitized);
         $sanitized = preg_replace('#(href|src)\s*=\s*("|\')?\s*vbscript:[^"\'>\s]+#i', '$1="#"', $sanitized);
 
-        return $sanitized;
+        return $this->normalize_social_icon_email_html($sanitized);
     }
 
     private function hydrate_builder_campaign($campaign)
@@ -1346,7 +1346,7 @@ class Campaigns extends AdminController
             : $this->extract_builder_state_metadata($storedHtml);
         $campaign['targeting_rules'] = $this->marketing_campaigns_model->get_campaign_targeting_rules($campaign);
         $campaign['builder_state'] = $this->marketing_campaigns_model->strip_targeting_rules_from_builder_state($campaign['builder_state']);
-        $campaign['html_content'] = $this->strip_builder_state_metadata($storedHtml);
+        $campaign['html_content'] = $this->normalize_social_icon_email_html($this->strip_builder_state_metadata($storedHtml));
         $campaign['text_content'] = $this->normalize_campaign_text_content($campaign['text_content'] ?? '');
         $campaign['schedule_mode'] = !empty($campaign['scheduled_at']) && $campaign['status'] === 'scheduled' ? 'later' : 'now';
         $campaign['delivery_channel'] = $this->marketing_campaigns_model->normalize_delivery_channel($campaign['delivery_channel'] ?? 'email');
@@ -1417,6 +1417,178 @@ class Campaigns extends AdminController
         $html = preg_replace('#on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html);
         $html = preg_replace('#(href|src)\s*=\s*("|\')?\s*javascript:[^"\'>\s]+#i', '$1="#"', $html);
         $html = preg_replace('#(href|src)\s*=\s*("|\')?\s*vbscript:[^"\'>\s]+#i', '$1="#"', $html);
+
+        return $this->normalize_social_icon_email_html($html);
+    }
+
+    private function normalize_social_icon_email_html($html)
+    {
+        $html = (string) $html;
+        if (trim($html) === '' || !class_exists('DOMDocument')) {
+            return $html;
+        }
+
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $wrapperId = 'marketing-social-normalizer-root';
+        $encoded = mb_convert_encoding('<div id="' . $wrapperId . '">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8');
+        $flags = 0;
+        if (defined('LIBXML_HTML_NOIMPLIED')) {
+            $flags |= LIBXML_HTML_NOIMPLIED;
+        }
+        if (defined('LIBXML_HTML_NODEFDTD')) {
+            $flags |= LIBXML_HTML_NODEFDTD;
+        }
+
+        $previousErrors = libxml_use_internal_errors(true);
+        $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousErrors);
+
+        if (!$loaded) {
+            return $html;
+        }
+
+        $root = $dom->getElementById($wrapperId);
+        if (!$root) {
+            return $html;
+        }
+
+        $changed = false;
+        $links = [];
+        foreach ($dom->getElementsByTagName('a') as $link) {
+            $links[] = $link;
+        }
+
+        foreach ($links as $link) {
+            $channel = $this->detect_social_icon_channel($link);
+            if ($channel === null) {
+                continue;
+            }
+
+            $href = trim((string) $link->getAttribute('href'));
+            if ($href === '' || $href === '#') {
+                if ($link->parentNode) {
+                    $link->parentNode->removeChild($link);
+                    $changed = true;
+                }
+                continue;
+            }
+
+            $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
+            $changed = true;
+        }
+
+        return $changed ? $this->get_dom_inner_html($root) : $html;
+    }
+
+    private function detect_social_icon_channel(DOMElement $link)
+    {
+        if (!$this->looks_like_social_icon_link($link)) {
+            return null;
+        }
+
+        $className = ' ' . preg_replace('/\s+/', ' ', strtolower((string) $link->getAttribute('class'))) . ' ';
+        foreach ($this->get_social_icon_email_definitions() as $channel => $definition) {
+            foreach ($definition['classes'] as $class) {
+                if (strpos($className, ' ' . strtolower($class) . ' ') !== false) {
+                    return $channel;
+                }
+            }
+        }
+
+        foreach ([
+            (string) $link->getAttribute('aria-label'),
+            (string) $link->getAttribute('title'),
+            (string) $link->textContent,
+        ] as $value) {
+            $channel = $this->map_social_icon_channel_token($value);
+            if ($channel !== null) {
+                return $channel;
+            }
+        }
+
+        return null;
+    }
+
+    private function looks_like_social_icon_link(DOMElement $link)
+    {
+        $className = strtolower((string) $link->getAttribute('class'));
+        $style = strtolower((string) $link->getAttribute('style'));
+
+        return strpos($className, 'mb-social-') !== false
+            || (strpos($style, 'border-radius:50%') !== false
+                && strpos($style, 'width:40px') !== false
+                && strpos($style, 'height:40px') !== false);
+    }
+
+    private function map_social_icon_channel_token($value)
+    {
+        $normalized = strtolower(preg_replace('/[^a-z0-9]+/', '', trim((string) $value)));
+        $map = [
+            'facebook' => 'facebook',
+            'f' => 'facebook',
+            'instagram' => 'instagram',
+            'ig' => 'instagram',
+            'x' => 'twitter',
+            'twitter' => 'twitter',
+            'twitterx' => 'twitter',
+            'youtube' => 'youtube',
+            'yt' => 'youtube',
+            'linkedin' => 'linkedin',
+            'in' => 'linkedin',
+            'website' => 'website',
+            'www' => 'website',
+        ];
+
+        return $map[$normalized] ?? null;
+    }
+
+    private function rewrite_social_icon_anchor(DOMDocument $dom, DOMElement $link, $channel, $href)
+    {
+        $definitions = $this->get_social_icon_email_definitions();
+        if (!isset($definitions[$channel])) {
+            return;
+        }
+
+        $definition = $definitions[$channel];
+        while ($link->firstChild) {
+            $link->removeChild($link->firstChild);
+        }
+
+        $img = $dom->createElement('img');
+        $img->setAttribute('src', $definition['url']);
+        $img->setAttribute('width', '40');
+        $img->setAttribute('height', '40');
+        $img->setAttribute('alt', $definition['label']);
+        $img->setAttribute('style', 'display:block;border:0;outline:none;text-decoration:none;width:40px;height:40px;border-radius:50%;');
+        $link->appendChild($img);
+
+        $link->setAttribute('href', $href);
+        $link->setAttribute('target', '_blank');
+        $link->setAttribute('rel', 'noopener noreferrer');
+        $link->setAttribute('title', $definition['label']);
+        $link->setAttribute('aria-label', $definition['label']);
+        $link->setAttribute('style', 'display:inline-block;vertical-align:middle;width:40px;height:40px;line-height:40px;margin:0 6px;text-align:center;text-decoration:none;border-radius:50%;');
+    }
+
+    private function get_social_icon_email_definitions()
+    {
+        return [
+            'facebook' => ['label' => 'Facebook', 'url' => module_dir_url('marketing', 'assets/img/social/facebook.png'), 'classes' => ['mb-social-facebook']],
+            'instagram' => ['label' => 'Instagram', 'url' => module_dir_url('marketing', 'assets/img/social/instagram.png'), 'classes' => ['mb-social-instagram']],
+            'twitter' => ['label' => 'X', 'url' => module_dir_url('marketing', 'assets/img/social/x.png'), 'classes' => ['mb-social-twitter', 'mb-social-x']],
+            'youtube' => ['label' => 'YouTube', 'url' => module_dir_url('marketing', 'assets/img/social/youtube.png'), 'classes' => ['mb-social-youtube']],
+            'linkedin' => ['label' => 'LinkedIn', 'url' => module_dir_url('marketing', 'assets/img/social/linkedin.png'), 'classes' => ['mb-social-linkedin']],
+            'website' => ['label' => 'Website', 'url' => module_dir_url('marketing', 'assets/img/social/website.png'), 'classes' => ['mb-social-website']],
+        ];
+    }
+
+    private function get_dom_inner_html(DOMNode $node)
+    {
+        $html = '';
+        foreach ($node->childNodes as $childNode) {
+            $html .= $node->ownerDocument->saveHTML($childNode);
+        }
 
         return $html;
     }
