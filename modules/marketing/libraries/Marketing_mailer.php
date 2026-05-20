@@ -274,6 +274,57 @@ class Marketing_mailer
         ];
     }
 
+    protected function get_default_campaign_sender_values()
+    {
+        $fromEmail = trim((string) get_option('marketing_smtp_from_email'));
+        $fromName = trim((string) get_option('marketing_smtp_from_name'));
+        $replyTo = trim((string) get_option('marketing_smtp_reply_to'));
+
+        if ($fromName === '') {
+            $fromName = trim((string) get_option('marketing_default_from_name'));
+        }
+        if ($fromName === '') {
+            $fromName = trim((string) get_option('companyname'));
+        }
+        if ($replyTo === '') {
+            $replyTo = trim((string) get_option('marketing_default_reply_to_email'));
+        }
+
+        return [
+            'from_name' => $fromName,
+            'from_email' => $fromEmail,
+            'reply_to_email' => $replyTo,
+        ];
+    }
+
+    protected function resolve_campaign_sender(array $campaign)
+    {
+        $defaults = $this->get_default_campaign_sender_values();
+        $campaignFromEmail = trim((string) ($campaign['from_email'] ?? ''));
+        $campaignFromName = trim((string) ($campaign['from_name'] ?? ''));
+        $campaignReplyTo = trim((string) ($campaign['reply_to_email'] ?? ''));
+        $configuredFromEmail = trim((string) ($defaults['from_email'] ?? ''));
+
+        if ($campaignFromEmail !== '' && $configuredFromEmail !== '' && strcasecmp($campaignFromEmail, $configuredFromEmail) !== 0) {
+            return [
+                'valid' => false,
+                'error' => 'campaign_from_email_mismatch',
+                'message' => 'Campaign From Email must match the verified Marketing SMTP From Email (' . $configuredFromEmail . ') or be left blank.',
+            ];
+        }
+
+        $fromEmail = $campaignFromEmail !== '' ? $campaignFromEmail : $configuredFromEmail;
+        $fromName = $campaignFromName !== '' ? $campaignFromName : trim((string) ($defaults['from_name'] ?? ''));
+        $replyTo = $campaignReplyTo !== '' ? $campaignReplyTo : trim((string) ($defaults['reply_to_email'] ?? ''));
+
+        return [
+            'valid' => true,
+            'from_email' => $fromEmail,
+            'from_name' => $fromName,
+            'reply_to_email' => $replyTo,
+        ];
+    }
+
     protected function initialize_email_transport()
     {
         $this->ci->load->config('email');
@@ -901,9 +952,19 @@ class Marketing_mailer
 
     public function send_campaign_message(array $campaign, array $recipient)
     {
-        $fromEmail = $campaign['from_email'] ?: get_option('marketing_smtp_from_email');
-        $fromName = $campaign['from_name'] ?: get_option('marketing_smtp_from_name') ?: get_option('marketing_default_from_name') ?: get_option('companyname');
-        $replyTo = $campaign['reply_to_email'] ?: get_option('marketing_smtp_reply_to') ?: get_option('marketing_default_reply_to_email');
+        $sender = $this->resolve_campaign_sender($campaign);
+        if (empty($sender['valid'])) {
+            return [
+                'success' => false,
+                'error' => (string) ($sender['error'] ?? 'campaign_sender_invalid'),
+                'message' => (string) ($sender['message'] ?? 'Campaign sender configuration is invalid.'),
+                'campaign_configuration_error' => true,
+            ];
+        }
+
+        $fromEmail = (string) ($sender['from_email'] ?? '');
+        $fromName = (string) ($sender['from_name'] ?? '');
+        $replyTo = (string) ($sender['reply_to_email'] ?? '');
         $recipientEmail = $recipient['email'];
         $campaignHtmlContent = trim($this->normalize_campaign_html_for_send($campaign));
 

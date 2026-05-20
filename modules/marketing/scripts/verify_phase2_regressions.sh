@@ -3670,6 +3670,37 @@ check_social_icons_email_export_safety() {
     "social_config=$form_social_urls_line | asset_version=$asset_version_helper_line | asset_lookup=$email_asset_lookup_line | icon_helper=$email_icon_helper_line | legacy_helper=$legacy_normalize_helper_line | controller_helper=$controller_helper_line | mailer_helper=$mailer_helper_line | mailer_unsub=$mailer_unsub_helper_line | smtp_test=$smtp_test_method_line | size_constant=$email_size_constant_line | img_src=$email_img_src_line"
 }
 
+check_campaign_send_sender_guard() {
+  local controller_no_queue_line controller_all_failed_line model_no_queue_line model_sender_validate_line model_sender_validate_use_line model_sender_defaults_line model_duplicate_defaults_line model_config_requeue_line model_config_warning_line model_finalize_failed_line mailer_sender_defaults_line mailer_sender_resolve_line mailer_sender_mismatch_line mailer_sender_config_error_line controller_default_sender_line
+
+  controller_no_queue_line="$(first_fixed_match "set_alert('warning', 'No queued recipients. Please prepare recipients first.');" "$CAMPAIGNS_CONTROLLER_FILE")"
+  controller_all_failed_line="$(first_fixed_match "set_alert('warning', 'Campaign send failed for all processed recipients. Review the recipient failure reasons below and verify the sender configuration.');" "$CAMPAIGNS_CONTROLLER_FILE")"
+  controller_default_sender_line="$(first_fixed_match "\$senderDefaults = \$this->marketing_campaigns_model->get_default_campaign_sender_values();" "$CAMPAIGNS_CONTROLLER_FILE")"
+  model_no_queue_line="$(first_fixed_match "\$warning = 'campaign_' . \$campaign['id'] . '_no_queued_recipients';" "$CAMPAIGNS_FILE")"
+  model_sender_validate_line="$(first_match 'function[[:space:]]+validate_campaign_sender_settings' "$CAMPAIGNS_FILE")"
+  model_sender_validate_use_line="$(first_fixed_match '$senderValidation = $this->validate_campaign_sender_settings($campaign);' "$CAMPAIGNS_FILE")"
+  model_sender_defaults_line="$(first_match 'function[[:space:]]+get_default_campaign_sender_values' "$CAMPAIGNS_FILE")"
+  model_duplicate_defaults_line="$(first_fixed_match '$senderDefaults = $this->get_default_campaign_sender_values();' "$CAMPAIGNS_FILE")"
+  model_config_requeue_line="$(first_fixed_match "} elseif (!empty(\$result['campaign_configuration_error'])) {" "$CAMPAIGNS_FILE")"
+  model_config_warning_line="$(first_fixed_match "\$this->append_unique_warning(\$summary['warnings'], 'campaign_configuration_error');" "$CAMPAIGNS_FILE")"
+  model_finalize_failed_line="$(first_fixed_match "\$newStatus = (\$sent > 0 || \$suppressed > 0 || \$skipped > 0) ? 'sent' : (\$failed > 0 ? 'failed' : \$campaign['status']);" "$CAMPAIGNS_FILE")"
+  mailer_sender_defaults_line="$(first_match 'function[[:space:]]+get_default_campaign_sender_values' "$MAILER_FILE")"
+  mailer_sender_resolve_line="$(first_match 'function[[:space:]]+resolve_campaign_sender' "$MAILER_FILE")"
+  mailer_sender_mismatch_line="$(first_fixed_match "'error' => 'campaign_from_email_mismatch'," "$MAILER_FILE")"
+  mailer_sender_config_error_line="$(first_fixed_match "'campaign_configuration_error' => true," "$MAILER_FILE")"
+
+  if [[ -z "$controller_no_queue_line" || -z "$controller_all_failed_line" || -z "$controller_default_sender_line" || -z "$model_no_queue_line" || -z "$model_sender_validate_line" || -z "$model_sender_validate_use_line" || -z "$model_sender_defaults_line" || -z "$model_duplicate_defaults_line" || -z "$model_config_requeue_line" || -z "$model_config_warning_line" || -z "$model_finalize_failed_line" || -z "$mailer_sender_defaults_line" || -z "$mailer_sender_resolve_line" || -z "$mailer_sender_mismatch_line" || -z "$mailer_sender_config_error_line" ]]; then
+    fail \
+      "campaign send guards prevent silent sender and queue failures" \
+      "expected explicit no-queue warning, all-failed warning, default sender seeding for new campaigns, sender validation in send readiness, duplicate sender normalization, campaign-configuration requeue handling, failed-status finalization only after actual recipient failures, and mailer sender mismatch guard; controller_no_queue=${controller_no_queue_line:-missing}; controller_all_failed=${controller_all_failed_line:-missing}; controller_default_sender=${controller_default_sender_line:-missing}; model_no_queue=${model_no_queue_line:-missing}; model_sender_validate=${model_sender_validate_line:-missing}; model_sender_validate_use=${model_sender_validate_use_line:-missing}; model_sender_defaults=${model_sender_defaults_line:-missing}; model_duplicate_defaults=${model_duplicate_defaults_line:-missing}; model_config_requeue=${model_config_requeue_line:-missing}; model_config_warning=${model_config_warning_line:-missing}; model_finalize_failed=${model_finalize_failed_line:-missing}; mailer_sender_defaults=${mailer_sender_defaults_line:-missing}; mailer_sender_resolve=${mailer_sender_resolve_line:-missing}; mailer_sender_mismatch=${mailer_sender_mismatch_line:-missing}; mailer_sender_config_error=${mailer_sender_config_error_line:-missing}"
+    return
+  fi
+
+  pass \
+    "campaign send guards prevent silent sender and queue failures" \
+    "controller_no_queue=$controller_no_queue_line | controller_all_failed=$controller_all_failed_line | controller_default_sender=$controller_default_sender_line | model_sender_validate=$model_sender_validate_line | model_sender_validate_use=$model_sender_validate_use_line | model_config_requeue=$model_config_requeue_line | mailer_sender_resolve=$mailer_sender_resolve_line | mailer_sender_mismatch=$mailer_sender_mismatch_line"
+}
+
 check_duplicate_redirect_metric_gate
 check_campaign_eligibility_semantics
 check_processing_recovery_timeout
@@ -3723,6 +3754,7 @@ check_campaign_builder_workspace_layout
 check_campaign_duplicate_builder_personalization_features
 check_social_icons_persisted_round_trip
 check_social_icons_email_export_safety
+check_campaign_send_sender_guard
 check_campaign_show_command_center
 check_campaign_send_schedule_guidance
 check_campaign_reprepare_recipients_workflow

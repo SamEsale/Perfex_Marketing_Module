@@ -195,7 +195,11 @@ class Campaigns extends AdminController
             } elseif (is_array($summary)) {
                 $accepted = (int) ($summary['accepted'] ?? $summary['processed'] ?? 0);
                 $failed   = (int) ($summary['failed'] ?? 0);
-                set_alert('success', sprintf(_l('marketing_campaign_send_batch_summary'), $accepted, $failed));
+                if ($accepted === 0 && $failed > 0) {
+                    set_alert('warning', 'Campaign send failed for all processed recipients. Review the recipient failure reasons below and verify the sender configuration.');
+                } else {
+                    set_alert('success', sprintf(_l('marketing_campaign_send_batch_summary'), $accepted, $failed));
+                }
             } else {
                 set_alert('success', _l('marketing_campaign_queue_processed'));
             }
@@ -1219,14 +1223,16 @@ class Campaigns extends AdminController
 
     protected function get_default_campaign()
     {
+        $senderDefaults = $this->marketing_campaigns_model->get_default_campaign_sender_values();
+
         return [
             'id'            => '',
             'name'          => '',
             'subject'       => '',
             'preview_text'  => '',
-            'from_name'     => '',
-            'from_email'    => '',
-            'reply_to_email'=> '',
+            'from_name'     => $senderDefaults['from_name'] ?? '',
+            'from_email'    => $senderDefaults['from_email'] ?? '',
+            'reply_to_email'=> $senderDefaults['reply_to_email'] ?? '',
             'list_id'       => '',
             'status'        => 'draft',
             'delivery_channel' => 'email',

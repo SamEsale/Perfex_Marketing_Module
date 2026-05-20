@@ -500,14 +500,26 @@ class Marketing_campaigns_model extends App_Model
         $duplicateName = $duplicateName !== ''
             ? sprintf('Copy of %s', $duplicateName)
             : 'Copy of Campaign #' . $campaignId;
+        $senderDefaults = $this->get_default_campaign_sender_values();
+        $duplicatedFromEmail = trim((string) ($campaign['from_email'] ?? ''));
+        $duplicatedReplyTo = trim((string) ($campaign['reply_to_email'] ?? ''));
+        $configuredFromEmail = $senderDefaults['from_email'];
+        $configuredReplyTo = $senderDefaults['reply_to_email'];
+
+        if ($duplicatedFromEmail !== '' && $configuredFromEmail !== '' && strcasecmp($duplicatedFromEmail, $configuredFromEmail) !== 0) {
+            $duplicatedFromEmail = $configuredFromEmail;
+        }
+        if ($duplicatedReplyTo !== '' && $configuredReplyTo !== '' && strcasecmp($duplicatedReplyTo, $configuredReplyTo) !== 0) {
+            $duplicatedReplyTo = $configuredReplyTo;
+        }
 
         $data = [
             'name' => $duplicateName,
             'subject' => (string) ($campaign['subject'] ?? ''),
             'preview_text' => (string) ($campaign['preview_text'] ?? ''),
-            'from_name' => (string) ($campaign['from_name'] ?? ''),
-            'from_email' => (string) ($campaign['from_email'] ?? ''),
-            'reply_to_email' => (string) ($campaign['reply_to_email'] ?? ''),
+            'from_name' => (string) ($campaign['from_name'] ?? ($senderDefaults['from_name'] ?? '')),
+            'from_email' => $duplicatedFromEmail,
+            'reply_to_email' => $duplicatedReplyTo,
             'list_id' => (int) ($campaign['list_id'] ?? 0),
             'status' => 'draft',
             'delivery_channel' => $this->normalize_delivery_channel($campaign['delivery_channel'] ?? 'email'),
@@ -1188,6 +1200,8 @@ class Marketing_campaigns_model extends App_Model
             $deliveryChannel = $this->normalize_delivery_channel($campaign['delivery_channel'] ?? 'email');
             $licenseFeature = $deliveryChannel === 'whatsapp' ? 'whatsapp_campaign_send' : 'campaign_send';
             $eventProvider = $deliveryChannel === 'whatsapp' ? 'whatsapp_business' : ($campaign['source_type'] ?? 'smtp');
+            $campaignOriginalStatus = (string) ($campaign['status'] ?? 'draft');
+            $campaignStartedThisBatch = false;
             $summary['campaigns_considered']++;
             $campaignWarnings = [];
             if ($batchLimitClamped) {
@@ -1370,6 +1384,7 @@ class Marketing_campaigns_model extends App_Model
             if (in_array($campaign['status'], ['draft', 'scheduled'], true)) {
                 if ($this->mark_campaign_started($campaign)) {
                     $summary['campaigns_started']++;
+                    $campaignStartedThisBatch = true;
                 }
                 $campaign['status'] = 'sending';
                 $campaign['send_started_at'] = date('Y-m-d H:i:s');
@@ -1646,6 +1661,55 @@ class Marketing_campaigns_model extends App_Model
                     if ($normalizedSuppressionCode !== null) {
                         $this->increment_metric_count($campaignFailureMetrics, $normalizedSuppressionCode);
                     }
+                } elseif (!empty($result['campaign_configuration_error'])) {
+                    $senderMessage = trim((string) ($result['message'] ?? _l('marketing_campaign_not_ready')));
+                    if (!$this->update_reserved_recipient_status($recipient['id'], $workerLeaseToken, 'queued', [
+                        'failed_at' => null,
+                        'failure_reason' => null,
+                        'message_id' => null,
+                        'provider_message_id' => null,
+                    ])) {
+                        $this->append_unique_warning($summary['warnings'], 'recipient_lease_conflict');
+                        $this->append_unique_warning($campaignWarnings, 'recipient_lease_conflict');
+                        log_message('warning', 'Marketing recipient lease conflict on campaign configuration reset: campaign_id=' . (int) $campaign['id'] . ' recipient_id=' . (int) $recipient['id']);
+                        continue;
+                    }
+
+                    $this->append_unique_warning($summary['warnings'], 'campaign_configuration_error');
+                    $this->append_unique_warning($campaignWarnings, 'campaign_configuration_error');
+                    $summary['readiness_messages'] = array_values(array_unique(array_merge(
+                        $summary['readiness_messages'] ?? [],
+                        [$senderMessage]
+                    )));
+
+                    $this->create_event([
+                        'campaign_id' => $campaign['id'],
+                        'campaign_recipient_id' => $recipient['id'],
+                        'marketing_contact_id' => $recipient['marketing_contact_id'],
+                        'event_type' => 'send_readiness_failed',
+                        'provider' => $eventProvider,
+                        'email' => $recipient['email'],
+                        'payload_json' => json_encode([
+                            'readiness_messages' => [$senderMessage],
+                            'missing_fields' => ['from_email'],
+                            'delivery_channel' => $deliveryChannel,
+                            'manual_or_cron' => $manualOrCron,
+                        ]),
+                    ]);
+
+                    if ($campaignStartedThisBatch && $campaignProcessed === 0 && $campaignAccepted === 0 && $campaignFailed === 0) {
+                        $this->db->where('id', (int) $campaign['id']);
+                        $this->db->update($this->table, [
+                            'status' => $campaignOriginalStatus === 'scheduled' ? 'scheduled' : 'draft',
+                            'send_started_at' => null,
+                            'send_completed_at' => null,
+                        ]);
+                        $campaign['status'] = $campaignOriginalStatus;
+                        $campaign['send_started_at'] = null;
+                        $campaignStartedThisBatch = false;
+                    }
+
+                    break;
                 } elseif (!empty($result['success'])) {
                     $recipientUpdate = [
                         'sent_at' => date('Y-m-d H:i:s'),
@@ -3665,6 +3729,12 @@ class Marketing_campaigns_model extends App_Model
                 $missingFields[] = 'smtp_configuration';
                 $messages = array_merge($messages, $smtpStatus['messages']);
             }
+
+            $senderValidation = $this->validate_campaign_sender_settings($campaign);
+            if (!$senderValidation['valid']) {
+                $missingFields = array_merge($missingFields, $senderValidation['missing_fields']);
+                $messages = array_merge($messages, $senderValidation['messages']);
+            }
         }
 
         if (empty($campaign['list_id']) || !$this->list_exists($campaign['list_id'])) {
@@ -3790,6 +3860,69 @@ class Marketing_campaigns_model extends App_Model
             'configuration_set' => $configurationSet,
             'telemetry_ready' => $configurationSet !== '',
             'telemetry_messages' => $telemetryMessages,
+        ];
+    }
+
+    public function get_default_campaign_sender_values()
+    {
+        $fromEmail = trim((string) get_option('marketing_smtp_from_email'));
+        $fromName = trim((string) get_option('marketing_smtp_from_name'));
+        $replyTo = trim((string) get_option('marketing_smtp_reply_to'));
+
+        if ($fromName === '') {
+            $fromName = trim((string) get_option('marketing_default_from_name'));
+        }
+        if ($fromName === '') {
+            $fromName = trim((string) get_option('companyname'));
+        }
+        if ($replyTo === '') {
+            $replyTo = trim((string) get_option('marketing_default_reply_to_email'));
+        }
+
+        return [
+            'from_name' => $fromName,
+            'from_email' => $fromEmail,
+            'reply_to_email' => $replyTo,
+        ];
+    }
+
+    public function validate_campaign_sender_settings(array $campaign)
+    {
+        $deliveryChannel = $this->normalize_delivery_channel($campaign['delivery_channel'] ?? 'email');
+        if ($deliveryChannel !== 'email') {
+            return [
+                'valid' => true,
+                'missing_fields' => [],
+                'messages' => [],
+            ];
+        }
+
+        $missingFields = [];
+        $messages = [];
+        $defaults = $this->get_default_campaign_sender_values();
+        $configuredFromEmail = trim((string) ($defaults['from_email'] ?? ''));
+        $campaignFromEmail = trim((string) ($campaign['from_email'] ?? ''));
+        $campaignReplyTo = trim((string) ($campaign['reply_to_email'] ?? ''));
+
+        if ($campaignFromEmail !== '' && !filter_var($campaignFromEmail, FILTER_VALIDATE_EMAIL)) {
+            $missingFields[] = 'from_email';
+            $messages[] = _l('marketing_campaign_from_email') . ' ' . _l('marketing_must_be_valid');
+        }
+
+        if ($campaignReplyTo !== '' && !filter_var($campaignReplyTo, FILTER_VALIDATE_EMAIL)) {
+            $missingFields[] = 'reply_to_email';
+            $messages[] = _l('marketing_campaign_reply_to_email') . ' ' . _l('marketing_must_be_valid');
+        }
+
+        if ($campaignFromEmail !== '' && $configuredFromEmail !== '' && strcasecmp($campaignFromEmail, $configuredFromEmail) !== 0) {
+            $missingFields[] = 'from_email';
+            $messages[] = 'Campaign From Email must match the verified Marketing SMTP From Email (' . $configuredFromEmail . ') or be left blank.';
+        }
+
+        return [
+            'valid' => empty($missingFields),
+            'missing_fields' => array_values(array_unique($missingFields)),
+            'messages' => array_values(array_unique($messages)),
         ];
     }
 
