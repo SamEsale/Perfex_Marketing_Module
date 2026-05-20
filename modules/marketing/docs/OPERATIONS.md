@@ -118,12 +118,30 @@ This package is a **Perfex CRM module** located at `modules/marketing`. It is no
 ## Commercial Licensing Operations
 
 - License status lives under `Marketing -> Settings -> License & Updates`
-- Production license API base URL is `https://license.spitol.com/api`
-- Configuration order is `MARKETING_LICENSE_API_BASE_URL` constant first, then the `marketing_license_api_base_url` module option, then the built-in production default
+- License API configuration is environment-specific and blank by default on a fresh install
+- Example format only: `https://license.example.com/api`
+- Configuration order is `MARKETING_LICENSE_API_BASE_URL` constant first, then the `marketing_license_api_base_url` module option, then the built-in empty default
 - If the license API base URL is empty, status is `unconfigured`
 - If the license server is unreachable after a previously active validation, the module grants a `7` day grace period
 - Licensing only gates commercial actions such as campaign sending, WhatsApp campaign sending, and large recipient-batch preparation
 - Diagnostics, settings access, activation, uninstall, and schema repair remain available
+
+## Deploying On A New Domain Or Server
+
+1. Upload the module ZIP through `Setup -> Modules`.
+2. Activate the module and confirm the extracted path is `modules/marketing/marketing.php`.
+3. Open `Marketing -> Settings` and save environment-specific SMTP / SES, inbound reply, WhatsApp, and license values.
+4. Confirm rendered webhook, tracking, unsubscribe, and social asset URLs use the current Perfex base URL rather than any previous domain or server path.
+5. Update provider-side callback endpoints for SES / SNS, inbound reply, and WhatsApp to the new public base URL.
+6. Run `Provider Readiness`, send the SMTP test, preview a campaign with real social URLs, prepare recipients, and send a live campaign test before production cutover.
+
+## Full Perfex CRM Migration Notes
+
+- Restore CRM files, the database dump, `application/config/config.php`, and `application/config/database.php`
+- Recreate writable-folder permissions, cron, the web-server document root, SSL, and the supported PHP extension set
+- Update the Perfex base URL, SMTP sender domain, provider callbacks, and any license domain binding for the new environment
+- Do not restore production secrets into staging or demo environments unintentionally
+- Keep a pre-migration database backup and use ZIP replacement plus activation/reload for module upgrades
 
 ## Troubleshooting
 

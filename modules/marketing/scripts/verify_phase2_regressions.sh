@@ -20,6 +20,7 @@ INSTALL_FILE="modules/marketing/install.php"
 UNINSTALL_FILE="modules/marketing/uninstall.php"
 MIGRATION_FILE="modules/marketing/migrations/001_initial_schema.php"
 MAILER_FILE="modules/marketing/libraries/Marketing_mailer.php"
+LICENSE_FILE="modules/marketing/libraries/Marketing_license.php"
 WHATSAPP_FILE="modules/marketing/libraries/Marketing_whatsapp.php"
 SUBSCRIPTIONS_CONTROLLER_FILE="modules/marketing/controllers/Subscriptions.php"
 DASHBOARD_VIEW_FILE="modules/marketing/views/dashboard.php"
@@ -3383,6 +3384,43 @@ check_release_build_script_hardening() {
     "builder=$builder_exists | strict=$builder_strict | zip=$builder_zip_name | git_diff_mode=$git_diff_mode"
 }
 
+check_portability_runtime_hardening() {
+  local runtime_forbidden_matches option_default_line license_default_line license_hint_line settings_hint_line settings_release_line readme_domain_section install_domain_section operations_domain_section checklist_domain_section manifest_domain_section
+
+  runtime_forbidden_matches="$(find \
+    modules/marketing/config \
+    modules/marketing/controllers \
+    modules/marketing/libraries \
+    modules/marketing/models \
+    modules/marketing/views \
+    modules/marketing/assets/js \
+    modules/marketing/assets/css \
+    -type f \
+    \( -name '*.php' -o -name '*.js' -o -name '*.css' \) \
+    -print0 | xargs -0 grep -nEI 'spitol\.com|107\.152\.41\.90|:2222|/Users/samesale|/home/supacrm|domains/spitol\.com' || true)"
+  option_default_line="$(first_fixed_match "'marketing_license_api_base_url' => ''," "$BOOTSTRAP_FILE")"
+  license_default_line="$(first_fixed_match "private const DEFAULT_API_BASE_URL = '';" "$LICENSE_FILE")"
+  license_hint_line="$(first_fixed_match "private const DEFAULT_API_BASE_URL_HINT = 'https://license.example.com/api';" "$LICENSE_FILE")"
+  settings_hint_line="$(first_fixed_match "'api_base_url_hint' => 'https://license.example.com/api'," "$SETTINGS_CONTROLLER_FILE")"
+  settings_release_line="$(first_fixed_match "\$licenseConfigured = !empty(\$licenseState['api_configured']);" "$SETTINGS_CONTROLLER_FILE")"
+  readme_domain_section="$(first_fixed_match '## Deploying On A New Domain Or Server' "$README_FILE")"
+  install_domain_section="$(first_fixed_match '## Deploying On A New Domain Or Server' "$INSTALLATION_FILE")"
+  operations_domain_section="$(first_fixed_match '## Deploying On A New Domain Or Server' "$OPERATIONS_FILE")"
+  checklist_domain_section="$(first_fixed_match '## New Domain / Server Cutover Checklist' "$PRODUCTION_CHECKLIST_FILE")"
+  manifest_domain_section="$(first_fixed_match '## New Domain / Server Deployment Notes' "$RELEASE_MANIFEST_DOC_FILE")"
+
+  if [[ -n "$runtime_forbidden_matches" || -z "$option_default_line" || -z "$license_default_line" || -z "$license_hint_line" || -z "$settings_hint_line" || -z "$settings_release_line" || -z "$readme_domain_section" || -z "$install_domain_section" || -z "$operations_domain_section" || -z "$checklist_domain_section" || -z "$manifest_domain_section" ]]; then
+    fail \
+      "runtime portability hardening removes production-specific domain and server assumptions while documenting new-domain deployment" \
+      "expected no spitol/IP/DirectAdmin/local-path runtime hardcoding, empty built-in license API default, generic license hint, release readiness config detection based on actual configuration, and explicit new-domain deployment docs; runtime_forbidden=${runtime_forbidden_matches:-none}; option_default=${option_default_line:-missing}; license_default=${license_default_line:-missing}; license_hint=${license_hint_line:-missing}; settings_hint=${settings_hint_line:-missing}; settings_release=${settings_release_line:-missing}; readme_domain=${readme_domain_section:-missing}; install_domain=${install_domain_section:-missing}; operations_domain=${operations_domain_section:-missing}; checklist_domain=${checklist_domain_section:-missing}; manifest_domain=${manifest_domain_section:-missing}"
+    return
+  fi
+
+  pass \
+    "runtime portability hardening removes production-specific domain and server assumptions while documenting new-domain deployment" \
+    "option_default=$option_default_line | license_default=$license_default_line | settings_release=$settings_release_line | readme_domain=$readme_domain_section"
+}
+
 check_ses_sns_replay_window_defaults() {
   local install_helper ensure_window ensure_skew
   install_helper="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
@@ -3826,6 +3864,7 @@ check_release_forbidden_artifact_detection
 check_release_packaging_docs_hardening
 check_release_handoff_manifest_assets
 check_release_build_script_hardening
+check_portability_runtime_hardening
 check_ses_sns_replay_window_defaults
 check_ses_sns_timestamp_freshness_validation
 check_ses_sns_replay_options_passed_from_webhooks

@@ -29,6 +29,16 @@ This checklist is for commercial packaging, deployment review, and operator hand
 - Confirm `Marketing -> Settings` loads without PHP errors
 - Review `Schema Health` before any operational testing
 
+## New Domain / Server Cutover Checklist
+
+- Confirm the target Perfex base URL is final before enabling provider callbacks
+- Confirm `Marketing -> Settings` shows webhook, click-tracking, unsubscribe, and social asset URLs on the new domain
+- Save SMTP / SES, inbound reply, WhatsApp, and license settings for the new environment
+- Update provider-side callback URLs to the new public CRM base URL
+- Send the SMTP test email before campaign testing
+- Create a campaign with real social URLs, preview desktop/mobile, prepare recipients, and send a live delivery test
+- Confirm Gmail/Zoho render the official PNG social icons and unsubscribe still works on the new domain
+
 ## Provider Readiness Review
 
 - Review `Marketing -> Settings -> Provider Readiness`
@@ -117,6 +127,15 @@ This checklist is for commercial packaging, deployment review, and operator hand
 - Roll back the module ZIP and database together when reversing a release
 - Do not use uninstall as a rollback shortcut; uninstall clears module-owned options and is separate from the supported upgrade path
 - Do not rely on cleanup tools or retention cleanup as rollback substitutes
+
+## Full Perfex CRM Migration Checklist
+
+- Restore CRM files and the database dump together
+- Restore `application/config/config.php` and `application/config/database.php`
+- Recreate writable folder permissions, cron, PHP extensions, SSL, and the web-server root
+- Update the Perfex base URL, database credentials, sender domain, provider callback URLs, and any license endpoint/domain binding
+- Do not restore production secrets into an unintended environment
+- Keep a fresh database backup before module activation, schema repair, or release cutover
 
 ## Support Handoff Checklist
 

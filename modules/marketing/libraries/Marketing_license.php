@@ -4,7 +4,8 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Marketing_license
 {
-    private const DEFAULT_API_BASE_URL = 'https://license.spitol.com/api';
+    private const DEFAULT_API_BASE_URL = '';
+    private const DEFAULT_API_BASE_URL_HINT = 'https://license.example.com/api';
     private const GRACE_DAYS = 7;
     private const OPTION_TABLE = 'options';
     private const LEGACY_LICENSE_KEY_OPTION = 'marketing_license_key';
@@ -58,7 +59,7 @@ class Marketing_license
             'perfex_version' => function_exists('marketing_get_perfex_version') ? marketing_get_perfex_version() : '',
             'php_version' => PHP_VERSION,
             'api_base_url' => $apiBaseUrl,
-            'api_base_url_hint' => self::DEFAULT_API_BASE_URL,
+            'api_base_url_hint' => self::DEFAULT_API_BASE_URL_HINT,
             'api_configured' => $apiBaseUrl !== '',
         ];
     }

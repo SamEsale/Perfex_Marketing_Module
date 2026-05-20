@@ -71,9 +71,34 @@ This package installs as a module inside **Perfex CRM**. It is not standalone so
 - If manual WhatsApp conversion is blocked, review for ambiguous existing lead matches instead of forcing a duplicate lead
 - WhatsApp provider approval/configuration remains externally gated by Meta. A valid-looking saved token may still fail until the Meta app, business asset, and phone-number permissions are fully approved.
 - Email-builder social icons for Facebook, Instagram, X/Twitter, YouTube, LinkedIn, and Website are email content only. They do not activate inbox, webhook, or operator integrations for those channels.
-- Production licensing uses `https://license.spitol.com/api` by default; only define `MARKETING_LICENSE_API_BASE_URL` or set `marketing_license_api_base_url` if you need to override it
+- Licensing is environment-configurable. Leave the API base URL empty until you have the correct endpoint for the target environment, or define `MARKETING_LICENSE_API_BASE_URL` / `marketing_license_api_base_url` explicitly
 - If licensing shows `unconfigured`, check for an explicit empty override in `MARKETING_LICENSE_API_BASE_URL` or `marketing_license_api_base_url`
 - If licensing shows `grace`, restore connectivity to the licensing server before the grace deadline
+
+## Deploying On A New Domain Or Server
+
+1. Upload the ZIP through `Setup -> Modules`.
+2. Activate the module and confirm the install path is `modules/marketing/marketing.php`.
+3. Open `Marketing -> Settings`.
+4. Save SMTP / SES, Reply-to-Lead, WhatsApp, and License settings for the new environment.
+5. Confirm all generated webhook, click-tracking, unsubscribe, and social asset URLs use the new Perfex base URL.
+6. Update provider-side callbacks to the new public CRM URL before live traffic is expected.
+7. Run provider readiness checks, send the SMTP test, preview a campaign, prepare recipients, and send a live test campaign.
+
+## Full Perfex CRM Migration Notes
+
+If you are moving the entire Perfex CRM, restore:
+
+- CRM files
+- database dump
+- `application/config/config.php`
+- `application/config/database.php`
+- writable folders and permissions
+- cron configuration
+- web server document root / vhost
+- PHP extensions and SSL
+
+After restore, update the new base URL, database credentials, sender identity, external webhook callbacks, and license endpoint values. Keep production secrets out of unintended environments, back up the database before module activation or repair, and do not use uninstall/reinstall as an upgrade shortcut.
 
 ## Security Notes
 

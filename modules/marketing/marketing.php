@@ -277,7 +277,7 @@ function marketing_get_default_options()
         'marketing_license_last_error' => '',
         'marketing_license_grace_until' => '',
         'marketing_license_instance_id' => '',
-        'marketing_license_api_base_url' => 'https://license.spitol.com/api',
+        'marketing_license_api_base_url' => '',
         'marketing_license_response_hmac_secret' => '',
         'marketing_schema_bootstrap_version' => '',
         'marketing_reply_lead_defaults_seeded' => '0',

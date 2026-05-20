@@ -293,7 +293,7 @@ class Settings extends AdminController
         $integrityRuntimePath = $moduleRoot . '/scripts/verify_phase4_integrity_runtime.php';
         $moduleVersion = trim((string) ($licenseState['module_version'] ?? ''));
         $licenseStatus = trim((string) ($licenseState['status'] ?? 'inactive'));
-        $licenseConfigured = !empty($licenseState['api_configured']) || trim((string) ($licenseState['api_base_url_hint'] ?? '')) !== '';
+        $licenseConfigured = !empty($licenseState['api_configured']);
         $docsAvailable = is_file($readmePath)
             && is_file($installationPath)
             && is_file($operationsPath)
@@ -1084,7 +1084,7 @@ class Settings extends AdminController
             'perfex_version' => function_exists('marketing_get_perfex_version') ? marketing_get_perfex_version() : '',
             'php_version' => PHP_VERSION,
             'api_base_url' => '',
-            'api_base_url_hint' => 'https://license.spitol.com/api',
+            'api_base_url_hint' => 'https://license.example.com/api',
             'api_configured' => false,
         ];
     }

@@ -88,7 +88,8 @@ Detailed install, upgrade, uninstall, and troubleshooting steps are in [INSTALLA
 
 The `License & Updates` settings panel is designed for future marketplace activation.
 
-- Production license API base URL: `https://license.spitol.com/api`
+- The license API base URL is environment-configurable and intentionally blank on a fresh install
+- Example format only: `https://license.example.com/api`
 - If the license API base URL is empty, license status becomes `unconfigured` and the module remains safe to install and operate for diagnostics
 - If the license server is unreachable after a previously active validation, a `7` day grace period is allowed
 - License enforcement only blocks commercial actions such as sending campaigns, sending WhatsApp campaign batches, and preparing large recipient batches
@@ -98,7 +99,43 @@ Configuration order:
 
 1. `MARKETING_LICENSE_API_BASE_URL` constant, if defined
 2. `marketing_license_api_base_url` module option, if saved
-3. built-in production default `https://license.spitol.com/api`
+3. built-in empty default
+
+## Deploying On A New Domain Or Server
+
+1. Build or obtain a release ZIP whose root is `marketing/`.
+2. In Perfex CRM, open `Setup -> Modules` and upload the ZIP.
+3. Activate the module and confirm it installs to `modules/marketing/marketing.php`.
+4. Open `Marketing -> Settings`.
+5. Save the General, SMTP / SES, Reply-to-Lead, WhatsApp, and License panels for the new environment.
+6. Confirm webhook, click-tracking, unsubscribe, and social asset URLs render from the new Perfex base URL.
+7. Configure provider-side callbacks against the new public CRM base URL:
+   `marketing/webhooks/ses_sns`, `marketing/webhooks/inbound_email`, `marketing/webhooks/whatsapp`, `marketing/track/c/{token}`, and `marketing/unsubscribe/{token}`.
+8. Run provider readiness checks and send the SMTP test email.
+9. Create a test campaign with real social URLs, preview desktop/mobile, prepare recipients, and send a live test.
+10. Confirm delivered Gmail/Zoho emails render the official PNG social icons and the unsubscribe route works on the new domain.
+
+## Full Perfex CRM Migration
+
+Moving the entire CRM to a new domain or server requires more than the module ZIP. Plan the move around:
+
+- CRM files
+- database dump
+- `application/config/config.php`
+- `application/config/database.php`
+- writable folder permissions
+- cron configuration
+- web server vhost or document root
+- supported PHP version and extensions
+- SSL for public webhook, tracking, and unsubscribe routes
+
+After restore:
+
+1. Update the Perfex base URL and database credentials for the new environment.
+2. Reconfigure SMTP sender identity, SES / SNS callbacks, inbound reply webhooks, WhatsApp callbacks, and any license API endpoint/domain binding.
+3. Do not restore production secrets into an unintended staging or demo environment.
+4. Keep a database backup before activation, schema repair, or module upgrades.
+5. Use ZIP replacement plus activation/reload for upgrades. Do not use uninstall/reinstall as an upgrade path.
 
 ## Build A Release ZIP
 

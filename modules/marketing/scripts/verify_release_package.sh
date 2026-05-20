@@ -30,6 +30,7 @@ pass() {
 
 require_command bash
 require_command grep
+require_command find
 require_command php
 require_command sed
 
@@ -52,12 +53,30 @@ REQUIRED_FILES=(
   "release/manifest.json"
 )
 
+REQUIRED_SOCIAL_ASSETS=(
+  "assets/img/social/facebook.png"
+  "assets/img/social/instagram.png"
+  "assets/img/social/linkedin.png"
+  "assets/img/social/x.png"
+  "assets/img/social/youtube.png"
+  "assets/img/social/website.png"
+)
+
+RUNTIME_FORBIDDEN_PATTERN='spitol\.com|107\.152\.41\.90|:2222|/Users/samesale|/home/supacrm|domains/spitol\.com'
+
 for relative_path in "${REQUIRED_FILES[@]}"; do
   if [[ ! -f "$MODULE_DIR/$relative_path" ]]; then
     fail "required module file missing" "$relative_path"
   fi
 done
 pass "required module files exist" "validated ${#REQUIRED_FILES[@]} required files"
+
+for relative_path in "${REQUIRED_SOCIAL_ASSETS[@]}"; do
+  if [[ ! -f "$MODULE_DIR/$relative_path" ]]; then
+    fail "required social icon asset missing" "$relative_path"
+  fi
+done
+pass "required social icon assets exist" "validated ${#REQUIRED_SOCIAL_ASSETS[@]} official PNG assets"
 
 MANIFEST_FILE="$MODULE_DIR/release/manifest.json"
 if ! php -r '$path = $argv[1]; $json = file_get_contents($path); if ($json === false) {fwrite(STDERR, "read_failed"); exit(1);} json_decode($json, true); if (json_last_error() !== JSON_ERROR_NONE) {fwrite(STDERR, json_last_error_msg()); exit(1);} ' "$MANIFEST_FILE" >/dev/null 2>&1; then
@@ -102,6 +121,22 @@ for hook_line in \
   fi
 done
 pass "module lifecycle hooks present" "activation, deactivation, uninstall, cron, and csrf hooks are registered"
+
+runtime_forbidden_matches="$(find \
+  "$MODULE_DIR/config" \
+  "$MODULE_DIR/controllers" \
+  "$MODULE_DIR/libraries" \
+  "$MODULE_DIR/models" \
+  "$MODULE_DIR/views" \
+  "$MODULE_DIR/assets/js" \
+  "$MODULE_DIR/assets/css" \
+  -type f \
+  \( -name '*.php' -o -name '*.js' -o -name '*.css' \) \
+  -print0 | xargs -0 grep -nEI "$RUNTIME_FORBIDDEN_PATTERN" || true)"
+if [[ -n "$runtime_forbidden_matches" ]]; then
+  fail "runtime module files contain no production-specific domain, server, or local-path hardcoding" "${runtime_forbidden_matches%%$'\n'*}"
+fi
+pass "runtime module files contain no production-specific domain, server, or local-path hardcoding" "scanned config, controllers, libraries, models, views, and frontend assets"
 
 for route_line in \
   "\$route['marketing/webhooks/ses_sns'] = 'webhooks/ses_sns';" \
@@ -289,6 +324,17 @@ for zip_required in \
   "marketing/scripts/build_release_package.sh"; do
   if ! printf '%s\n' "$zip_entries" | grep -qxF "$zip_required"; then
     fail "required file missing from release zip" "$zip_required"
+  fi
+done
+for zip_asset in \
+  "marketing/assets/img/social/facebook.png" \
+  "marketing/assets/img/social/instagram.png" \
+  "marketing/assets/img/social/linkedin.png" \
+  "marketing/assets/img/social/x.png" \
+  "marketing/assets/img/social/youtube.png" \
+  "marketing/assets/img/social/website.png"; do
+  if ! printf '%s\n' "$zip_entries" | grep -qxF "$zip_asset"; then
+    fail "required social icon asset missing from release zip" "$zip_asset"
   fi
 done
 for zip_doc in \

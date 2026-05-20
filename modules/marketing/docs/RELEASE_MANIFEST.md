@@ -72,6 +72,21 @@
 - regression validation via `bash scripts/verify_phase2_regressions.sh`
 - runtime integrity diagnostics via `php modules/marketing/scripts/verify_phase4_integrity_runtime.php`
 
+## New Domain / Server Deployment Notes
+
+- Upload the ZIP through `Setup -> Modules`; the package root must remain `marketing/`
+- Activation must resolve to `modules/marketing/marketing.php`
+- SMTP / SES, inbound reply, WhatsApp, and license values are environment-specific and must be saved after install
+- Rendered webhook, click-tracking, unsubscribe, and social asset URLs must come from the current Perfex base URL
+- External provider callbacks must be repointed to the new public CRM domain before live traffic is expected
+
+## Full Perfex CRM Migration Notes
+
+- A full CRM migration requires CRM files, a database dump, `application/config/config.php`, `application/config/database.php`, writable-folder permissions, cron, PHP extensions, SSL, and the correct web-server root
+- Update the Perfex base URL, SMTP sender domain, provider callback URLs, and any license endpoint/domain binding after restore
+- Do not restore production secrets into unintended environments
+- Do not use uninstall/reinstall as an upgrade or migration shortcut
+
 ## Browser Smoke Expectations
 
 - Company address insert/save/reload/preview remains functional

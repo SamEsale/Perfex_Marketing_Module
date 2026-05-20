@@ -581,7 +581,7 @@ if (($license_state['status'] ?? '') === 'active') {
                                             <div class="alert alert-info">
                                                 <?= sprintf(
                                                     _l('marketing_license_api_config_note'),
-                                                    html_escape($license_state['api_base_url_hint'] ?? 'https://license.spitol.com/api')
+                                                    html_escape($license_state['api_base_url_hint'] ?? 'https://license.example.com/api')
                                                 ); ?>
                                             </div>
 
