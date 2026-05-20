@@ -86,6 +86,7 @@ class Marketing_mailer
 
             $changed = false;
             $links = [];
+            $containers = [];
             foreach ($dom->getElementsByTagName('a') as $link) {
                 $links[] = $link;
             }
@@ -98,6 +99,10 @@ class Marketing_mailer
 
                 $href = trim((string) $link->getAttribute('href'));
                 if ($href === '' || $href === '#') {
+                    $container = $this->find_social_icon_container($link);
+                    if ($container instanceof DOMElement) {
+                        $containers[spl_object_id($container)] = $container;
+                    }
                     if ($link->parentNode) {
                         $link->parentNode->removeChild($link);
                         $changed = true;
@@ -105,7 +110,28 @@ class Marketing_mailer
                     continue;
                 }
 
+                $container = $this->find_social_icon_container($link);
+                if ($container instanceof DOMElement) {
+                    $containers[spl_object_id($container)] = $container;
+                }
                 $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
+                $changed = true;
+            }
+
+            foreach ($containers as $container) {
+                if (!$container instanceof DOMElement || !$container->parentNode) {
+                    continue;
+                }
+
+                if ($this->container_has_social_icon_links($container)) {
+                    continue;
+                }
+
+                if (trim(preg_replace('/\x{00a0}/u', ' ', (string) $container->textContent)) !== '') {
+                    continue;
+                }
+
+                $container->parentNode->removeChild($container);
                 $changed = true;
             }
 
@@ -143,7 +169,7 @@ class Marketing_mailer
             }
         }
 
-        return null;
+        return $this->infer_social_icon_channel_from_href((string) $link->getAttribute('href'));
     }
 
     protected function looks_like_social_icon_link(DOMElement $link)
@@ -177,6 +203,128 @@ class Marketing_mailer
         ];
 
         return $map[$normalized] ?? null;
+    }
+
+    protected function infer_social_icon_channel_from_href($href)
+    {
+        $normalizedHref = strtolower(trim((string) $href));
+        if ($normalizedHref === '' || $normalizedHref === '#') {
+            return null;
+        }
+
+        if (strpos($normalizedHref, 'facebook.com') !== false) {
+            return 'facebook';
+        }
+
+        if (strpos($normalizedHref, 'instagram.com') !== false) {
+            return 'instagram';
+        }
+
+        if (strpos($normalizedHref, 'x.com') !== false || strpos($normalizedHref, 'twitter.com') !== false) {
+            return 'twitter';
+        }
+
+        if (strpos($normalizedHref, 'youtube.com') !== false || strpos($normalizedHref, 'youtu.be') !== false) {
+            return 'youtube';
+        }
+
+        if (strpos($normalizedHref, 'linkedin.com') !== false) {
+            return 'linkedin';
+        }
+
+        if (preg_match('#^https?://#i', $normalizedHref)) {
+            return 'website';
+        }
+
+        return null;
+    }
+
+    protected function find_social_icon_container(DOMElement $node)
+    {
+        $current = $node;
+
+        while ($current instanceof DOMElement) {
+            if (strtolower($current->tagName) === 'table') {
+                return $current;
+            }
+
+            $current = $current->parentNode instanceof DOMElement ? $current->parentNode : null;
+        }
+
+        return $node->parentNode instanceof DOMElement ? $node->parentNode : null;
+    }
+
+    protected function container_has_social_icon_links(DOMElement $container)
+    {
+        foreach ($container->getElementsByTagName('a') as $link) {
+            if ($link instanceof DOMElement && $this->detect_social_icon_channel($link) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function campaign_contains_broken_social_block_markup($html)
+    {
+        $html = (string) $html;
+        if (trim($html) === '' || !class_exists('DOMDocument')) {
+            return false;
+        }
+
+        try {
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $encoded = function_exists('mb_convert_encoding')
+                ? mb_convert_encoding('<div id="marketing-social-guard-root">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8')
+                : '<div id="marketing-social-guard-root">' . $html . '</div>';
+            $flags = 0;
+            if (defined('LIBXML_HTML_NOIMPLIED')) {
+                $flags |= LIBXML_HTML_NOIMPLIED;
+            }
+            if (defined('LIBXML_HTML_NODEFDTD')) {
+                $flags |= LIBXML_HTML_NODEFDTD;
+            }
+
+            $previousErrors = libxml_use_internal_errors(true);
+            $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousErrors);
+
+            if (!$loaded) {
+                return false;
+            }
+
+            $hasSocialLinks = false;
+            $hasSocialImages = false;
+            foreach ($dom->getElementsByTagName('a') as $link) {
+                if (!$link instanceof DOMElement) {
+                    continue;
+                }
+
+                if ($this->detect_social_icon_channel($link) === null) {
+                    continue;
+                }
+
+                $href = trim((string) $link->getAttribute('href'));
+                if ($href === '' || $href === '#') {
+                    continue;
+                }
+
+                $hasSocialLinks = true;
+                foreach ($link->getElementsByTagName('img') as $image) {
+                    if ($image instanceof DOMElement && strpos((string) $image->getAttribute('src'), 'assets/img/social/') !== false) {
+                        $hasSocialImages = true;
+                        break 2;
+                    }
+                }
+            }
+
+            return $hasSocialLinks && !$hasSocialImages;
+        } catch (Throwable $exception) {
+            log_message('warning', 'Marketing social icon send guard fallback used in mailer: ' . $this->sanitize_failure_reason($exception->getMessage()));
+
+            return false;
+        }
     }
 
     protected function rewrite_social_icon_anchor(DOMDocument $dom, DOMElement $link, $channel, $href)
@@ -972,6 +1120,14 @@ class Marketing_mailer
             return [
                 'success' => false,
                 'error' => 'campaign_not_ready',
+            ];
+        }
+
+        if ($this->campaign_contains_broken_social_block_markup($campaignHtmlContent)) {
+            return [
+                'success' => false,
+                'error' => 'broken_social_icon_markup',
+                'message' => 'Campaign social icon markup could not be normalized to PNG images.',
             ];
         }
 

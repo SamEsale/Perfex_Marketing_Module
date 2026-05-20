@@ -1074,13 +1074,24 @@
     vertical-align: middle;
 }
 
+.marketing-builder-canvas .mb-social-link img,
+.marketing-builder-canvas .mb-social-link svg,
+.marketing-builder-canvas .mb-social-link .marketing-builder-social-icon-fallback {
+    line-height: 1;
+    display: block;
+}
+
+.marketing-builder-canvas .mb-social-link img {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+}
+
 .marketing-builder-canvas .mb-social-link svg,
 .marketing-builder-canvas .mb-social-link .marketing-builder-social-icon-fallback {
     font-size: 18px;
-    line-height: 1;
     width: 18px;
     height: 18px;
-    display: block;
 }
 
 .marketing-builder-sidebar-view.hide {

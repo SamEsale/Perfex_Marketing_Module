@@ -27,6 +27,7 @@
 
     var EMAIL_SOCIAL_ICON_SIZE = 40;
     var EMAIL_SOCIAL_ICON_MARGIN = 6;
+    var CANVAS_SOCIAL_ICON_SIZE = 34;
 
     function getElementClassName(element) {
         if (!element || element.nodeType !== 1 || typeof element.getAttribute !== 'function') {
@@ -46,7 +47,21 @@
 
     function getSocialLinkStyle(isVisible) {
         return 'display:' + (isVisible ? 'inline-flex' : 'none')
-            + ';align-items:center;justify-content:center;width:34px;height:34px;margin:0 6px;border-radius:999px;vertical-align:middle;color:#2563eb;text-decoration:none;line-height:1;';
+            + ';align-items:center;justify-content:center;width:' + CANVAS_SOCIAL_ICON_SIZE + 'px;height:' + CANVAS_SOCIAL_ICON_SIZE + 'px;margin:0 6px;border-radius:999px;vertical-align:middle;text-decoration:none;line-height:1;';
+    }
+
+    function normalizeSocialUrlValue(value) {
+        var normalized = String(value || '').trim();
+
+        if (normalized === '' || normalized === '#') {
+            return '';
+        }
+
+        return normalized;
+    }
+
+    function hasConfiguredSocialUrl(value) {
+        return normalizeSocialUrlValue(value) !== '';
     }
 
     function normalizeSocialLinkPresentation(link, isVisible) {
@@ -1744,12 +1759,12 @@
         function createSocialBlock() {
             return blockShell('social', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;') + '">'
-                + '<a href="" class="mb-social-link mb-social-facebook" style="' + getSocialLinkStyle(false) + '" title="Facebook" aria-label="Facebook"></a>'
-                + '<a href="" class="mb-social-link mb-social-instagram" style="' + getSocialLinkStyle(false) + '" title="Instagram" aria-label="Instagram"></a>'
-                + '<a href="" class="mb-social-link mb-social-twitter" style="' + getSocialLinkStyle(false) + '" title="X" aria-label="X"></a>'
-                + '<a href="" class="mb-social-link mb-social-youtube" style="' + getSocialLinkStyle(false) + '" title="YouTube" aria-label="YouTube"></a>'
-                + '<a href="" class="mb-social-link mb-social-linkedin" style="' + getSocialLinkStyle(false) + '" title="LinkedIn" aria-label="LinkedIn"></a>'
-                + '<a href="" class="mb-social-link mb-social-website" style="' + getSocialLinkStyle(false) + '" title="Website" aria-label="Website"></a>'
+                + '<a href="" class="mb-social-link mb-social-facebook" style="' + getSocialLinkStyle(false) + '" title="Facebook" aria-label="Facebook">' + renderSocialIconHtml({ key: 'facebook', label: 'Facebook' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-instagram" style="' + getSocialLinkStyle(false) + '" title="Instagram" aria-label="Instagram">' + renderSocialIconHtml({ key: 'instagram', label: 'Instagram' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-twitter" style="' + getSocialLinkStyle(false) + '" title="X" aria-label="X">' + renderSocialIconHtml({ key: 'twitter', label: 'X' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-youtube" style="' + getSocialLinkStyle(false) + '" title="YouTube" aria-label="YouTube">' + renderSocialIconHtml({ key: 'youtube', label: 'YouTube' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-linkedin" style="' + getSocialLinkStyle(false) + '" title="LinkedIn" aria-label="LinkedIn">' + renderSocialIconHtml({ key: 'linkedin', label: 'LinkedIn' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-website" style="' + getSocialLinkStyle(false) + '" title="Website" aria-label="Website">' + renderSocialIconHtml({ key: 'website', label: 'Website' }) + '</a>'
                 + '<div class="mb-social-meta hide" data-facebook="" data-instagram="" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>'
                 + '</td></tr></table>');
         }
@@ -2197,13 +2212,13 @@
             var values = {};
 
             getSocialLinkDefinitions().forEach(function (definition) {
-                var metaValue = meta ? String(meta.getAttribute('data-' + definition.key) || '').trim() : '';
-                var rootValue = block ? String(block.getAttribute(getSocialDataAttributeName(definition.key)) || '').trim() : '';
+                var metaValue = meta ? normalizeSocialUrlValue(meta.getAttribute('data-' + definition.key) || '') : '';
+                var rootValue = block ? normalizeSocialUrlValue(block.getAttribute(getSocialDataAttributeName(definition.key)) || '') : '';
                 var link = block ? block.querySelector(definition.selector) : null;
-                var linkValue = link ? String(link.getAttribute('href') || '').trim() : '';
+                var linkValue = link ? normalizeSocialUrlValue(link.getAttribute('href') || '') : '';
                 var resolvedValue = metaValue !== '' ? metaValue : (rootValue !== '' ? rootValue : '');
 
-                if (resolvedValue === '' && linkValue !== '' && linkValue !== '#') {
+                if (resolvedValue === '' && linkValue !== '') {
                     resolvedValue = linkValue;
                 }
 
@@ -2218,12 +2233,12 @@
 
             getSocialLinkDefinitions().forEach(function (definition) {
                 var link = block ? block.querySelector(definition.selector) : null;
-                var linkValue = link ? String(link.getAttribute('href') || '').trim() : '';
-                var metaValue = meta ? String(meta.getAttribute('data-' + definition.key) || '').trim() : '';
-                var rootValue = block ? String(block.getAttribute(getSocialDataAttributeName(definition.key)) || '').trim() : '';
+                var linkValue = link ? normalizeSocialUrlValue(link.getAttribute('href') || '') : '';
+                var metaValue = meta ? normalizeSocialUrlValue(meta.getAttribute('data-' + definition.key) || '') : '';
+                var rootValue = block ? normalizeSocialUrlValue(block.getAttribute(getSocialDataAttributeName(definition.key)) || '') : '';
                 var resolvedValue = metaValue !== '' ? metaValue : (rootValue !== '' ? rootValue : '');
 
-                if (resolvedValue === '' && linkValue !== '' && linkValue !== '#') {
+                if (resolvedValue === '' && linkValue !== '') {
                     resolvedValue = linkValue;
                 }
 
@@ -2239,7 +2254,7 @@
             }
 
             getSocialLinkDefinitions().forEach(function (definition) {
-                var resolvedValue = String((values && values[definition.key]) || '').trim();
+                var resolvedValue = normalizeSocialUrlValue((values && values[definition.key]) || '');
 
                 block.setAttribute(getSocialDataAttributeName(definition.key), resolvedValue);
                 if (meta) {
@@ -2248,25 +2263,14 @@
             });
         }
 
-        function getSocialIconSvg(channel) {
-            var icons = {
-                facebook: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.5 8.25V6.5c0-.83.67-1.5 1.5-1.5h1.5V2h-2.25A4.75 4.75 0 0 0 9.5 6.75v1.5H7v3h2.5V22h4v-10.75H16l.5-3z"></path></svg>',
-                instagram: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2.5A2.5 2.5 0 0 0 4.5 7v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5V7A2.5 2.5 0 0 0 17 4.5zm5 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2.25A2.75 2.75 0 1 0 12 14.75 2.75 2.75 0 0 0 12 9.25zm5.25-3a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z"></path></svg>',
-                twitter: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17.96 3H21l-6.64 7.6L22 21h-6.13l-4.8-6.27L5.58 21H2.54l7.1-8.13L2 3h6.29l4.33 5.73zm-1.08 16.13h1.68L7.38 4.78H5.57z"></path></svg>',
-                youtube: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M21.58 7.19a2.84 2.84 0 0 0-2-2C17.78 4.67 12 4.67 12 4.67s-5.78 0-7.58.52a2.84 2.84 0 0 0-2 2A29.44 29.44 0 0 0 2 12a29.44 29.44 0 0 0 .42 4.81 2.84 2.84 0 0 0 2 2c1.8.52 7.58.52 7.58.52s5.78 0 7.58-.52a2.84 2.84 0 0 0 2-2A29.44 29.44 0 0 0 22 12a29.44 29.44 0 0 0-.42-4.81zM10 15.5v-7l6 3.5z"></path></svg>',
-                linkedin: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.94 8.5H3.56V20h3.38zM5.25 3A1.97 1.97 0 1 0 7.22 5 1.97 1.97 0 0 0 5.25 3zm15.19 9.32c0-3.12-1.66-4.57-3.89-4.57a3.36 3.36 0 0 0-3 1.66V8.5H10.2V20h3.38v-6.05c0-1.59.3-3.13 2.27-3.13s2 1.84 2 3.23V20h3.38z"></path></svg>',
-                website: '<svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm6.93 9h-3.11a15.85 15.85 0 0 0-1.2-5 8.05 8.05 0 0 1 4.31 5zM12 4.06A13.73 13.73 0 0 1 13.8 11h-3.6A13.73 13.73 0 0 1 12 4.06zM9.38 6a15.85 15.85 0 0 0-1.2 5H5.07a8.05 8.05 0 0 1 4.31-5zM5.07 13h3.11a15.85 15.85 0 0 0 1.2 5 8.05 8.05 0 0 1-4.31-5zM12 19.94A13.73 13.73 0 0 1 10.2 13h3.6A13.73 13.73 0 0 1 12 19.94zM14.62 18a15.85 15.85 0 0 0 1.2-5h3.11a8.05 8.05 0 0 1-4.31 5z"></path></svg>'
-            };
-
-            return icons[channel] || icons.website;
-        }
-
         function renderSocialIconHtml(definition) {
-            return String(definition && definition.key ? getSocialIconSvg(definition.key) : getSocialIconSvg('website'))
-                .replace(
-                    '<svg ',
-                    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" style="display:block;width:18px;height:18px;vertical-align:middle;flex:0 0 18px;" '
-                );
+            var src = getSocialIconAssetUrl(definition && definition.key ? definition.key : 'website');
+
+            if (src === '') {
+                return '';
+            }
+
+            return '<img src="' + escapeHtml(src) + '" width="' + CANVAS_SOCIAL_ICON_SIZE + '" height="' + CANVAS_SOCIAL_ICON_SIZE + '" alt="' + escapeHtml(definition.label) + '" style="display:block;border:0;outline:none;text-decoration:none;width:' + CANVAS_SOCIAL_ICON_SIZE + 'px;height:' + CANVAS_SOCIAL_ICON_SIZE + 'px;border-radius:50%;">';
         }
 
         function getSocialIconAssetUrl(channel) {
@@ -2359,7 +2363,7 @@
                     surface.insertBefore(link, meta);
                 }
 
-                normalizeSocialLinkPresentation(link, String(link.getAttribute('href') || '').trim() !== '');
+                normalizeSocialLinkPresentation(link, hasConfiguredSocialUrl(link.getAttribute('href') || ''));
                 setSocialLinkIcon(link, definition);
 
                 if (!meta.hasAttribute('data-' + definition.key)) {
@@ -2391,7 +2395,7 @@
             persistSocialValues(block, meta, values);
 
             getSocialLinkDefinitions().forEach(function (item) {
-                var value = String(block.getAttribute(getSocialDataAttributeName(item.key)) || '').trim();
+                var value = normalizeSocialUrlValue(block.getAttribute(getSocialDataAttributeName(item.key)) || '');
                 var link = block.querySelector(item.selector);
                 if (!link) {
                     return;
@@ -2482,7 +2486,7 @@
 
             getSocialLinkDefinitions().forEach(function (definition) {
                 var link = block.querySelector(definition.selector);
-                var value = String((values && values[definition.key]) || '').trim();
+                var value = normalizeSocialUrlValue((values && values[definition.key]) || '');
 
                 if (!link) {
                     return;
@@ -2527,6 +2531,10 @@
             });
         }
 
+        function socialBlockHasEmailIcons(block) {
+            return !!(block && block.querySelector && block.querySelector('.mb-social-link img'));
+        }
+
         function normalizeLegacySocialHtml(rawHtml) {
             var html = String(rawHtml || '');
             var holder;
@@ -2543,6 +2551,9 @@
                 var sourceMeta = ensureSocialBlockStructure(block);
 
                 renderSocialBlockForEmail(block, getPersistedSocialValues(block, sourceMeta));
+                if (!socialBlockHasEmailIcons(block) && block.parentNode) {
+                    block.parentNode.removeChild(block);
+                }
                 changed = true;
             });
 
@@ -2936,6 +2947,10 @@
 
             syncSocialBlockTree(block, clone);
             prepareSocialBlockTreeForEmailExport(block, clone);
+
+            if (block.dataset.builderBlock === 'social' && !socialBlockHasEmailIcons(clone)) {
+                return '';
+            }
 
             Array.prototype.forEach.call(clone.querySelectorAll('.mb-block-toolbar'), function (node) {
                 node.parentNode.removeChild(node);
@@ -3952,30 +3967,32 @@
             } else if (control === 'icon-color') {
                 block.querySelector('.mb-icon-symbol').style.color = target.value;
             } else if (control === 'social-facebook' || control === 'social-instagram' || control === 'social-twitter' || control === 'social-youtube' || control === 'social-linkedin' || control === 'social-website') {
-                if (target.value && !isValidLink(target.value)) {
+                var normalizedSocialUrl = normalizeSocialUrlValue(target.value);
+                if (normalizedSocialUrl && !isValidLink(normalizedSocialUrl)) {
                     window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
                     return;
                 }
                 var socialMeta = ensureSocialBlockStructure(block);
                 var socialValues = getPersistedSocialValues(block, socialMeta);
                 if (control === 'social-facebook') {
-                    socialValues.facebook = target.value;
+                    socialValues.facebook = normalizedSocialUrl;
                 }
                 if (control === 'social-instagram') {
-                    socialValues.instagram = target.value;
+                    socialValues.instagram = normalizedSocialUrl;
                 }
                 if (control === 'social-twitter') {
-                    socialValues.twitter = target.value;
+                    socialValues.twitter = normalizedSocialUrl;
                 }
                 if (control === 'social-youtube') {
-                    socialValues.youtube = target.value;
+                    socialValues.youtube = normalizedSocialUrl;
                 }
                 if (control === 'social-linkedin') {
-                    socialValues.linkedin = target.value;
+                    socialValues.linkedin = normalizedSocialUrl;
                 }
                 if (control === 'social-website') {
-                    socialValues.website = target.value;
+                    socialValues.website = normalizedSocialUrl;
                 }
+                target.value = normalizedSocialUrl;
                 updateSocialLinks(block, socialValues);
             } else if (control === 'inline-image-url') {
                 if (currentImageNode) {
