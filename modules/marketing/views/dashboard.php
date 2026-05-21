@@ -1,122 +1,228 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
 <style>
+    .marketing-dashboard-layout {
+        display: grid;
+        gap: 22px;
+    }
     .marketing-dashboard-hero {
-        margin-bottom: 18px;
-        padding: 22px 24px;
-        border: 1px solid #e2e8f0;
+        margin-bottom: 0;
+        padding: 20px 22px;
+        border: 1px solid rgba(148, 163, 184, .22);
         border-radius: 18px;
         background: linear-gradient(135deg, #f8fafc 0%, #ffffff 55%, #fff7ed 100%);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
     }
     .marketing-dashboard-hero-copy {
         margin: 8px 0 0;
-        max-width: 780px;
+        max-width: none;
         color: #64748b;
-        font-size: 14px;
+        font-size: 13px;
         line-height: 1.6;
     }
     .marketing-dashboard-summary-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
-        margin-bottom: 14px;
+        gap: 16px;
+        margin-bottom: 0;
     }
     .marketing-dashboard-summary-card {
-        padding: 16px 18px;
-        border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        background: #ffffff;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+        padding: 18px 16px;
+        min-height: 116px;
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, .22);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+        color: #475569;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+1) {
+        background: #eef6ff;
+        color: #2563eb;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+2) {
+        background: #ecfdf3;
+        color: #15803d;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+3) {
+        background: #f8fafc;
+        color: #475569;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+4) {
+        background: #f5f3ff;
+        color: #6d28d9;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+5) {
+        background: #ecfdf3;
+        color: #15803d;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+6) {
+        background: #eef6ff;
+        color: #2563eb;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+7) {
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+    .marketing-dashboard-summary-card:nth-child(8n+8) {
+        background: #fffbeb;
+        color: #b45309;
     }
     .marketing-dashboard-summary-label {
         display: block;
-        color: #64748b;
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: .08em;
         font-weight: 700;
+        color: inherit;
+        opacity: .78;
     }
     .marketing-dashboard-summary-value {
         display: block;
         margin-top: 10px;
-        color: #0f172a;
-        font-size: 30px;
+        color: inherit;
+        font-size: 34px;
         line-height: 1.1;
         font-weight: 700;
     }
     .marketing-dashboard-summary-helper {
         display: block;
         margin-top: 8px;
-        color: #94a3b8;
         font-size: 12px;
+        color: inherit;
+        opacity: .72;
     }
     .marketing-dashboard-section-card {
-        border: 1px solid #e2e8f0;
-        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .22);
+        border-radius: 16px;
         background: #ffffff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
         overflow: hidden;
     }
     .marketing-dashboard-section-card.is-analytics {
-        background: linear-gradient(135deg, #fff8f1 0%, #eff6ff 100%);
+        background: linear-gradient(135deg, #fff8f1 0%, #ffffff 52%, #eff6ff 100%);
     }
     .marketing-dashboard-section-body {
-        padding: 22px 24px;
+        padding: 18px 20px;
     }
     .marketing-dashboard-section-head {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
         gap: 18px;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
     }
     .marketing-dashboard-section-title {
         margin: 0;
         color: #0f172a;
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 700;
     }
     .marketing-dashboard-section-copy {
-        margin: 8px 0 0;
+        margin: 6px 0 0;
         color: #64748b;
-        font-size: 14px;
+        font-size: 13px;
         line-height: 1.6;
     }
     .marketing-dashboard-mini-kpis {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
-        min-width: 260px;
+        min-width: 0;
+        max-width: 360px;
     }
     .marketing-dashboard-mini-kpi {
         padding: 14px 16px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid rgba(148, 163, 184, .18);
         border-radius: 14px;
-        background: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 255, 255, .92);
         text-align: left;
     }
     .marketing-dashboard-mini-kpi .marketing-dashboard-summary-value {
         font-size: 24px;
     }
     .marketing-dashboard-inline-note {
-        margin: 0 0 16px;
+        margin: 0;
         color: #64748b;
         font-size: 13px;
     }
+    .marketing-dashboard-click-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr);
+        gap: 18px;
+        margin-top: 16px;
+    }
+    .marketing-dashboard-click-panel {
+        min-width: 0;
+    }
+    .marketing-dashboard-table-shell {
+        overflow-x: auto;
+        border: 1px solid rgba(148, 163, 184, .18);
+        border-radius: 14px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .marketing-dashboard-table-shell .table {
+        margin-bottom: 0;
+    }
+    .marketing-dashboard-table-shell .table thead th {
+        border-bottom: 1px solid rgba(148, 163, 184, .22);
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .marketing-dashboard-table-shell .table tbody td {
+        border-top: 1px solid rgba(226, 232, 240, .85);
+        color: #0f172a;
+        font-size: 13px;
+        vertical-align: middle;
+    }
+    .marketing-dashboard-table-shell .table-striped > tbody > tr:nth-of-type(odd) {
+        background-color: rgba(248, 250, 252, .72);
+    }
     .marketing-ops-shell {
-        border: 1px solid #e2e8f0;
-        background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+        border: 1px solid rgba(148, 163, 184, .22);
+        background: #ffffff;
         border-radius: 16px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
         overflow: hidden;
     }
-    .marketing-ops-section {
-        border-top: 1px solid #e2e8f0;
-        padding-top: 18px;
-        margin-top: 18px;
+    .marketing-ops-shell .panel-body {
+        padding: 18px 20px;
     }
-    .marketing-ops-section:first-of-type {
-        border-top: 0;
-        padding-top: 0;
+    .marketing-dashboard-ops-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    .marketing-dashboard-ops-head-copy {
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.6;
+        margin: 6px 0 0;
+    }
+    .marketing-dashboard-ops-status-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+    .marketing-dashboard-ops-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+    }
+    .marketing-ops-section {
+        grid-column: span 12;
         margin-top: 0;
+        padding: 18px;
+        border: 1px solid rgba(148, 163, 184, .22);
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
     }
     .marketing-ops-section-title {
         margin: 0;
@@ -142,10 +248,10 @@
     .marketing-ops-status-pill {
         display: inline-flex;
         align-items: center;
-        margin: 0 8px 8px 0;
+        gap: 6px;
         padding: 7px 11px;
         border-radius: 999px;
-        border: 1px solid #dbeafe;
+        border: 1px solid rgba(148, 163, 184, .22);
         background: #ffffff;
         color: #0f172a;
         font-size: 12px;
@@ -156,8 +262,8 @@
         margin-top: 14px;
         padding: 16px;
         border-radius: 14px;
-        border: 1px solid #e2e8f0;
-        background: #ffffff;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     }
     .marketing-ops-control-grid {
         display: grid;
@@ -194,14 +300,14 @@
         border: 1px dashed #cbd5e1;
         border-radius: 12px;
         color: #64748b;
-        background: #ffffff;
+        background: #f8fafc;
     }
     .marketing-ops-metric {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, .18);
         border-radius: 14px;
-        padding: 16px;
-        min-height: 112px;
+        padding: 14px 15px;
+        min-height: 104px;
     }
     .marketing-ops-metric-label {
         display: block;
@@ -212,22 +318,22 @@
     }
     .marketing-ops-metric-value {
         display: block;
-        margin-top: 10px;
+        margin-top: 8px;
         color: #0f172a;
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 700;
         line-height: 1.1;
     }
     .marketing-ops-metric-helper {
         display: block;
-        margin-top: 8px;
+        margin-top: 6px;
         color: #94a3b8;
         font-size: 12px;
     }
     .marketing-ops-retention-grid,
     .marketing-ops-health-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 14px;
     }
     .marketing-ops-compact-grid {
@@ -235,9 +341,18 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
         align-items: start;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
     }
     .marketing-ops-compact-card {
         min-width: 0;
+        padding: 18px;
+        border: 1px solid rgba(148, 163, 184, .22);
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
     }
     .marketing-ops-compact-card .marketing-ops-section-title {
         margin-bottom: 0;
@@ -276,7 +391,7 @@
         padding: 14px 16px;
         border: 1px dashed #cbd5e1;
         border-radius: 14px;
-        background: #ffffff;
+        background: #f8fafc;
     }
     .marketing-ops-advanced summary {
         cursor: pointer;
@@ -301,6 +416,129 @@
     .marketing-ops-command-list li {
         margin-bottom: 8px;
     }
+    .marketing-ops-command-block {
+        margin-top: 12px;
+        padding: 12px 14px;
+        border: 1px solid #1e293b;
+        border-radius: 14px;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .marketing-ops-command-block--compact {
+        margin-top: 10px;
+        max-height: 160px;
+        overflow: auto;
+    }
+    .marketing-ops-cron-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .marketing-ops-cron-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #0f172a;
+        min-width: 0;
+    }
+    .marketing-ops-cron-chip-label {
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .marketing-ops-cron-chip-value {
+        color: #0f172a;
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .marketing-ops-cron-chip-value--status {
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 11px;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+    }
+    .marketing-ops-cron-chip-value--healthy {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .marketing-ops-cron-chip-value--warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .marketing-ops-cron-chip-value--critical {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .marketing-ops-cron-chip-value--not_detected {
+        background: #e2e8f0;
+        color: #334155;
+    }
+    .marketing-ops-cron-details {
+        margin-top: 14px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        background: #f8fafc;
+        overflow: hidden;
+    }
+    .marketing-ops-cron-details summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 12px 14px;
+        color: #0f172a;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .marketing-ops-cron-details summary::-webkit-details-marker {
+        display: none;
+    }
+    .marketing-ops-cron-details-body {
+        padding: 0 14px 14px;
+    }
+    .marketing-ops-cron-details-copy {
+        margin: 0;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.55;
+    }
+    .marketing-ops-cron-details-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 16px;
+        margin-top: 12px;
+    }
+    .marketing-ops-cron-details-item {
+        min-width: 0;
+    }
+    .marketing-ops-cron-details-item span {
+        display: block;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .marketing-ops-cron-details-item strong {
+        display: block;
+        margin-top: 4px;
+        color: #0f172a;
+        font-size: 13px;
+        line-height: 1.4;
+        word-break: break-word;
+    }
     .marketing-dashboard-whatsapp-summary {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -310,16 +548,59 @@
     .marketing-dashboard-whatsapp-summary .marketing-ops-metric {
         min-height: 0;
     }
+    [data-marketing-cron-health-panel="1"] {
+        grid-column: span 12;
+    }
+    [data-marketing-dashboard-integrity-panel="1"],
+    [data-marketing-dashboard-whatsapp-panel="1"],
+    [data-marketing-dashboard-queue-controls="1"],
+    [data-marketing-dashboard-queue-health="1"] {
+        grid-column: span 6;
+    }
+    [data-marketing-dashboard-queue-diagnostics="1"],
+    [data-marketing-dashboard-retention-panel="1"] {
+        grid-column: span 12;
+    }
+    @media (min-width: 1200px) {
+        .marketing-dashboard-hero-copy {
+            white-space: nowrap;
+        }
+    }
+    @media (max-width: 1199px) {
+        .marketing-dashboard-click-grid {
+            grid-template-columns: 1fr;
+        }
+        .marketing-ops-retention-grid,
+        .marketing-ops-health-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        [data-marketing-dashboard-integrity-panel="1"],
+        [data-marketing-dashboard-whatsapp-panel="1"],
+        [data-marketing-dashboard-queue-controls="1"],
+        [data-marketing-dashboard-queue-health="1"] {
+            grid-column: span 12;
+        }
+    }
     @media (max-width: 991px) {
         .marketing-dashboard-summary-grid,
         .marketing-dashboard-whatsapp-summary {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .marketing-ops-cron-details-grid {
+            grid-template-columns: 1fr;
         }
         .marketing-dashboard-section-head {
             flex-direction: column;
         }
         .marketing-dashboard-mini-kpis {
             width: 100%;
+            max-width: none;
+        }
+        .marketing-dashboard-ops-head {
+            flex-direction: column;
+        }
+        .marketing-dashboard-ops-status-row {
+            justify-content: flex-start;
         }
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
@@ -335,12 +616,22 @@
         .marketing-dashboard-whatsapp-summary {
             grid-template-columns: repeat(1, minmax(0, 1fr));
         }
+        .marketing-dashboard-layout {
+            gap: 18px;
+        }
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid,
         .marketing-ops-compact-grid,
         .marketing-ops-integrity-grid {
             grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+        .marketing-ops-cron-strip {
+            gap: 8px;
+        }
+        .marketing-ops-cron-chip {
+            width: 100%;
+            justify-content: space-between;
         }
         .marketing-ops-compact-card .marketing-ops-section-copy {
             min-height: 0;
@@ -391,8 +682,9 @@
         <div class="row">
             <div class="col-md-12">
                 <div class="panel_s">
-                    <div class="panel-body">
-                        <div class="marketing-dashboard-hero">
+                    <div class="panel-body" data-marketing-dashboard-analytics-layout="1">
+                        <div class="marketing-dashboard-layout">
+                        <div class="marketing-dashboard-hero" data-marketing-dashboard-hero-wide="1">
                             <h4 class="no-margin"><?= _l('marketing_dashboard'); ?></h4>
                             <p class="marketing-dashboard-hero-copy"><?= _l('marketing_dashboard_executive_overview_note'); ?></p>
                         </div>
@@ -438,10 +730,8 @@
                                 <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_summary_suppressions_helper'); ?></span>
                             </div>
                         </div>
-                        <div class="row tw-mt-15">
-                            <div class="col-md-12">
-                                <div class="marketing-dashboard-section-card is-analytics">
-                                    <div class="marketing-dashboard-section-body">
+                        <div class="marketing-dashboard-section-card is-analytics">
+                            <div class="marketing-dashboard-section-body">
                                         <div class="marketing-dashboard-section-head">
                                             <div>
                                                 <h4 class="marketing-dashboard-section-title"><?= _l('marketing_link_click_analytics'); ?></h4>
@@ -467,8 +757,8 @@
                                                 <?= _l('marketing_click_analytics_empty'); ?>
                                             </div>
                                         <?php } else { ?>
-                                            <div class="row mtop20">
-                                                <div class="col-md-6">
+                                            <div class="marketing-dashboard-click-grid">
+                                                <div class="marketing-dashboard-click-panel">
                                                     <div style="position:relative;height:360px;">
                                                         <canvas id="marketing-click-analytics-chart" height="360"></canvas>
                                                     </div>
@@ -476,7 +766,7 @@
                                                         <div class="alert alert-info">
                                                             <?= _l('marketing_click_chart_fallback'); ?>
                                                         </div>
-                                                        <div class="table-responsive">
+                                                        <div class="marketing-dashboard-table-shell">
                                                             <table class="table table-striped">
                                                                 <thead>
                                                                     <tr>
@@ -502,9 +792,9 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="marketing-dashboard-click-panel">
                                                     <h5 class="bold"><?= _l($click_analytics['chart_mode'] === 'links' ? 'marketing_top_clicked_links' : 'marketing_clicks_by_campaign'); ?></h5>
-                                                    <div class="table-responsive">
+                                                    <div class="marketing-dashboard-table-shell">
                                                         <table class="table table-striped">
                                                             <thead>
                                                                 <tr>
@@ -531,9 +821,8 @@
                                                 </div>
                                             </div>
                                         <?php } ?>
-                                    </div>
-                                </div>
                             </div>
+                        </div>
                         </div>
                         <?php
                         $queueDiagnostics = isset($queue_diagnostics) && is_array($queue_diagnostics) ? $queue_diagnostics : [];
@@ -559,6 +848,88 @@
                         $recentQueueWarnings = isset($queueDiagnostics['recent_warning_counts']) && is_array($queueDiagnostics['recent_warning_counts'])
                             ? $queueDiagnostics['recent_warning_counts']
                             : [];
+                        $cronReadiness = isset($cron_readiness) && is_array($cron_readiness)
+                            ? array_merge([
+                                'cron_status' => 'not_detected',
+                                'last_run_at' => null,
+                                'last_import_run_at' => null,
+                                'last_campaign_run_at' => null,
+                                'minutes_since_last_run' => null,
+                                'warning_threshold_minutes' => 5,
+                                'critical_threshold_minutes' => 15,
+                                'recommended_command' => '* * * * * cd . && php index.php cron/index >/dev/null 2>&1',
+                                'import_queue' => [],
+                            ], $cron_readiness)
+                            : [
+                                'cron_status' => 'not_detected',
+                                'last_run_at' => null,
+                                'last_import_run_at' => null,
+                                'last_campaign_run_at' => null,
+                                'minutes_since_last_run' => null,
+                                'warning_threshold_minutes' => 5,
+                                'critical_threshold_minutes' => 15,
+                                'recommended_command' => '* * * * * cd . && php index.php cron/index >/dev/null 2>&1',
+                                'import_queue' => [],
+                            ];
+                        $cronImportQueue = isset($cronReadiness['import_queue']) && is_array($cronReadiness['import_queue'])
+                            ? array_merge([
+                                'queued_count' => 0,
+                                'processing_count' => 0,
+                                'failed_count' => 0,
+                                'completed_count' => 0,
+                                'oldest_queued_at' => null,
+                                'oldest_queued_age_minutes' => null,
+                                'stale_processing_count' => 0,
+                            ], $cronReadiness['import_queue'])
+                            : [
+                                'queued_count' => 0,
+                                'processing_count' => 0,
+                                'failed_count' => 0,
+                                'completed_count' => 0,
+                                'oldest_queued_at' => null,
+                                'oldest_queued_age_minutes' => null,
+                                'stale_processing_count' => 0,
+                            ];
+                        $cronStatusLabel = static function ($statusKey) {
+                            if ($statusKey === 'healthy') {
+                                return _l('marketing_cron_status_healthy');
+                            }
+                            if ($statusKey === 'warning') {
+                                return _l('marketing_cron_status_warning');
+                            }
+                            if ($statusKey === 'critical') {
+                                return _l('marketing_cron_status_critical');
+                            }
+
+                            return _l('marketing_cron_status_not_detected');
+                        };
+                        $cronStatusChipClass = static function ($statusKey) {
+                            $statusKey = trim((string) $statusKey);
+                            if (!in_array($statusKey, ['healthy', 'warning', 'critical', 'not_detected'], true)) {
+                                $statusKey = 'not_detected';
+                            }
+
+                            return 'marketing-ops-cron-chip-value marketing-ops-cron-chip-value--status marketing-ops-cron-chip-value--' . $statusKey;
+                        };
+                        $formatCronMinutes = static function ($minutes) {
+                            if ($minutes === null || $minutes === '') {
+                                return _l('marketing_cron_not_detected_yet');
+                            }
+
+                            $minutes = max(0, (int) $minutes);
+                            if ($minutes < 60) {
+                                return sprintf(_l('marketing_cron_age_minutes'), $minutes);
+                            }
+
+                            $hours = (int) floor($minutes / 60);
+                            $remainingMinutes = $minutes % 60;
+
+                            if ($remainingMinutes === 0) {
+                                return sprintf(_l('marketing_cron_age_hours'), $hours);
+                            }
+
+                            return sprintf(_l('marketing_cron_age_hours_minutes'), $hours, $remainingMinutes);
+                        };
                         $recentFailureMetrics = isset($queueDiagnostics['recent_failure_metric_counts']) && is_array($queueDiagnostics['recent_failure_metric_counts'])
                             ? $queueDiagnostics['recent_failure_metric_counts']
                             : [];
@@ -633,22 +1004,89 @@
                             : [];
                         $canManageQueue = !empty($can_manage_queue);
                         ?>
-                        <div class="row tw-mt-15">
-                            <div class="col-md-12">
-                                <div class="panel_s marketing-ops-shell">
-                                    <div class="panel-body">
-                                        <div class="row">
-                                            <div class="col-md-8">
+                        <div class="panel_s marketing-ops-shell">
+                            <div class="panel-body">
+                                        <div class="marketing-dashboard-ops-head">
+                                            <div>
                                                 <h4 class="no-margin"><?= _l('marketing_dashboard_operations_center'); ?></h4>
-                                                <p class="text-muted mtop10"><?= _l('marketing_dashboard_operations_center_note'); ?></p>
+                                                <p class="marketing-dashboard-ops-head-copy"><?= _l('marketing_dashboard_operations_center_note'); ?></p>
                                             </div>
-                                            <div class="col-md-4 text-right">
+                                            <div class="marketing-dashboard-ops-status-row">
                                                 <span class="marketing-ops-status-pill"><?= !empty($queueDiagnostics['queue_paused']) ? 'Queue Paused' : 'Queue Active'; ?></span>
                                                 <span class="marketing-ops-status-pill"><?= !empty($queueDiagnostics['schema_ready']) ? 'Schema Ready' : 'Schema Partial'; ?></span>
                                                 <span class="marketing-ops-status-pill">Mode: <?= html_escape(ucwords($retentionModeLabel)); ?></span>
+                                                <span class="marketing-ops-status-pill"><?= sprintf(_l('marketing_cron_status_pill_format'), html_escape($cronStatusLabel((string) $cronReadiness['cron_status']))); ?></span>
                                             </div>
                                         </div>
-                                        <div class="marketing-ops-section">
+                                        <div class="marketing-dashboard-ops-grid">
+                                        <div class="marketing-ops-section" data-marketing-cron-health-panel="1" data-marketing-cron-health-compact="1">
+                                            <h5 class="marketing-ops-section-title"><?= _l('marketing_cron_readiness_heading'); ?></h5>
+                                            <p class="marketing-ops-section-copy"><?= _l('marketing_cron_dashboard_compact_note'); ?></p>
+                                            <div class="marketing-ops-cron-strip">
+                                                <div class="marketing-ops-cron-chip">
+                                                    <span class="marketing-ops-cron-chip-label">Cron</span>
+                                                    <span class="<?= html_escape($cronStatusChipClass((string) $cronReadiness['cron_status'])); ?>"><?= html_escape($cronStatusLabel((string) $cronReadiness['cron_status'])); ?></span>
+                                                </div>
+                                                <div class="marketing-ops-cron-chip">
+                                                    <span class="marketing-ops-cron-chip-label"><?= _l('marketing_cron_compact_last_run'); ?></span>
+                                                    <span class="marketing-ops-cron-chip-value"><?= html_escape($formatCronMinutes($cronReadiness['minutes_since_last_run'])); ?></span>
+                                                </div>
+                                                <div class="marketing-ops-cron-chip">
+                                                    <span class="marketing-ops-cron-chip-label"><?= _l('marketing_import_status_queued'); ?></span>
+                                                    <span class="marketing-ops-cron-chip-value"><?= (int) ($cronImportQueue['queued_count'] ?? 0); ?></span>
+                                                </div>
+                                                <div class="marketing-ops-cron-chip">
+                                                    <span class="marketing-ops-cron-chip-label"><?= _l('marketing_import_status_processing'); ?></span>
+                                                    <span class="marketing-ops-cron-chip-value"><?= (int) ($cronImportQueue['processing_count'] ?? 0); ?></span>
+                                                </div>
+                                                <div class="marketing-ops-cron-chip">
+                                                    <span class="marketing-ops-cron-chip-label"><?= _l('marketing_import_status_failed'); ?></span>
+                                                    <span class="marketing-ops-cron-chip-value"><?= (int) ($cronImportQueue['failed_count'] ?? 0); ?></span>
+                                                </div>
+                                                <div class="marketing-ops-cron-chip">
+                                                    <span class="marketing-ops-cron-chip-label"><?= _l('marketing_import_status_completed'); ?></span>
+                                                    <span class="marketing-ops-cron-chip-value"><?= (int) ($cronImportQueue['completed_count'] ?? 0); ?></span>
+                                                </div>
+                                                <div class="marketing-ops-cron-chip">
+                                                    <span class="marketing-ops-cron-chip-label"><?= _l('marketing_cron_compact_stale'); ?></span>
+                                                    <span class="marketing-ops-cron-chip-value"><?= (int) ($cronImportQueue['stale_processing_count'] ?? 0); ?></span>
+                                                </div>
+                                            </div>
+                                            <details class="marketing-ops-cron-details" data-marketing-cron-details="1">
+                                                <summary><?= _l('marketing_cron_diagnostics_summary'); ?></summary>
+                                                <div class="marketing-ops-cron-details-body">
+                                                    <p class="marketing-ops-cron-details-copy"><?= _l('marketing_cron_readiness_note'); ?></p>
+                                                    <div class="marketing-ops-cron-details-grid">
+                                                        <div class="marketing-ops-cron-details-item">
+                                                            <span><?= _l('marketing_cron_last_run_at'); ?></span>
+                                                            <strong><?= !empty($cronReadiness['last_run_at']) ? html_escape((string) $cronReadiness['last_run_at']) : _l('marketing_cron_not_detected_yet'); ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-cron-details-item">
+                                                            <span><?= _l('marketing_cron_oldest_queued_job_age'); ?></span>
+                                                            <strong><?= html_escape($formatCronMinutes($cronImportQueue['oldest_queued_age_minutes'])); ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-cron-details-item">
+                                                            <span><?= _l('marketing_cron_last_import_run_at'); ?></span>
+                                                            <strong><?= !empty($cronReadiness['last_import_run_at']) ? html_escape((string) $cronReadiness['last_import_run_at']) : _l('marketing_cron_not_detected_yet'); ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-cron-details-item">
+                                                            <span><?= _l('marketing_cron_last_campaign_run_at'); ?></span>
+                                                            <strong><?= !empty($cronReadiness['last_campaign_run_at']) ? html_escape((string) $cronReadiness['last_campaign_run_at']) : _l('marketing_cron_not_detected_yet'); ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-cron-details-item">
+                                                            <span><?= _l('marketing_cron_warning_threshold'); ?></span>
+                                                            <strong><?= sprintf(_l('marketing_cron_age_minutes'), (int) ($cronReadiness['warning_threshold_minutes'] ?? 5)); ?></strong>
+                                                        </div>
+                                                        <div class="marketing-ops-cron-details-item">
+                                                            <span><?= _l('marketing_cron_critical_threshold'); ?></span>
+                                                            <strong><?= sprintf(_l('marketing_cron_age_minutes'), (int) ($cronReadiness['critical_threshold_minutes'] ?? 15)); ?></strong>
+                                                        </div>
+                                                    </div>
+                                                    <pre class="marketing-ops-command-block marketing-ops-command-block--compact" data-marketing-cron-command="1"><code><?= html_escape((string) ($cronReadiness['recommended_command'] ?? '')); ?></code></pre>
+                                                </div>
+                                            </details>
+                                        </div>
+                                        <div class="marketing-ops-section" data-marketing-dashboard-integrity-panel="1">
                                             <h5 class="marketing-ops-section-title">Integrity Health</h5>
                                             <p class="marketing-ops-section-copy"><?= _l('marketing_dashboard_integrity_health_copy'); ?></p>
                                             <?php if (empty($integrityDiagnostics['available'])) { ?>
@@ -693,7 +1131,7 @@
                                                 <?php } ?>
                                             <?php } ?>
                                         </div>
-                                        <div class="marketing-ops-section">
+                                        <div class="marketing-ops-section" data-marketing-dashboard-whatsapp-panel="1">
                                             <h5 class="marketing-ops-section-title"><?= _l('marketing_dashboard_whatsapp_conversations'); ?></h5>
                                             <p class="marketing-ops-section-copy"><?= _l('marketing_dashboard_whatsapp_conversations_note'); ?></p>
                                             <?php if (empty($whatsappConversations['available'])) { ?>
@@ -788,7 +1226,7 @@
                                                 <?php } ?>
                                             <?php } ?>
                                         </div>
-                                        <div class="marketing-ops-section">
+                                        <div class="marketing-ops-section" data-marketing-dashboard-queue-controls="1">
                                             <h5 class="marketing-ops-section-title">Queue Controls</h5>
                                             <p class="marketing-ops-section-copy">Pause, resume, or recover stale queue work without modifying active recipient ownership or deleting telemetry.</p>
                                             <div class="marketing-ops-control-shell">
@@ -836,7 +1274,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="marketing-ops-section">
+                                        <div class="marketing-ops-section" data-marketing-dashboard-queue-health="1">
                                             <h5 class="marketing-ops-section-title">Queue Health</h5>
                                             <p class="marketing-ops-section-copy">Live lease, backlog, recovery, and rate-cap telemetry from existing queue state.</p>
                                             <div class="marketing-ops-health-grid mtop15">
@@ -893,7 +1331,7 @@
                                                 </p>
                                             <?php } ?>
                                         </div>
-                                        <div class="marketing-ops-section marketing-ops-compact-grid">
+                                        <div class="marketing-ops-section marketing-ops-compact-grid" data-marketing-dashboard-queue-diagnostics="1">
                                             <div class="marketing-ops-compact-card">
                                                 <h5 class="marketing-ops-section-title">Recent Warnings</h5>
                                                 <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
@@ -955,7 +1393,7 @@
                                                 <?php } ?>
                                             </div>
                                         </div>
-                                        <div class="marketing-ops-section">
+                                        <div class="marketing-ops-section" data-marketing-dashboard-retention-panel="1">
                                             <h5 class="marketing-ops-section-title">Telemetry Retention</h5>
                                             <p class="marketing-ops-section-copy">Bounded explicit cleanup policy for non-critical telemetry and stale click aggregates.</p>
                                             <div class="marketing-ops-retention-grid mtop15">
@@ -1008,9 +1446,11 @@
                                                 <span class="marketing-ops-badge">Per-run cap: <?= (int) ($retentionDiagnostics['delete_limit_per_run'] ?? 0); ?> rows</span>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
                             </div>
+                        </div>
+                                        </div>
+                            </div>
+                        </div>
                         </div>
                     </div>
                 </div>

@@ -12,7 +12,7 @@ Requires at least: 3.2.*
 define('MARKETING_MODULE_NAME', 'marketing');
 define('MARKETING_MODULE_VERSION', '1.1.0');
 define('MARKETING_COMMERCIAL_PREPARE_THRESHOLD', 100);
-define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-13-safe-bootstrap-v11');
+define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-21-import-queue-v12');
 
 hooks()->add_action('admin_init', 'marketing_module_init_menu_items');
 hooks()->add_action('admin_init', 'marketing_register_permissions');
@@ -162,38 +162,126 @@ function module_marketing_action_links($actions)
 
 function marketing_cron_process_queue($manually = false)
 {
+    $cronRunAt = date('Y-m-d H:i:s');
+    $importSnapshot = [
+        'status' => 'idle',
+        'job_found' => false,
+        'job_id' => 0,
+        'processed_rows' => 0,
+        'imported_rows' => 0,
+        'skipped_rows' => 0,
+        'failed_rows' => 0,
+        'warnings' => [],
+    ];
+    $campaignSnapshot = [
+        'status' => 'skipped_disabled',
+        'processed' => 0,
+        'accepted' => 0,
+        'failed' => 0,
+        'suppressed' => 0,
+        'skipped' => 0,
+        'recovered' => 0,
+        'campaigns_considered' => 0,
+        'campaigns_started' => 0,
+        'campaigns_completed' => 0,
+        'warnings' => [],
+    ];
+
+    marketing_update_runtime_option('marketing_cron_last_run_at', $cronRunAt);
+
     try {
         marketing_bootstrap_safe_schema();
 
-        if (get_option('marketing_send_enabled') != 1) {
-            return true;
-        }
-
         $CI = &get_instance();
-        $CI->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
+        $CI->load->model('marketing/Marketing_imports_model', 'marketing_imports_model');
+        $importSummary = $CI->marketing_imports_model->process_queued_imports([
+            'batch_size' => (int) get_option('marketing_import_batch_size'),
+            'max_runtime_seconds' => (int) get_option('marketing_import_max_runtime_seconds'),
+            'stale_lock_seconds' => (int) get_option('marketing_import_stale_lock_seconds'),
+        ]);
+        marketing_update_runtime_option('marketing_cron_last_import_run_at', $cronRunAt);
+        $importSnapshot = array_merge($importSnapshot, [
+            'status' => (string) ($importSummary['status'] ?? 'idle'),
+            'job_found' => !empty($importSummary['job_found']),
+            'job_id' => (int) ($importSummary['job_id'] ?? 0),
+            'processed_rows' => (int) ($importSummary['processed_rows'] ?? 0),
+            'imported_rows' => (int) ($importSummary['imported_rows'] ?? 0),
+            'skipped_rows' => (int) ($importSummary['skipped_rows'] ?? 0),
+            'failed_rows' => (int) ($importSummary['failed_rows'] ?? 0),
+            'warnings' => array_values($importSummary['warnings'] ?? []),
+        ]);
 
-        $limit = (int) get_option('marketing_send_per_cron_run');
-        if ($limit <= 0) {
-            $limit = 1;
+        if (!empty($importSummary['job_found'])) {
+            log_message('info', 'Marketing import queue completed: ' . json_encode([
+                'job_id' => (int) ($importSummary['job_id'] ?? 0),
+                'status' => (string) ($importSummary['status'] ?? 'idle'),
+                'processed_rows' => (int) ($importSummary['processed_rows'] ?? 0),
+                'imported_rows' => (int) ($importSummary['imported_rows'] ?? 0),
+                'skipped_rows' => (int) ($importSummary['skipped_rows'] ?? 0),
+                'failed_rows' => (int) ($importSummary['failed_rows'] ?? 0),
+                'warnings' => array_values($importSummary['warnings'] ?? []),
+            ]));
         }
-
-        log_message('info', 'Marketing campaign queue started: mode=cron limit=' . $limit);
-        $summary = $CI->marketing_campaigns_model->process_due_recipients($limit);
-        log_message('info', 'Marketing campaign queue completed: ' . json_encode([
-            'processed' => (int) ($summary['processed'] ?? 0),
-            'accepted' => (int) ($summary['accepted'] ?? 0),
-            'failed' => (int) ($summary['failed'] ?? 0),
-            'suppressed' => (int) ($summary['suppressed'] ?? 0),
-            'skipped' => (int) ($summary['skipped'] ?? 0),
-            'recovered' => (int) ($summary['recovered'] ?? 0),
-            'campaigns_considered' => (int) ($summary['campaigns_considered'] ?? 0),
-            'campaigns_started' => (int) ($summary['campaigns_started'] ?? 0),
-            'campaigns_completed' => (int) ($summary['campaigns_completed'] ?? 0),
-            'warnings' => array_values($summary['warnings'] ?? []),
-        ]));
     } catch (Throwable $exception) {
+        marketing_update_runtime_option('marketing_cron_last_import_run_at', $cronRunAt);
+        $importSnapshot['status'] = 'failed';
+        $importSnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
+        log_message('error', 'Marketing import queue failed: ' . marketing_sanitize_log_message($exception->getMessage()));
+    }
+
+    try {
+        if (get_option('marketing_send_enabled') != 1) {
+            $campaignSnapshot['status'] = 'skipped_disabled';
+        } else {
+            $CI = &get_instance();
+            $CI->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
+
+            $limit = (int) get_option('marketing_send_per_cron_run');
+            if ($limit <= 0) {
+                $limit = 1;
+            }
+
+            log_message('info', 'Marketing campaign queue started: mode=cron limit=' . $limit);
+            $summary = $CI->marketing_campaigns_model->process_due_recipients($limit);
+            $campaignSnapshot = array_merge($campaignSnapshot, [
+                'status' => 'processed',
+                'processed' => (int) ($summary['processed'] ?? 0),
+                'accepted' => (int) ($summary['accepted'] ?? 0),
+                'failed' => (int) ($summary['failed'] ?? 0),
+                'suppressed' => (int) ($summary['suppressed'] ?? 0),
+                'skipped' => (int) ($summary['skipped'] ?? 0),
+                'recovered' => (int) ($summary['recovered'] ?? 0),
+                'campaigns_considered' => (int) ($summary['campaigns_considered'] ?? 0),
+                'campaigns_started' => (int) ($summary['campaigns_started'] ?? 0),
+                'campaigns_completed' => (int) ($summary['campaigns_completed'] ?? 0),
+                'warnings' => array_values($summary['warnings'] ?? []),
+            ]);
+            log_message('info', 'Marketing campaign queue completed: ' . json_encode([
+                'processed' => (int) ($summary['processed'] ?? 0),
+                'accepted' => (int) ($summary['accepted'] ?? 0),
+                'failed' => (int) ($summary['failed'] ?? 0),
+                'suppressed' => (int) ($summary['suppressed'] ?? 0),
+                'skipped' => (int) ($summary['skipped'] ?? 0),
+                'recovered' => (int) ($summary['recovered'] ?? 0),
+                'campaigns_considered' => (int) ($summary['campaigns_considered'] ?? 0),
+                'campaigns_started' => (int) ($summary['campaigns_started'] ?? 0),
+                'campaigns_completed' => (int) ($summary['campaigns_completed'] ?? 0),
+                'warnings' => array_values($summary['warnings'] ?? []),
+            ]));
+        }
+        marketing_update_runtime_option('marketing_cron_last_campaign_run_at', $cronRunAt);
+    } catch (Throwable $exception) {
+        marketing_update_runtime_option('marketing_cron_last_campaign_run_at', $cronRunAt);
+        $campaignSnapshot['status'] = 'failed';
+        $campaignSnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
         log_message('error', 'Marketing campaign queue failed: ' . marketing_sanitize_log_message($exception->getMessage()));
     }
+
+    marketing_update_runtime_option('marketing_cron_last_summary_json', marketing_build_cron_summary_json([
+        'last_run_at' => $cronRunAt,
+        'import' => $importSnapshot,
+        'campaign' => $campaignSnapshot,
+    ]));
 
     return true;
 }
@@ -223,6 +311,15 @@ function marketing_get_default_options()
         'marketing_send_enabled' => '0',
         'marketing_queue_paused' => '0',
         'marketing_send_per_cron_run' => '20',
+        'marketing_import_batch_size' => '500',
+        'marketing_import_max_runtime_seconds' => '20',
+        'marketing_import_stale_lock_seconds' => '900',
+        'marketing_cron_warning_minutes' => '5',
+        'marketing_cron_critical_minutes' => '15',
+        'marketing_cron_last_run_at' => '',
+        'marketing_cron_last_import_run_at' => '',
+        'marketing_cron_last_campaign_run_at' => '',
+        'marketing_cron_last_summary_json' => '',
         'marketing_send_sleep_ms' => '0',
         'marketing_send_hourly_cap' => '0',
         'marketing_send_daily_cap' => '0',
@@ -297,6 +394,97 @@ function marketing_ensure_required_options()
             add_option($name, $value);
         }
     }
+}
+
+function marketing_update_runtime_option($name, $value)
+{
+    $name = trim((string) $name);
+    if ($name === '') {
+        return false;
+    }
+
+    $stringValue = is_string($value) ? $value : (string) $value;
+    if (get_option($name) === false) {
+        return add_option($name, $stringValue);
+    }
+
+    if ((string) get_option($name) === $stringValue) {
+        return true;
+    }
+
+    return update_option($name, $stringValue);
+}
+
+function marketing_build_cron_summary_json(array $summary)
+{
+    $sanitizeList = static function ($items) {
+        $sanitized = [];
+        foreach ((array) $items as $item) {
+            $item = function_exists('marketing_sanitize_log_message')
+                ? marketing_sanitize_log_message($item)
+                : trim(strip_tags((string) $item));
+            if ($item !== '') {
+                $sanitized[] = $item;
+            }
+        }
+
+        return array_values(array_slice($sanitized, 0, 10));
+    };
+
+    $payload = [
+        'last_run_at' => trim((string) ($summary['last_run_at'] ?? '')),
+        'import' => [
+            'status' => trim((string) ($summary['import']['status'] ?? 'idle')),
+            'job_found' => !empty($summary['import']['job_found']),
+            'job_id' => (int) ($summary['import']['job_id'] ?? 0),
+            'processed_rows' => (int) ($summary['import']['processed_rows'] ?? 0),
+            'imported_rows' => (int) ($summary['import']['imported_rows'] ?? 0),
+            'skipped_rows' => (int) ($summary['import']['skipped_rows'] ?? 0),
+            'failed_rows' => (int) ($summary['import']['failed_rows'] ?? 0),
+            'warnings' => $sanitizeList($summary['import']['warnings'] ?? []),
+        ],
+        'campaign' => [
+            'status' => trim((string) ($summary['campaign']['status'] ?? 'idle')),
+            'processed' => (int) ($summary['campaign']['processed'] ?? 0),
+            'accepted' => (int) ($summary['campaign']['accepted'] ?? 0),
+            'failed' => (int) ($summary['campaign']['failed'] ?? 0),
+            'suppressed' => (int) ($summary['campaign']['suppressed'] ?? 0),
+            'skipped' => (int) ($summary['campaign']['skipped'] ?? 0),
+            'recovered' => (int) ($summary['campaign']['recovered'] ?? 0),
+            'campaigns_considered' => (int) ($summary['campaign']['campaigns_considered'] ?? 0),
+            'campaigns_started' => (int) ($summary['campaign']['campaigns_started'] ?? 0),
+            'campaigns_completed' => (int) ($summary['campaign']['campaigns_completed'] ?? 0),
+            'warnings' => $sanitizeList($summary['campaign']['warnings'] ?? []),
+        ],
+    ];
+
+    $json = json_encode($payload);
+
+    return is_string($json) ? $json : '';
+}
+
+function marketing_detect_cli_php_binary()
+{
+    $candidate = defined('PHP_BINARY') ? trim((string) PHP_BINARY) : '';
+    if ($candidate === '') {
+        return 'php';
+    }
+
+    $basename = strtolower(basename($candidate));
+    if ($basename === 'php' || preg_match('/^php[0-9.]*$/', $basename)) {
+        return $candidate;
+    }
+
+    return 'php';
+}
+
+function marketing_get_recommended_cron_command()
+{
+    $crmRoot = defined('FCPATH') && trim((string) FCPATH) !== ''
+        ? rtrim(str_replace('\\', '/', (string) FCPATH), '/')
+        : '.';
+
+    return '* * * * * cd ' . $crmRoot . ' && ' . marketing_detect_cli_php_binary() . ' index.php cron/index >/dev/null 2>&1';
 }
 
 function marketing_bootstrap_safe_schema($force = false)

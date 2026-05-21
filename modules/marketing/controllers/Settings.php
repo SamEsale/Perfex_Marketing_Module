@@ -16,6 +16,7 @@ class Settings extends AdminController
         }
 
         $this->load->model('marketing/Marketing_reply_leads_model', 'marketing_reply_leads_model');
+        $this->load->model('marketing/Marketing_dashboard_model', 'marketing_dashboard_model');
         $this->load->library('marketing/Marketing_schema');
         $this->load->library('marketing/Marketing_whatsapp');
         $this->marketingLicenseAvailable = $this->load_marketing_license_library();
@@ -131,6 +132,7 @@ class Settings extends AdminController
             $data['whatsapp_app_secret_configured']
         );
         $data['schema_report'] = $this->marketing_schema->get_readiness_report();
+        $data['cron_readiness'] = $this->marketing_dashboard_model->get_cron_readiness_summary();
         $data['license_available'] = $this->marketingLicenseAvailable;
         $data['license_state'] = $this->marketingLicenseAvailable
             ? $this->marketing_license->get_license_state()

@@ -41,6 +41,7 @@ class Marketing_dashboard_model extends App_Model
         $defaults = $this->get_default_dashboard_data();
         $eventSummary = $this->get_safe_event_summary();
         $queueDiagnostics = $this->get_safe_queue_diagnostics();
+        $cronReadiness = $this->get_cron_readiness_summary();
         $retentionDiagnostics = $this->get_safe_retention_diagnostics();
         $totalRecipients = $this->db->count_all($this->recipientsTable);
         $sentRecipients = total_rows($this->recipientsTable, ['status' => 'sent']);
@@ -70,10 +71,62 @@ class Marketing_dashboard_model extends App_Model
             'bounce_rate'            => $bounceRate,
             'click_analytics'        => $this->get_click_analytics(),
             'queue_diagnostics'      => $queueDiagnostics,
+            'cron_readiness'         => $cronReadiness,
             'retention_diagnostics'  => $retentionDiagnostics,
             'recent_campaigns'       => $this->get_recent_campaigns($campaignLimit),
             'recent_activity'        => $this->get_recent_activity($activityLimit),
         ]);
+    }
+
+    public function get_cron_readiness_summary()
+    {
+        $summary = $this->get_default_cron_readiness();
+        $warningMinutes = max(1, (int) get_option('marketing_cron_warning_minutes'));
+        $criticalMinutes = max($warningMinutes + 1, (int) get_option('marketing_cron_critical_minutes'));
+        $lastRunAt = trim((string) get_option('marketing_cron_last_run_at'));
+        $lastImportRunAt = trim((string) get_option('marketing_cron_last_import_run_at'));
+        $lastCampaignRunAt = trim((string) get_option('marketing_cron_last_campaign_run_at'));
+        $summaryJson = trim((string) get_option('marketing_cron_last_summary_json'));
+
+        $summary['warning_threshold_minutes'] = $warningMinutes;
+        $summary['critical_threshold_minutes'] = $criticalMinutes;
+        $summary['recommended_command'] = function_exists('marketing_get_recommended_cron_command')
+            ? marketing_get_recommended_cron_command()
+            : '* * * * * cd . && php index.php cron/index >/dev/null 2>&1';
+        $summary['last_run_at'] = $lastRunAt !== '' ? $lastRunAt : null;
+        $summary['last_import_run_at'] = $lastImportRunAt !== '' ? $lastImportRunAt : null;
+        $summary['last_campaign_run_at'] = $lastCampaignRunAt !== '' ? $lastCampaignRunAt : null;
+        $summary['last_summary_json'] = $summaryJson;
+
+        if ($lastRunAt !== '') {
+            $lastRunTimestamp = strtotime($lastRunAt);
+            if ($lastRunTimestamp !== false) {
+                $minutesSince = max(0, (int) floor((time() - $lastRunTimestamp) / 60));
+                $summary['minutes_since_last_run'] = $minutesSince;
+
+                if ($minutesSince > $criticalMinutes) {
+                    $summary['cron_status'] = 'critical';
+                } elseif ($minutesSince > $warningMinutes) {
+                    $summary['cron_status'] = 'warning';
+                } else {
+                    $summary['cron_status'] = 'healthy';
+                }
+            }
+        }
+
+        try {
+            $importsModel = $this->get_imports_model();
+            if (is_object($importsModel) && method_exists($importsModel, 'get_queue_diagnostics_summary')) {
+                $summary['import_queue'] = array_merge(
+                    $summary['import_queue'],
+                    (array) $importsModel->get_queue_diagnostics_summary((int) get_option('marketing_import_stale_lock_seconds'))
+                );
+            }
+        } catch (Throwable $exception) {
+            $this->log_dashboard_runtime_failure('Marketing cron readiness import diagnostics unavailable: ', $exception);
+        }
+
+        return $summary;
     }
 
     public function get_click_analytics($topLimit = 5)
@@ -930,6 +983,14 @@ class Marketing_dashboard_model extends App_Model
         return $CI->marketing_campaigns_model;
     }
 
+    protected function get_imports_model()
+    {
+        $CI = &get_instance();
+        $CI->load->model('marketing/Marketing_imports_model', 'marketing_imports_model');
+
+        return $CI->marketing_imports_model;
+    }
+
     protected function safe_count_all($table)
     {
         if (!is_string($table) || $table === '' || !$this->db->table_exists($table)) {
@@ -1093,9 +1154,36 @@ class Marketing_dashboard_model extends App_Model
             'bounce_rate' => 0,
             'click_analytics' => $this->get_default_click_analytics(),
             'queue_diagnostics' => $this->get_safe_queue_diagnostics(),
+            'cron_readiness' => $this->get_default_cron_readiness(),
             'retention_diagnostics' => $this->get_default_retention_diagnostics(),
             'recent_campaigns' => [],
             'recent_activity' => [],
+        ];
+    }
+
+    protected function get_default_cron_readiness()
+    {
+        return [
+            'cron_status' => 'not_detected',
+            'last_run_at' => null,
+            'last_import_run_at' => null,
+            'last_campaign_run_at' => null,
+            'last_summary_json' => '',
+            'minutes_since_last_run' => null,
+            'warning_threshold_minutes' => 5,
+            'critical_threshold_minutes' => 15,
+            'recommended_command' => '* * * * * cd . && php index.php cron/index >/dev/null 2>&1',
+            'import_queue' => [
+                'available' => false,
+                'queued_count' => 0,
+                'processing_count' => 0,
+                'failed_count' => 0,
+                'completed_count' => 0,
+                'oldest_queued_at' => null,
+                'oldest_queued_age_minutes' => null,
+                'stale_processing_count' => 0,
+                'stale_lock_seconds' => 900,
+            ],
         ];
     }
 

@@ -29,7 +29,9 @@ MARKETING_CONTROLLER_FILE="modules/marketing/controllers/Marketing.php"
 CAMPAIGNS_CONTROLLER_FILE="modules/marketing/controllers/Campaigns.php"
 ANALYTICS_CONTROLLER_FILE="modules/marketing/controllers/Analytics.php"
 SETTINGS_CONTROLLER_FILE="modules/marketing/controllers/Settings.php"
+IMPORTS_CONTROLLER_FILE="modules/marketing/controllers/Imports.php"
 INTEGRITY_MODEL_FILE="modules/marketing/models/Marketing_integrity_model.php"
+IMPORTS_MODEL_FILE="modules/marketing/models/Marketing_imports_model.php"
 INTEGRITY_RUNTIME_FILE="modules/marketing/scripts/verify_phase4_integrity_runtime.php"
 INTEGRITY_REPAIR_FILE="modules/marketing/scripts/repair_phase4_integrity_runtime.php"
 README_FILE="modules/marketing/README.md"
@@ -52,6 +54,8 @@ QUILL_CSS_ASSET_FILE="modules/marketing/assets/vendor/quill/quill.snow.css"
 ANALYTICS_VIEW_FILE="modules/marketing/views/analytics/index.php"
 ANALYTICS_FALLBACK_VIEW_FILE="modules/marketing/views/analytics/fallback.php"
 SETTINGS_VIEW_FILE="modules/marketing/views/settings/index.php"
+IMPORTS_INDEX_VIEW_FILE="modules/marketing/views/imports/index.php"
+IMPORTS_UPLOAD_VIEW_FILE="modules/marketing/views/imports/upload.php"
 UNSUBSCRIBE_VIEW_FILE="modules/marketing/views/subscriptions/unsubscribe_result.php"
 LANGUAGE_FILE="modules/marketing/language/english/marketing_lang.php"
 FALSE_UNSUBSCRIBE_REPAIR_FILE="modules/marketing/scripts/repair_false_unsubscribe_suppressions.php"
@@ -2274,7 +2278,11 @@ check_email_delivery_settings_surface() {
 }
 
 check_dashboard_operator_ui_structure() {
-  local operations_title_line controls_line health_line warnings_line failure_line audit_line retention_line compact_grid_line executive_shell_line advanced_details_line visible_raw_command
+  local analytics_layout_line kpi_grid_line click_grid_line ops_grid_line operations_title_line controls_line health_line warnings_line failure_line audit_line retention_line compact_grid_line executive_shell_line advanced_details_line visible_raw_command
+  analytics_layout_line="$(first_fixed_match 'data-marketing-dashboard-analytics-layout="1"' "$DASHBOARD_VIEW_FILE")"
+  kpi_grid_line="$(first_fixed_match 'marketing-dashboard-summary-grid' "$DASHBOARD_VIEW_FILE")"
+  click_grid_line="$(first_fixed_match 'marketing-dashboard-click-grid' "$DASHBOARD_VIEW_FILE")"
+  ops_grid_line="$(first_fixed_match 'marketing-dashboard-ops-grid' "$DASHBOARD_VIEW_FILE")"
   operations_title_line="$(first_fixed_match "marketing_dashboard_operations_center" "$DASHBOARD_VIEW_FILE")"
   controls_line="$(first_fixed_match 'Queue Controls' "$DASHBOARD_VIEW_FILE")"
   health_line="$(first_fixed_match 'Queue Health' "$DASHBOARD_VIEW_FILE")"
@@ -2287,16 +2295,69 @@ check_dashboard_operator_ui_structure() {
   advanced_details_line="$(first_fixed_match 'marketing-ops-advanced' "$DASHBOARD_VIEW_FILE")"
   visible_raw_command="$(grep -nF "marketing-ops-section-copy\">Read-only runtime integrity checks for queue state, provider events, inbound replies, and schema drift. Run <code>php modules/marketing/scripts/verify_phase4_integrity_runtime.php</code>" "$DASHBOARD_VIEW_FILE" || true)"
 
-  if [[ -z "$operations_title_line" || -z "$controls_line" || -z "$health_line" || -z "$warnings_line" || -z "$failure_line" || -z "$audit_line" || -z "$retention_line" || -z "$compact_grid_line" || -z "$executive_shell_line" || -z "$advanced_details_line" || -n "$visible_raw_command" ]]; then
+  if [[ -z "$analytics_layout_line" || -z "$kpi_grid_line" || -z "$click_grid_line" || -z "$ops_grid_line" || -z "$operations_title_line" || -z "$controls_line" || -z "$health_line" || -z "$warnings_line" || -z "$failure_line" || -z "$audit_line" || -z "$retention_line" || -z "$compact_grid_line" || -z "$executive_shell_line" || -z "$advanced_details_line" || -n "$visible_raw_command" ]]; then
     fail \
       "dashboard operator controls are rendered as structured commercial UI sections" \
-      "expected executive dashboard shell, Delivery Operations, Queue Controls, Queue Health, Recent Warnings, Failure Metrics, Operator Audit, Telemetry Retention, compact diagnostics grid, and collapsed advanced diagnostics commands without raw CLI copy in always-visible integrity text; hero=${executive_shell_line:-missing}; operations=${operations_title_line:-missing}; controls=${controls_line:-missing}; health=${health_line:-missing}; warnings=${warnings_line:-missing}; failure=${failure_line:-missing}; audit=${audit_line:-missing}; retention=${retention_line:-missing}; compact_grid=${compact_grid_line:-missing}; advanced=${advanced_details_line:-missing}; visible_raw=${visible_raw_command:-none}"
+      "expected analytics-style dashboard shell marker, compact KPI grid, click analytics grid, operations grid, Delivery Operations, Queue Controls, Queue Health, Recent Warnings, Failure Metrics, Operator Audit, Telemetry Retention, compact diagnostics grid, and collapsed advanced diagnostics commands without raw CLI copy in always-visible integrity text; layout=${analytics_layout_line:-missing}; kpis=${kpi_grid_line:-missing}; click_grid=${click_grid_line:-missing}; ops_grid=${ops_grid_line:-missing}; hero=${executive_shell_line:-missing}; operations=${operations_title_line:-missing}; controls=${controls_line:-missing}; health=${health_line:-missing}; warnings=${warnings_line:-missing}; failure=${failure_line:-missing}; audit=${audit_line:-missing}; retention=${retention_line:-missing}; compact_grid=${compact_grid_line:-missing}; advanced=${advanced_details_line:-missing}; visible_raw=${visible_raw_command:-none}"
     return
   fi
 
   pass \
     "dashboard operator controls are rendered as structured commercial UI sections" \
-    "hero=$executive_shell_line | operations=$operations_title_line | controls=$controls_line | advanced=$advanced_details_line"
+    "layout=$analytics_layout_line | hero=$executive_shell_line | operations=$operations_title_line | controls=$controls_line | advanced=$advanced_details_line"
+}
+
+check_cron_readiness_diagnostics() {
+  local warning_default critical_default last_run_default import_run_default campaign_run_default summary_default install_defaults
+  local cron_record_line import_record_line campaign_record_line summary_record_line runtime_helper_line summary_helper_line php_helper_line command_helper_line dynamic_command_line
+  local dashboard_helper_line imports_helper_line dashboard_assignment settings_assignment settings_panel settings_command dashboard_panel dashboard_compact dashboard_details dashboard_command dashboard_hero_wide dashboard_no_wrap
+  local compact_note details_summary old_grid_helper_usage hardcoded_path hardcoded_domain forbidden_exec
+
+  warning_default="$(first_fixed_match "'marketing_cron_warning_minutes' => '5'," "$BOOTSTRAP_FILE")"
+  critical_default="$(first_fixed_match "'marketing_cron_critical_minutes' => '15'," "$BOOTSTRAP_FILE")"
+  last_run_default="$(first_fixed_match "'marketing_cron_last_run_at' => ''," "$BOOTSTRAP_FILE")"
+  import_run_default="$(first_fixed_match "'marketing_cron_last_import_run_at' => ''," "$BOOTSTRAP_FILE")"
+  campaign_run_default="$(first_fixed_match "'marketing_cron_last_campaign_run_at' => ''," "$BOOTSTRAP_FILE")"
+  summary_default="$(first_fixed_match "'marketing_cron_last_summary_json' => ''," "$BOOTSTRAP_FILE")"
+  install_defaults="$(first_fixed_match "marketing_get_default_options()" "$INSTALL_FILE")"
+  cron_record_line="$(first_fixed_match "marketing_update_runtime_option('marketing_cron_last_run_at', \$cronRunAt);" "$BOOTSTRAP_FILE")"
+  import_record_line="$(first_fixed_match "marketing_update_runtime_option('marketing_cron_last_import_run_at', \$cronRunAt);" "$BOOTSTRAP_FILE")"
+  campaign_record_line="$(first_fixed_match "marketing_update_runtime_option('marketing_cron_last_campaign_run_at', \$cronRunAt);" "$BOOTSTRAP_FILE")"
+  summary_record_line="$(first_fixed_match "marketing_update_runtime_option('marketing_cron_last_summary_json', marketing_build_cron_summary_json([" "$BOOTSTRAP_FILE")"
+  runtime_helper_line="$(first_match 'function[[:space:]]+marketing_update_runtime_option' "$BOOTSTRAP_FILE")"
+  summary_helper_line="$(first_match 'function[[:space:]]+marketing_build_cron_summary_json' "$BOOTSTRAP_FILE")"
+  php_helper_line="$(first_match 'function[[:space:]]+marketing_detect_cli_php_binary' "$BOOTSTRAP_FILE")"
+  command_helper_line="$(first_match 'function[[:space:]]+marketing_get_recommended_cron_command' "$BOOTSTRAP_FILE")"
+  dynamic_command_line="$(first_fixed_match "return '* * * * * cd ' . \$crmRoot . ' && ' . marketing_detect_cli_php_binary() . ' index.php cron/index >/dev/null 2>&1';" "$BOOTSTRAP_FILE")"
+  dashboard_helper_line="$(first_match 'function[[:space:]]+get_cron_readiness_summary' "$DASHBOARD_FILE")"
+  imports_helper_line="$(first_match 'function[[:space:]]+get_queue_diagnostics_summary' "$IMPORTS_MODEL_FILE")"
+  dashboard_assignment="$(first_fixed_match "'cron_readiness'         => \$cronReadiness," "$DASHBOARD_FILE")"
+  settings_assignment="$(first_fixed_match "\$data['cron_readiness'] = \$this->marketing_dashboard_model->get_cron_readiness_summary();" "$SETTINGS_CONTROLLER_FILE")"
+  settings_panel="$(first_fixed_match 'data-marketing-cron-readiness-panel="1"' "$SETTINGS_VIEW_FILE")"
+  settings_command="$(first_fixed_match 'data-marketing-cron-command="1"' "$SETTINGS_VIEW_FILE")"
+  dashboard_panel="$(first_fixed_match 'data-marketing-cron-health-panel="1"' "$DASHBOARD_VIEW_FILE")"
+  dashboard_compact="$(first_fixed_match 'data-marketing-cron-health-compact="1"' "$DASHBOARD_VIEW_FILE")"
+  dashboard_details="$(first_fixed_match 'data-marketing-cron-details="1"' "$DASHBOARD_VIEW_FILE")"
+  dashboard_command="$(first_fixed_match 'data-marketing-cron-command="1"' "$DASHBOARD_VIEW_FILE")"
+  dashboard_hero_wide="$(first_fixed_match 'data-marketing-dashboard-hero-wide="1"' "$DASHBOARD_VIEW_FILE")"
+  dashboard_no_wrap="$(first_fixed_match 'white-space: nowrap;' "$DASHBOARD_VIEW_FILE")"
+  compact_note="$(first_fixed_match "marketing_cron_dashboard_compact_note" "$DASHBOARD_VIEW_FILE")"
+  details_summary="$(first_fixed_match "marketing_cron_diagnostics_summary" "$DASHBOARD_VIEW_FILE")"
+  old_grid_helper_usage="$(grep -nF -- "marketing_cron_dashboard_helper_" "$DASHBOARD_VIEW_FILE" || true)"
+  hardcoded_path="$(grep -nF -- '/home/eusacone' "$BOOTSTRAP_FILE" "$SETTINGS_CONTROLLER_FILE" "$DASHBOARD_FILE" "$IMPORTS_MODEL_FILE" "$SETTINGS_VIEW_FILE" "$DASHBOARD_VIEW_FILE" || true)"
+  hardcoded_domain="$(grep -nF -- 'eusaconevents.com' "$BOOTSTRAP_FILE" "$SETTINGS_CONTROLLER_FILE" "$DASHBOARD_FILE" "$IMPORTS_MODEL_FILE" "$SETTINGS_VIEW_FILE" "$DASHBOARD_VIEW_FILE" || true)"
+  forbidden_exec="$(grep -nE -- 'shell_exec|exec[(]|system[(]|passthru|proc_open|popen|crontab' "$BOOTSTRAP_FILE" "$SETTINGS_CONTROLLER_FILE" "$DASHBOARD_FILE" "$IMPORTS_MODEL_FILE" "$SETTINGS_VIEW_FILE" "$DASHBOARD_VIEW_FILE" || true)"
+
+  if [[ -z "$warning_default" || -z "$critical_default" || -z "$last_run_default" || -z "$import_run_default" || -z "$campaign_run_default" || -z "$summary_default" || -z "$install_defaults" || -z "$cron_record_line" || -z "$import_record_line" || -z "$campaign_record_line" || -z "$summary_record_line" || -z "$runtime_helper_line" || -z "$summary_helper_line" || -z "$php_helper_line" || -z "$command_helper_line" || -z "$dynamic_command_line" || -z "$dashboard_helper_line" || -z "$imports_helper_line" || -z "$dashboard_assignment" || -z "$settings_assignment" || -z "$settings_panel" || -z "$settings_command" || -z "$dashboard_panel" || -z "$dashboard_compact" || -z "$dashboard_details" || -z "$dashboard_command" || -z "$dashboard_hero_wide" || -z "$dashboard_no_wrap" || -z "$compact_note" || -z "$details_summary" || -n "$old_grid_helper_usage" || -n "$hardcoded_path" || -n "$hardcoded_domain" || -n "$forbidden_exec" ]]; then
+    fail \
+      "cron readiness diagnostics stay add-only, dynamic, import-aware, and shared-hosting safe" \
+      "expected cron defaults, install add-only seeding, last-run runtime writes, sanitized summary helper, dynamic recommended command helper, dashboard/settings readiness wiring, import queue diagnostics helper, compact dashboard cron strip with collapsible diagnostics, dashboard hero wide marker, desktop nowrap fix, no legacy oversized cron helper grid usage, and no hardcoded live paths/domains or shell/crontab execution; warning_default=${warning_default:-missing}; critical_default=${critical_default:-missing}; last_run_default=${last_run_default:-missing}; import_run_default=${import_run_default:-missing}; campaign_run_default=${campaign_run_default:-missing}; summary_default=${summary_default:-missing}; install_defaults=${install_defaults:-missing}; cron_record=${cron_record_line:-missing}; import_record=${import_record_line:-missing}; campaign_record=${campaign_record_line:-missing}; summary_record=${summary_record_line:-missing}; runtime_helper=${runtime_helper_line:-missing}; summary_helper=${summary_helper_line:-missing}; php_helper=${php_helper_line:-missing}; command_helper=${command_helper_line:-missing}; dynamic_command=${dynamic_command_line:-missing}; dashboard_helper=${dashboard_helper_line:-missing}; imports_helper=${imports_helper_line:-missing}; dashboard_assignment=${dashboard_assignment:-missing}; settings_assignment=${settings_assignment:-missing}; settings_panel=${settings_panel:-missing}; settings_command=${settings_command:-missing}; dashboard_panel=${dashboard_panel:-missing}; dashboard_compact=${dashboard_compact:-missing}; dashboard_details=${dashboard_details:-missing}; dashboard_command=${dashboard_command:-missing}; compact_note=${compact_note:-missing}; details_summary=${details_summary:-missing}; hero_wide=${dashboard_hero_wide:-missing}; nowrap=${dashboard_no_wrap:-missing}; old_grid_helper_usage=${old_grid_helper_usage:-none}; hardcoded_path=${hardcoded_path:-none}; hardcoded_domain=${hardcoded_domain:-none}; forbidden_exec=${forbidden_exec:-none}"
+    return
+  fi
+
+  pass \
+    "cron readiness diagnostics stay add-only, dynamic, import-aware, and shared-hosting safe" \
+    "defaults=$warning_default | cron_record=$cron_record_line | helper=$dashboard_helper_line | compact=$dashboard_compact | details=$dashboard_details"
 }
 
 check_marketing_reports_surface() {
@@ -2989,6 +3050,70 @@ check_module_lifecycle_hooks() {
     "activation=$activation_line | cron=$cron_line | csrf=$csrf_line"
 }
 
+check_import_queue_hardening() {
+  local upload_method queue_status_line inspect_line no_sync_call retry_method requeue_controller_method requeue_controller_call storage_path_line worker_method retry_worker_method batch_clamp_line runtime_clamp_line stale_clamp_line lease_claim_line stream_line progress_line failure_upsert_line retry_queue_line requeue_method ci_helper_line audiences_helper_line loader_exception_line audiences_exception_line safe_row_loader_line safe_row_skip_line safe_row_upsert_line safe_row_list_line unsafe_loader_line unsafe_audience_calls cron_model_line cron_call_line batch_option_line runtime_option_line stale_option_line schema_processed_line schema_lease_line schema_failures_table_line ui_shell_line ui_jobs_line ui_failures_line upload_form_line upload_note_line refresh_note_line details_button_view_line details_button_lang_line requeue_status_guard_line requeue_offset_line requeue_error_clear_line requeue_lease_clear_line
+  upload_method="$(first_match 'public function[[:space:]]+upload\(' "$IMPORTS_CONTROLLER_FILE")"
+  queue_status_line="$(first_fixed_match "'status' => Marketing_imports_model::STATUS_QUEUED" "$IMPORTS_CONTROLLER_FILE")"
+  inspect_line="$(first_fixed_match 'inspect_csv_file($storedFilePath)' "$IMPORTS_CONTROLLER_FILE")"
+  no_sync_call="$(first_fixed_match '$summary = $this->process_csv_import(' "$IMPORTS_CONTROLLER_FILE")"
+  retry_method="$(first_match 'public function[[:space:]]+retry\(' "$IMPORTS_CONTROLLER_FILE")"
+  requeue_controller_method="$(first_match 'public function[[:space:]]+requeue\(' "$IMPORTS_CONTROLLER_FILE")"
+  requeue_controller_call="$(first_fixed_match "\$result = \$this->marketing_imports_model->requeue_failed_import((int) \$id, get_staff_user_id());" "$IMPORTS_CONTROLLER_FILE")"
+  storage_path_line="$(first_fixed_match "get_storage_directory()" "$IMPORTS_MODEL_FILE")"
+  worker_method="$(first_match 'function[[:space:]]+process_queued_imports' "$IMPORTS_MODEL_FILE")"
+  retry_worker_method="$(first_match 'function[[:space:]]+process_retry_batch' "$IMPORTS_MODEL_FILE")"
+  batch_clamp_line="$(first_fixed_match 'return max(1, min(self::MAX_BATCH_SIZE, $batchSize));' "$IMPORTS_MODEL_FILE")"
+  runtime_clamp_line="$(first_fixed_match 'return max(5, min(60, $seconds));' "$IMPORTS_MODEL_FILE")"
+  stale_clamp_line="$(first_fixed_match 'return max(60, min(86400, $seconds));' "$IMPORTS_MODEL_FILE")"
+  lease_claim_line="$(first_fixed_match "'lease_token' => \$token" "$IMPORTS_MODEL_FILE")"
+  stream_line="$(first_fixed_match "new SplFileObject(\$filePath, 'r')" "$IMPORTS_MODEL_FILE")"
+  progress_line="$(first_fixed_match "'processed_rows' => \$counters['processed_rows']" "$IMPORTS_MODEL_FILE")"
+  failure_upsert_line="$(first_match 'function[[:space:]]+upsert_failed_row' "$IMPORTS_MODEL_FILE")"
+  retry_queue_line="$(first_match 'function[[:space:]]+queue_failed_rows_retry' "$IMPORTS_MODEL_FILE")"
+  requeue_method="$(first_match 'function[[:space:]]+requeue_failed_import' "$IMPORTS_MODEL_FILE")"
+  ci_helper_line="$(first_match 'function[[:space:]]+get_ci_instance' "$IMPORTS_MODEL_FILE")"
+  audiences_helper_line="$(first_match 'function[[:space:]]+ensure_audiences_model_loaded' "$IMPORTS_MODEL_FILE")"
+  loader_exception_line="$(first_fixed_match "throw new RuntimeException('Marketing import dependency loader unavailable');" "$IMPORTS_MODEL_FILE")"
+  audiences_exception_line="$(first_fixed_match "throw new RuntimeException('Marketing audiences model unavailable');" "$IMPORTS_MODEL_FILE")"
+  safe_row_loader_line="$(first_fixed_match "\$audiencesModel = \$this->ensure_audiences_model_loaded();" "$IMPORTS_MODEL_FILE")"
+  safe_row_skip_line="$(first_fixed_match "if (\$audiencesModel->is_contact_suppressed(\$normalizedEmail)) {" "$IMPORTS_MODEL_FILE")"
+  safe_row_upsert_line="$(first_fixed_match "\$contactId = \$audiencesModel->upsert_contact([" "$IMPORTS_MODEL_FILE")"
+  safe_row_list_line="$(first_fixed_match "\$audiencesModel->add_contact_to_list(" "$IMPORTS_MODEL_FILE")"
+  unsafe_loader_line="$(first_fixed_match "\$this->ci->load->model('marketing/Marketing_audiences_model', 'marketing_audiences_model');" "$IMPORTS_MODEL_FILE")"
+  unsafe_audience_calls="$(grep -nF -- '$this->ci->marketing_audiences_model' "$IMPORTS_MODEL_FILE" || true)"
+  cron_model_line="$(first_fixed_match "load->model('marketing/Marketing_imports_model', 'marketing_imports_model');" "$BOOTSTRAP_FILE")"
+  cron_call_line="$(first_fixed_match "process_queued_imports([" "$BOOTSTRAP_FILE")"
+  batch_option_line="$(first_fixed_match "'marketing_import_batch_size' => '500'," "$BOOTSTRAP_FILE")"
+  runtime_option_line="$(first_fixed_match "'marketing_import_max_runtime_seconds' => '20'," "$BOOTSTRAP_FILE")"
+  stale_option_line="$(first_fixed_match "'marketing_import_stale_lock_seconds' => '900'," "$BOOTSTRAP_FILE")"
+  schema_processed_line="$(first_fixed_match "'processed_rows' => ['sql' => 'INT NOT NULL DEFAULT 0'" "$SCHEMA_FILE")"
+  schema_lease_line="$(first_fixed_match "'lease_heartbeat_at' => ['sql' => 'DATETIME NULL'" "$SCHEMA_FILE")"
+  schema_failures_table_line="$(first_fixed_match "'table' => db_prefix() . 'marketing_import_failures'" "$SCHEMA_FILE")"
+  ui_shell_line="$(first_fixed_match 'data-marketing-import-queue="1"' "$IMPORTS_INDEX_VIEW_FILE")"
+  ui_jobs_line="$(first_fixed_match 'data-marketing-import-jobs="1"' "$IMPORTS_INDEX_VIEW_FILE")"
+  ui_failures_line="$(first_fixed_match 'data-marketing-import-failures="1"' "$IMPORTS_INDEX_VIEW_FILE")"
+  upload_form_line="$(first_fixed_match "form_open_multipart(admin_url('marketing/imports/upload'), ['id' => 'marketing_import_form'])" "$IMPORTS_UPLOAD_VIEW_FILE")"
+  upload_note_line="$(first_fixed_match "marketing_import_upload_queue_note" "$IMPORTS_UPLOAD_VIEW_FILE")"
+  refresh_note_line="$(first_fixed_match "marketing_import_refresh_note" "$IMPORTS_INDEX_VIEW_FILE")"
+  details_button_view_line="$(first_fixed_match "_l('marketing_import_view_failed_rows')" "$IMPORTS_INDEX_VIEW_FILE")"
+  details_button_lang_line="$(first_fixed_match "View Details / Failed Rows" "$LANGUAGE_FILE")"
+  requeue_status_guard_line="$(first_fixed_match "if ((string) (\$import['status'] ?? '') !== self::STATUS_FAILED) {" "$IMPORTS_MODEL_FILE")"
+  requeue_offset_line="$(first_fixed_match "'current_offset' => \$resetOffset" "$IMPORTS_MODEL_FILE")"
+  requeue_error_clear_line="$(first_fixed_match "'last_error_summary' => null" "$IMPORTS_MODEL_FILE")"
+  requeue_lease_clear_line="$(first_fixed_match "'lease_token' => null" "$IMPORTS_MODEL_FILE")"
+
+  if [[ -z "$upload_method" || -z "$queue_status_line" || -z "$inspect_line" || -n "$no_sync_call" || -z "$retry_method" || -z "$requeue_controller_method" || -z "$requeue_controller_call" || -z "$storage_path_line" || -z "$worker_method" || -z "$retry_worker_method" || -z "$batch_clamp_line" || -z "$runtime_clamp_line" || -z "$stale_clamp_line" || -z "$lease_claim_line" || -z "$stream_line" || -z "$progress_line" || -z "$failure_upsert_line" || -z "$retry_queue_line" || -z "$requeue_method" || -z "$ci_helper_line" || -z "$audiences_helper_line" || -z "$loader_exception_line" || -z "$audiences_exception_line" || -z "$safe_row_loader_line" || -z "$safe_row_skip_line" || -z "$safe_row_upsert_line" || -z "$safe_row_list_line" || -n "$unsafe_loader_line" || -n "$unsafe_audience_calls" || -z "$cron_model_line" || -z "$cron_call_line" || -z "$batch_option_line" || -z "$runtime_option_line" || -z "$stale_option_line" || -z "$schema_processed_line" || -z "$schema_lease_line" || -z "$schema_failures_table_line" || -z "$ui_shell_line" || -z "$ui_jobs_line" || -z "$ui_failures_line" || -z "$upload_form_line" || -z "$upload_note_line" || -z "$refresh_note_line" || -z "$details_button_view_line" || -z "$details_button_lang_line" || -z "$requeue_status_guard_line" || -z "$requeue_offset_line" || -z "$requeue_error_clear_line" || -z "$requeue_lease_clear_line" ]]; then
+    fail \
+      "CSV imports are queued for cron batch processing with leases, streamed rows, progress UI, and failed-row tracking" \
+      "expected queue-only upload flow, no synchronous process_csv_import call, retry and requeue actions, safe storage directory, queued worker methods, safe CI dependency loader helpers without direct \$this->ci usage, batch/runtime/stale clamps, lease token claim, SplFileObject streaming, processed-row progress persistence, failed-row upsert, cron import worker invocation, import defaults, repairable schema fields/tables, imports UI markers, renamed details button, upload form, queued upload note, and refresh guidance; upload=${upload_method:-missing}; queued=${queue_status_line:-missing}; inspect=${inspect_line:-missing}; sync_call=${no_sync_call:-none}; retry=${retry_method:-missing}; requeue_controller=${requeue_controller_method:-missing}; requeue_call=${requeue_controller_call:-missing}; storage=${storage_path_line:-missing}; worker=${worker_method:-missing}; retry_worker=${retry_worker_method:-missing}; requeue=${requeue_method:-missing}; ci_helper=${ci_helper_line:-missing}; audiences_helper=${audiences_helper_line:-missing}; loader_exception=${loader_exception_line:-missing}; audiences_exception=${audiences_exception_line:-missing}; safe_loader=${safe_row_loader_line:-missing}; safe_skip=${safe_row_skip_line:-missing}; safe_upsert=${safe_row_upsert_line:-missing}; safe_list=${safe_row_list_line:-missing}; unsafe_loader=${unsafe_loader_line:-none}; unsafe_audience_calls=${unsafe_audience_calls:-none}; batch=${batch_clamp_line:-missing}; runtime=${runtime_clamp_line:-missing}; stale=${stale_clamp_line:-missing}; lease=${lease_claim_line:-missing}; stream=${stream_line:-missing}; progress=${progress_line:-missing}; failure=${failure_upsert_line:-missing}; retry_queue=${retry_queue_line:-missing}; cron_model=${cron_model_line:-missing}; cron_call=${cron_call_line:-missing}; opt_batch=${batch_option_line:-missing}; opt_runtime=${runtime_option_line:-missing}; opt_stale=${stale_option_line:-missing}; schema_processed=${schema_processed_line:-missing}; schema_lease=${schema_lease_line:-missing}; schema_failures=${schema_failures_table_line:-missing}; ui_shell=${ui_shell_line:-missing}; ui_jobs=${ui_jobs_line:-missing}; ui_failures=${ui_failures_line:-missing}; details_button=${details_button_view_line:-missing}; details_lang=${details_button_lang_line:-missing}; requeue_guard=${requeue_status_guard_line:-missing}; requeue_offset=${requeue_offset_line:-missing}; requeue_error_clear=${requeue_error_clear_line:-missing}; requeue_lease_clear=${requeue_lease_clear_line:-missing}; upload_form=${upload_form_line:-missing}; upload_note=${upload_note_line:-missing}; refresh=${refresh_note_line:-missing}"
+    return
+  fi
+
+  pass \
+    "CSV imports are queued for cron batch processing with leases, streamed rows, progress UI, and failed-row tracking" \
+    "upload=$upload_method | worker=$worker_method | ci_helper=$ci_helper_line | safe_skip=$safe_row_skip_line | requeue=$requeue_method | cron=$cron_call_line"
+}
+
 check_confirmed_unsubscribe_flow() {
   local route_line get_guard_line confirm_line apply_call_line helper_line render_helper_line render_call_line lang_loader_line suppression_line event_line view_form_line view_checkbox_line view_note_line view_csrf_line public_layout_line page_class_line card_class_line status_class_line details_class_line button_class_line email_label_call_line campaign_label_call_line raw_uppercase_line csrf_exclude_line lang_title_line lang_confirm_line lang_message_line lang_required_line lang_checkbox_line lang_button_line lang_note_line lang_email_line lang_campaign_line lang_invalid_line lang_success_line lang_pending_line lang_status_success_line lang_status_error_line import_skip_line click_skip_line click_event_line unsubscribe_count_line repair_usage_line repair_apply_line webhooks_diff ses_diff whatsapp_diff git_diff_mode
   route_line="$(first_fixed_match "\$route['marketing/unsubscribe/(:any)'] = 'subscriptions/unsubscribe/\$1';" "$ROUTES_FILE")"
@@ -3029,7 +3154,7 @@ check_confirmed_unsubscribe_flow() {
   lang_pending_line="$(first_fixed_match "\$lang['marketing_unsubscribe_status_pending']" "$LANGUAGE_FILE")"
   lang_status_success_line="$(first_fixed_match "\$lang['marketing_unsubscribe_status_success']" "$LANGUAGE_FILE")"
   lang_status_error_line="$(first_fixed_match "\$lang['marketing_unsubscribe_status_error']" "$LANGUAGE_FILE")"
-  import_skip_line="$(first_fixed_match "if (\$this->marketing_audiences_model->is_contact_suppressed(\$normalizedEmail)) {" "modules/marketing/controllers/Imports.php")"
+  import_skip_line="$(first_fixed_match "if (\$audiencesModel->is_contact_suppressed(\$normalizedEmail)) {" "$IMPORTS_MODEL_FILE")"
   click_skip_line="$(first_fixed_match "|| strpos(\$path, '/marketing/unsubscribe/') !== false" "$MAILER_FILE")"
   click_event_line="$(first_fixed_match "'event_type' => 'click'" "$TRACK_FILE")"
   unsubscribe_count_line="$(first_fixed_match "'unsubscribe' => \$this->count_events_by_normalized_types(['unsubscribe'], \$campaignId)," "$EVENTS_FILE")"
@@ -3903,6 +4028,7 @@ check_settings_provider_readiness_panel
 check_settings_release_readiness_panel
 check_email_delivery_settings_surface
 check_dashboard_operator_ui_structure
+check_cron_readiness_diagnostics
 check_marketing_reports_surface
 check_marketing_reports_cleanup_controls
 check_whatsapp_send_auth_diagnostics
@@ -3925,6 +4051,7 @@ check_no_facebook_linkedin_active_ui_or_release_docs
 check_release_validator_exists
 check_module_metadata_header
 check_module_lifecycle_hooks
+check_import_queue_hardening
 check_required_config_and_public_endpoints
 check_confirmed_unsubscribe_flow
 check_false_unsubscribe_repair_script_safety

@@ -3,6 +3,9 @@
     <div class="panel-body">
         <h4 class="no-margin"><?= _l('marketing_import_upload'); ?></h4>
         <p class="text-muted mtop10"><?= _l('marketing_import_upload_note'); ?></p>
+        <div class="alert alert-info mtop15">
+            <?= _l('marketing_import_upload_queue_note'); ?>
+        </div>
         <hr />
         <?php if (empty($lists)) { ?>
             <p class="text-muted"><?= _l('marketing_import_no_lists'); ?></p>

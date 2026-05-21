@@ -68,6 +68,29 @@ foreach ($release_readiness as $readinessItem) {
 }
 $release_readiness = $normalizedReleaseReadiness;
 
+$cron_readiness = isset($cron_readiness) && is_array($cron_readiness) ? $cron_readiness : [];
+$cron_readiness = array_merge([
+    'cron_status' => 'not_detected',
+    'last_run_at' => null,
+    'last_import_run_at' => null,
+    'last_campaign_run_at' => null,
+    'minutes_since_last_run' => null,
+    'warning_threshold_minutes' => 5,
+    'critical_threshold_minutes' => 15,
+    'recommended_command' => '* * * * * cd . && php index.php cron/index >/dev/null 2>&1',
+    'import_queue' => [],
+], $cron_readiness);
+$cronQueueReadiness = isset($cron_readiness['import_queue']) && is_array($cron_readiness['import_queue']) ? $cron_readiness['import_queue'] : [];
+$cronQueueReadiness = array_merge([
+    'queued_count' => 0,
+    'processing_count' => 0,
+    'failed_count' => 0,
+    'completed_count' => 0,
+    'oldest_queued_at' => null,
+    'oldest_queued_age_minutes' => null,
+    'stale_processing_count' => 0,
+], $cronQueueReadiness);
+
 $whatsappEnabled = !empty($whatsapp_settings['enabled']);
 $licenseStatusClass = 'alert-info';
 
@@ -108,6 +131,58 @@ $summaryStatusClass = static function ($statusKey) {
     }
 
     return 'marketing-settings-status-pill marketing-settings-status-pill-blocked';
+};
+
+$cronStatusLabel = static function ($statusKey) {
+    if ($statusKey === 'healthy') {
+        return _l('marketing_cron_status_healthy');
+    }
+
+    if ($statusKey === 'warning') {
+        return _l('marketing_cron_status_warning');
+    }
+
+    if ($statusKey === 'critical') {
+        return _l('marketing_cron_status_critical');
+    }
+
+    return _l('marketing_cron_status_not_detected');
+};
+
+$cronStatusClass = static function ($statusKey) {
+    if ($statusKey === 'healthy') {
+        return 'marketing-provider-readiness-status marketing-provider-readiness-status-ready';
+    }
+
+    if ($statusKey === 'warning') {
+        return 'marketing-provider-readiness-status marketing-provider-readiness-status-needs_review';
+    }
+
+    if ($statusKey === 'critical') {
+        return 'marketing-provider-readiness-status marketing-provider-readiness-status-blocked';
+    }
+
+    return 'marketing-provider-readiness-status marketing-provider-readiness-status-unavailable';
+};
+
+$formatMinutesAged = static function ($minutes) {
+    if ($minutes === null || $minutes === '') {
+        return _l('marketing_cron_not_detected_yet');
+    }
+
+    $minutes = max(0, (int) $minutes);
+    if ($minutes < 60) {
+        return sprintf(_l('marketing_cron_age_minutes'), $minutes);
+    }
+
+    $hours = (int) floor($minutes / 60);
+    $remainingMinutes = $minutes % 60;
+
+    if ($remainingMinutes === 0) {
+        return sprintf(_l('marketing_cron_age_hours'), $hours);
+    }
+
+    return sprintf(_l('marketing_cron_age_hours_minutes'), $hours, $remainingMinutes);
 };
 
 $emailReadinessSummary = $findReadinessItem($provider_readiness, _l('marketing_provider_readiness_email_delivery'));
@@ -541,6 +616,43 @@ $settingsSectionNav = [
     .marketing-provider-readiness-check-value {
         color: #0f172a;
         font-weight: 600;
+    }
+    .marketing-settings-readiness-metrics {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+    }
+    .marketing-settings-readiness-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e2e8f0;
+        color: #334155;
+        font-size: 13px;
+        flex-wrap: wrap;
+    }
+    .marketing-settings-readiness-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+    }
+    .marketing-settings-readiness-row strong {
+        color: #0f172a;
+        font-weight: 700;
+        text-align: right;
+    }
+    .marketing-settings-code-block {
+        margin: 12px 0 0;
+        padding: 12px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
     }
     @media (max-width: 1199px) {
         .marketing-settings-summary-grid,
@@ -1019,6 +1131,52 @@ $settingsSectionNav = [
                                 </div>
 
                                 <div class="panel_s marketing-settings-panel marketing-settings-section-anchor" id="marketing-settings-section-readiness">
+                                    <div class="panel-body" data-marketing-cron-readiness-panel="1">
+                                        <div class="marketing-provider-readiness-header">
+                                            <h4 class="marketing-settings-panel-title"><?= _l('marketing_cron_readiness_heading'); ?></h4>
+                                            <span class="<?= html_escape($cronStatusClass((string) $cron_readiness['cron_status'])); ?>">
+                                                <?= html_escape($cronStatusLabel((string) $cron_readiness['cron_status'])); ?>
+                                            </span>
+                                        </div>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_cron_readiness_note'); ?></p>
+
+                                        <div class="marketing-settings-readiness-metrics">
+                                            <div class="marketing-settings-readiness-row">
+                                                <span><?= _l('marketing_cron_last_run_at'); ?></span>
+                                                <strong><?= !empty($cron_readiness['last_run_at']) ? html_escape((string) $cron_readiness['last_run_at']) : _l('marketing_cron_not_detected_yet'); ?></strong>
+                                            </div>
+                                            <div class="marketing-settings-readiness-row">
+                                                <span><?= _l('marketing_cron_minutes_since_last_run'); ?></span>
+                                                <strong><?= html_escape($formatMinutesAged($cron_readiness['minutes_since_last_run'])); ?></strong>
+                                            </div>
+                                            <div class="marketing-settings-readiness-row">
+                                                <span><?= _l('marketing_import_status_queued'); ?></span>
+                                                <strong><?= (int) ($cronQueueReadiness['queued_count'] ?? 0); ?></strong>
+                                            </div>
+                                            <div class="marketing-settings-readiness-row">
+                                                <span><?= _l('marketing_import_status_processing'); ?></span>
+                                                <strong><?= (int) ($cronQueueReadiness['processing_count'] ?? 0); ?></strong>
+                                            </div>
+                                            <div class="marketing-settings-readiness-row">
+                                                <span><?= _l('marketing_import_status_failed'); ?></span>
+                                                <strong><?= (int) ($cronQueueReadiness['failed_count'] ?? 0); ?></strong>
+                                            </div>
+                                            <div class="marketing-settings-readiness-row">
+                                                <span><?= _l('marketing_cron_oldest_queued_job_age'); ?></span>
+                                                <strong><?= html_escape($formatMinutesAged($cronQueueReadiness['oldest_queued_age_minutes'])); ?></strong>
+                                            </div>
+                                            <div class="marketing-settings-readiness-row">
+                                                <span><?= _l('marketing_cron_import_stale_processing'); ?></span>
+                                                <strong><?= (int) ($cronQueueReadiness['stale_processing_count'] ?? 0); ?></strong>
+                                            </div>
+                                        </div>
+
+                                        <label class="control-label mtop15"><?= _l('marketing_cron_recommended_command'); ?></label>
+                                        <pre class="marketing-settings-code-block" data-marketing-cron-command="1"><code><?= html_escape((string) ($cron_readiness['recommended_command'] ?? '')); ?></code></pre>
+                                    </div>
+                                </div>
+
+                                <div class="panel_s marketing-settings-panel">
                                     <div class="panel-body">
                                         <h4 class="marketing-settings-panel-title"><?= _l('marketing_provider_readiness_heading'); ?></h4>
                                         <p class="marketing-settings-panel-copy"><?= _l('marketing_provider_readiness_note'); ?></p>
