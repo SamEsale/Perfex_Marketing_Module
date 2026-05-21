@@ -40,6 +40,7 @@ RELEASE_MANIFEST_DOC_FILE="modules/marketing/docs/RELEASE_MANIFEST.md"
 RELEASE_MANIFEST_JSON_FILE="modules/marketing/release/manifest.json"
 RELEASE_VALIDATOR_FILE="modules/marketing/scripts/verify_release_package.sh"
 RELEASE_BUILDER_FILE="modules/marketing/scripts/build_release_package.sh"
+SES_SNS_SUBSCRIBE_URL_PROBE_FILE="modules/marketing/scripts/verify_ses_sns_subscribe_url.php"
 CAMPAIGN_FORM_VIEW_FILE="modules/marketing/views/campaigns/form.php"
 CAMPAIGN_SHOW_VIEW_FILE="modules/marketing/views/campaigns/show.php"
 CAMPAIGN_INDEX_VIEW_FILE="modules/marketing/views/campaigns/index.php"
@@ -2081,22 +2082,28 @@ check_events_public_links_fail_closed() {
     "loader=$helper_line | cleanup=$cleanup_method_line | method=$method_line"
 }
 
-check_settings_two_column_layout() {
-  local grid_line shell_line column_line
-  grid_line="$(first_fixed_match '.marketing-settings-grid {' "$SETTINGS_VIEW_FILE")"
-  shell_line="$(first_fixed_match '.marketing-settings-shell {' "$SETTINGS_VIEW_FILE")"
-  column_line="$(first_fixed_match '<div class="marketing-settings-grid">' "$SETTINGS_VIEW_FILE")"
+check_settings_dashboard_layout_shell() {
+  local grid_line shell_line summary_line nav_line column_line email_wide_line core_column_line readiness_column_line advanced_column_line
+  grid_line="$(first_fixed_match 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$SETTINGS_VIEW_FILE")"
+  shell_line="$(first_fixed_match 'data-marketing-settings-shell="1"' "$SETTINGS_VIEW_FILE")"
+  summary_line="$(first_fixed_match 'data-marketing-settings-summary-grid="1"' "$SETTINGS_VIEW_FILE")"
+  nav_line="$(first_fixed_match 'data-marketing-settings-nav="1"' "$SETTINGS_VIEW_FILE")"
+  column_line="$(first_fixed_match 'data-marketing-settings-layout="3-col"' "$SETTINGS_VIEW_FILE")"
+  email_wide_line="$(first_fixed_match 'data-marketing-settings-email-wide="1"' "$SETTINGS_VIEW_FILE")"
+  core_column_line="$(first_fixed_match 'marketing-settings-column marketing-settings-column--core' "$SETTINGS_VIEW_FILE")"
+  readiness_column_line="$(first_fixed_match 'marketing-settings-column marketing-settings-column--readiness' "$SETTINGS_VIEW_FILE")"
+  advanced_column_line="$(first_fixed_match 'marketing-settings-column marketing-settings-column--advanced' "$SETTINGS_VIEW_FILE")"
 
-  if [[ -z "$grid_line" || -z "$shell_line" || -z "$column_line" ]]; then
+  if [[ -z "$grid_line" || -z "$shell_line" || -z "$summary_line" || -z "$nav_line" || -z "$column_line" || -z "$email_wide_line" || -z "$core_column_line" || -z "$readiness_column_line" || -z "$advanced_column_line" ]]; then
     fail \
-      "settings page uses a structured two-column layout shell" \
-      "expected settings shell and two-column grid in $SETTINGS_VIEW_FILE; shell=${shell_line:-missing}; grid=${grid_line:-missing}; markup=${column_line:-missing}"
+      "settings page uses the wide-email dashboard layout shell" \
+      "expected shell/nav/summary markers, a full-width email card marker, a three-column responsive grid, and core/readiness/advanced column markers in $SETTINGS_VIEW_FILE; shell=${shell_line:-missing}; summary=${summary_line:-missing}; nav=${nav_line:-missing}; email_wide=${email_wide_line:-missing}; grid=${grid_line:-missing}; markup=${column_line:-missing}; core=${core_column_line:-missing}; readiness=${readiness_column_line:-missing}; advanced=${advanced_column_line:-missing}"
     return
   fi
 
   pass \
-    "settings page uses a structured two-column layout shell" \
-    "shell=$shell_line | grid=$grid_line | markup=$column_line"
+    "settings page uses the wide-email dashboard layout shell" \
+    "shell=$shell_line | summary=$summary_line | email_wide=$email_wide_line | grid=$grid_line"
 }
 
 check_settings_mobile_responsive_layout() {
@@ -2119,34 +2126,34 @@ check_settings_mobile_responsive_layout() {
     "media=$media_line | collapse=$collapse_line | general=$field_line"
 }
 
-check_settings_license_block_order() {
-  local inbound_line license_line second_column_line
-  inbound_line="$(first_fixed_match "marketing_inbound_reply_webhook_url" "$SETTINGS_VIEW_FILE")"
-  license_line="$(first_fixed_match "marketing_license_updates_heading" "$SETTINGS_VIEW_FILE")"
-  second_column_line="$(grep -nF -- '<div class="marketing-settings-column">' "$SETTINGS_VIEW_FILE" | sed -n '2p')"
+check_settings_wide_email_block_order() {
+  local summary_line email_line grid_line
+  summary_line="$(first_fixed_match 'data-marketing-settings-summary-grid="1"' "$SETTINGS_VIEW_FILE")"
+  email_line="$(first_fixed_match 'data-marketing-settings-email-wide="1"' "$SETTINGS_VIEW_FILE")"
+  grid_line="$(first_fixed_match 'data-marketing-settings-layout="3-col"' "$SETTINGS_VIEW_FILE")"
 
-  if [[ -z "$inbound_line" || -z "$license_line" || -z "$second_column_line" ]]; then
+  if [[ -z "$summary_line" || -z "$email_line" || -z "$grid_line" ]]; then
     fail \
-      "settings page places License & Updates after Inbound Reply Webhook URL in the left column" \
-      "expected inbound webhook section, license section, and second column marker in $SETTINGS_VIEW_FILE; inbound=${inbound_line:-missing}; license=${license_line:-missing}; second_column=${second_column_line:-missing}"
+      "settings page places the wide Email Delivery card directly after Quick Status" \
+      "expected quick-status marker, wide email marker, and dashboard grid marker in $SETTINGS_VIEW_FILE; summary=${summary_line:-missing}; email=${email_line:-missing}; grid=${grid_line:-missing}"
     return
   fi
 
-  local inbound_no license_no second_column_no
-  inbound_no="${inbound_line%%:*}"
-  license_no="${license_line%%:*}"
-  second_column_no="${second_column_line%%:*}"
+  local summary_no email_no grid_no
+  summary_no="${summary_line%%:*}"
+  email_no="${email_line%%:*}"
+  grid_no="${grid_line%%:*}"
 
-  if [[ "$license_no" -le "$inbound_no" || "$license_no" -ge "$second_column_no" ]]; then
+  if [[ "$email_no" -le "$summary_no" || "$email_no" -ge "$grid_no" ]]; then
     fail \
-      "settings page places License & Updates after Inbound Reply Webhook URL in the left column" \
-      "expected license block after inbound webhook and before second column; inbound=$inbound_line | license=$license_line | second_column=$second_column_line"
+      "settings page places the wide Email Delivery card directly after Quick Status" \
+      "expected wide email card after quick status and before the dashboard grid; summary=$summary_line | email=$email_line | grid=$grid_line"
     return
   fi
 
   pass \
-    "settings page places License & Updates after Inbound Reply Webhook URL in the left column" \
-    "inbound=$inbound_line | license=$license_line | second_column=$second_column_line"
+    "settings page places the wide Email Delivery card directly after Quick Status" \
+    "summary=$summary_line | email=$email_line | grid=$grid_line"
 }
 
 check_settings_provider_readiness_panel() {
@@ -2232,6 +2239,38 @@ check_settings_release_readiness_panel() {
   pass \
     "settings page adds read-only release readiness without shell execution or runtime file changes" \
     "controller=$controller_helper | panel=$view_heading | git_diff_mode=$git_diff_mode"
+}
+
+check_email_delivery_settings_surface() {
+  local topic_field verify_field signing_field replay_field skew_field username_field password_blank_line password_note webhook_line telemetry_note controller_topic controller_verify controller_signing controller_replay controller_skew controller_username preserve_password
+  topic_field="$(first_fixed_match 'id="marketing_ses_sns_topic_arn"' "$SETTINGS_VIEW_FILE")"
+  verify_field="$(first_fixed_match 'id="marketing_smtp_ses_verify_signature_yes"' "$SETTINGS_VIEW_FILE")"
+  signing_field="$(first_fixed_match 'id="marketing_ses_sns_signing_mode"' "$SETTINGS_VIEW_FILE")"
+  replay_field="$(first_fixed_match 'id="marketing_ses_sns_replay_window_seconds"' "$SETTINGS_VIEW_FILE")"
+  skew_field="$(first_fixed_match 'id="marketing_ses_sns_future_skew_seconds"' "$SETTINGS_VIEW_FILE")"
+  username_field="$(first_fixed_match 'id="marketing_smtp_username"' "$SETTINGS_VIEW_FILE")"
+  password_blank_line="$(first_fixed_match 'id="marketing_smtp_password" name="marketing_smtp_password" class="form-control" value=""' "$SETTINGS_VIEW_FILE")"
+  password_note="$(first_fixed_match "_l('marketing_smtp_password_visibility_note')" "$SETTINGS_VIEW_FILE")"
+  webhook_line="$(grep -nF -- 'readonly value="<?= e(site_url('\''marketing/webhooks/ses_sns'\'')); ?>">' "$SETTINGS_VIEW_FILE" | head -n 1)"
+  telemetry_note="$(first_fixed_match "_l('marketing_email_delivery_ses_sns_note')" "$SETTINGS_VIEW_FILE")"
+  controller_topic="$(first_fixed_match "'marketing_ses_sns_topic_arn' => \$posted['marketing_ses_sns_topic_arn']" "$SETTINGS_CONTROLLER_FILE")"
+  controller_verify="$(first_fixed_match "'marketing_ses_verify_signature' => \$posted['marketing_ses_verify_signature']" "$SETTINGS_CONTROLLER_FILE")"
+  controller_signing="$(first_fixed_match "'marketing_ses_sns_signing_mode' => \$posted['marketing_ses_sns_signing_mode']" "$SETTINGS_CONTROLLER_FILE")"
+  controller_replay="$(first_fixed_match "'marketing_ses_sns_replay_window_seconds' => \$posted['marketing_ses_sns_replay_window_seconds']" "$SETTINGS_CONTROLLER_FILE")"
+  controller_skew="$(first_fixed_match "'marketing_ses_sns_future_skew_seconds' => \$posted['marketing_ses_sns_future_skew_seconds']" "$SETTINGS_CONTROLLER_FILE")"
+  controller_username="$(first_fixed_match "'marketing_smtp_username' => \$posted['marketing_smtp_username']" "$SETTINGS_CONTROLLER_FILE")"
+  preserve_password="$(first_fixed_match "if (\$smtpPassword !== '') {" "$SETTINGS_CONTROLLER_FILE")"
+
+  if [[ -z "$topic_field" || -z "$verify_field" || -z "$signing_field" || -z "$replay_field" || -z "$skew_field" || -z "$username_field" || -z "$password_blank_line" || -z "$password_note" || -z "$webhook_line" || -z "$telemetry_note" || -z "$controller_topic" || -z "$controller_verify" || -z "$controller_signing" || -z "$controller_replay" || -z "$controller_skew" || -z "$controller_username" || -z "$preserve_password" ]]; then
+    fail \
+      "email delivery settings expose SES SNS fields, SMTP username, blank-password preservation, and read-only webhook URL" \
+      "expected topic/signature/signing/replay/skew/username fields plus blank SMTP password rendering in $SETTINGS_VIEW_FILE and saved settings wiring in $SETTINGS_CONTROLLER_FILE; topic=${topic_field:-missing}; verify=${verify_field:-missing}; signing=${signing_field:-missing}; replay=${replay_field:-missing}; skew=${skew_field:-missing}; username=${username_field:-missing}; password_blank=${password_blank_line:-missing}; password_note=${password_note:-missing}; webhook=${webhook_line:-missing}; telemetry=${telemetry_note:-missing}; controller_topic=${controller_topic:-missing}; controller_verify=${controller_verify:-missing}; controller_signing=${controller_signing:-missing}; controller_replay=${controller_replay:-missing}; controller_skew=${controller_skew:-missing}; controller_username=${controller_username:-missing}; preserve_password=${preserve_password:-missing}"
+    return
+  fi
+
+  pass \
+    "email delivery settings expose SES SNS fields, SMTP username, blank-password preservation, and read-only webhook URL" \
+    "topic=$topic_field | signing=$signing_field | password_blank=$password_blank_line"
 }
 
 check_dashboard_operator_ui_structure() {
@@ -3519,23 +3558,53 @@ check_ses_sns_signature_enforcement() {
 }
 
 check_ses_sns_verifier_strictness() {
-  local version_line topic_line cert_region_line confirm_region_line default_line
+  local version_line topic_line cert_region_line confirm_region_line action_line token_line global_host_line topic_region_line default_line
   version_line="$(first_fixed_match "SignatureVersion'] !== '1'" "$SES_SNS_FILE")"
   topic_line="$(first_fixed_match "topic_arn_matches" "$SES_SNS_FILE")"
   cert_region_line="$(first_fixed_match "signing_cert_url_matches_region" "$SES_SNS_FILE")"
-  confirm_region_line="$(first_fixed_match "is_valid_sns_action_url(\$subscribeUrl, \$expectedRegion)" "$SES_SNS_FILE")"
+  confirm_region_line="$(first_fixed_match "is_valid_sns_action_url(\$subscribeUrl, \$expectedRegion, \$expectedTopicArn)" "$SES_SNS_FILE")"
+  action_line="$(first_fixed_match "\$action !== 'ConfirmSubscription'" "$SES_SNS_FILE")"
+  token_line="$(first_fixed_match "\$token === ''" "$SES_SNS_FILE")"
+  global_host_line="$(first_fixed_match "\$allowGlobalHost && \$host === 'sns.amazonaws.com'" "$SES_SNS_FILE")"
+  topic_region_line="$(first_fixed_match "extract_sns_topic_region" "$SES_SNS_FILE")"
   default_line="$(first_fixed_match "'marketing_ses_verify_signature' => '1'" "$BOOTSTRAP_FILE")"
 
-  if [[ -z "$version_line" || -z "$topic_line" || -z "$cert_region_line" || -z "$confirm_region_line" || -z "$default_line" ]]; then
+  if [[ -z "$version_line" || -z "$topic_line" || -z "$cert_region_line" || -z "$confirm_region_line" || -z "$action_line" || -z "$token_line" || -z "$global_host_line" || -z "$topic_region_line" || -z "$default_line" ]]; then
     fail \
-      "SES SNS verifier checks signature version, region, topic ARN, and safe install defaults" \
-      "expected strict verification hooks in $SES_SNS_FILE and default enabled option in $BOOTSTRAP_FILE; version=${version_line:-missing}; topic=${topic_line:-missing}; cert_region=${cert_region_line:-missing}; confirm_region=${confirm_region_line:-missing}; default=${default_line:-missing}"
+      "SES SNS verifier checks signature version, safe SubscribeURL action parameters, region, topic ARN, and safe install defaults" \
+      "expected strict verification hooks in $SES_SNS_FILE and default enabled option in $BOOTSTRAP_FILE; version=${version_line:-missing}; topic=${topic_line:-missing}; cert_region=${cert_region_line:-missing}; confirm_region=${confirm_region_line:-missing}; action=${action_line:-missing}; token=${token_line:-missing}; global_host=${global_host_line:-missing}; topic_region=${topic_region_line:-missing}; default=${default_line:-missing}"
     return
   fi
 
   pass \
-    "SES SNS verifier checks signature version, region, topic ARN, and safe install defaults" \
-    "version=$version_line | cert_region=$cert_region_line | default=$default_line"
+    "SES SNS verifier checks signature version, safe SubscribeURL action parameters, region, topic ARN, and safe install defaults" \
+    "version=$version_line | action=$action_line | global_host=$global_host_line | default=$default_line"
+}
+
+check_ses_sns_subscribe_url_runtime_validation() {
+  local probe_path output status
+  probe_path="$ROOT_DIR/$SES_SNS_SUBSCRIBE_URL_PROBE_FILE"
+
+  if [[ ! -f "$probe_path" ]]; then
+    fail \
+      "SES SNS SubscribeURL runtime probe exists" \
+      "expected runtime probe at $SES_SNS_SUBSCRIBE_URL_PROBE_FILE"
+    return
+  fi
+
+  output="$(php "$probe_path" 2>&1)"
+  status=$?
+
+  if [[ "$status" -ne 0 || "$output" != *"PASS accepts valid AWS SNS ConfirmSubscription URL"* || "$output" != *"PASS rejects http SubscribeURL"* || "$output" != *"PASS rejects non-AWS host"* || "$output" != *"PASS rejects wrong Action"* || "$output" != *"PASS rejects missing Token"* || "$output" != *"PASS rejects wrong region"* || "$output" != *"PASS rejects mismatched TopicArn when configured"* ]]; then
+    fail \
+      "SES SNS SubscribeURL validator accepts valid AWS confirmation URLs and rejects unsafe variants" \
+      "expected PASS lines from $SES_SNS_SUBSCRIBE_URL_PROBE_FILE; status=$status output=${output:-none}"
+    return
+  fi
+
+  pass \
+    "SES SNS SubscribeURL validator accepts valid AWS confirmation URLs and rejects unsafe variants" \
+    "probe=$SES_SNS_SUBSCRIBE_URL_PROBE_FILE | status=$status"
 }
 
 check_sns_message_id_idempotency() {
@@ -3827,11 +3896,12 @@ check_no_destructive_retention_calls
 check_click_aggregate_cleanup_scope
 check_click_aggregate_cleanup_bounds
 check_events_public_links_fail_closed
-check_settings_two_column_layout
+check_settings_dashboard_layout_shell
 check_settings_mobile_responsive_layout
-check_settings_license_block_order
+check_settings_wide_email_block_order
 check_settings_provider_readiness_panel
 check_settings_release_readiness_panel
+check_email_delivery_settings_surface
 check_dashboard_operator_ui_structure
 check_marketing_reports_surface
 check_marketing_reports_cleanup_controls
@@ -3871,6 +3941,7 @@ check_ses_sns_replay_options_passed_from_webhooks
 check_transient_provider_backoff_safety
 check_ses_sns_signature_enforcement
 check_ses_sns_verifier_strictness
+check_ses_sns_subscribe_url_runtime_validation
 check_sns_message_id_idempotency
 check_inbound_reply_hardening
 check_phase4_integrity_diagnostics

@@ -188,7 +188,8 @@ class Marketing_ses_sns
         }
 
         $expectedRegion = strtolower(trim($this->scalar_string($options['region'] ?? '', '')));
-        if (!$this->is_valid_sns_action_url($subscribeUrl, $expectedRegion)) {
+        $expectedTopicArn = trim($this->scalar_string($options['topic_arn'] ?? '', ''));
+        if (!$this->is_valid_sns_action_url($subscribeUrl, $expectedRegion, $expectedTopicArn)) {
             return [
                 'success' => false,
                 'error' => 'SNS SubscribeURL is invalid.',
@@ -272,12 +273,12 @@ class Marketing_ses_sns
             return false;
         }
 
-        $host = strtolower((string) ($parts['host'] ?? ''));
-        if (!preg_match('/^sns\.([a-z0-9-]+)\.amazonaws\.com$/', $host, $matches)) {
+        $hostRegion = $this->extract_sns_host_region((string) ($parts['host'] ?? ''));
+        if ($hostRegion === false || $hostRegion === '') {
             return false;
         }
 
-        return strtolower((string) ($matches[1] ?? '')) === $expectedRegion;
+        return $hostRegion === $expectedRegion;
     }
 
     protected function topic_arn_matches($actualTopicArn, $expectedTopicArn)
@@ -342,7 +343,7 @@ class Marketing_ses_sns
         return (int) $parsedTimestamp;
     }
 
-    protected function is_valid_sns_action_url($url, $expectedRegion = '')
+    protected function is_valid_sns_action_url($url, $expectedRegion = '', $expectedTopicArn = '')
     {
         $parts = parse_url($url);
         if (!is_array($parts)) {
@@ -352,29 +353,118 @@ class Marketing_ses_sns
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
         $host = strtolower((string) ($parts['host'] ?? ''));
 
-        if ($scheme !== 'https' || !$this->is_safe_sns_host($host)) {
+        if ($scheme !== 'https' || !$this->is_safe_sns_host($host, true)) {
             return false;
         }
 
-        if (!empty($parts['query']) || !empty($parts['fragment']) || !empty($parts['user']) || !empty($parts['pass']) || !empty($parts['port'])) {
+        if (!empty($parts['fragment']) || !empty($parts['user']) || !empty($parts['pass']) || !empty($parts['port'])) {
             return false;
         }
 
-        if ($expectedRegion !== '' && !$this->signing_cert_url_matches_region($url, $expectedRegion)) {
+        $path = (string) ($parts['path'] ?? '');
+        if ($path !== '' && $path !== '/') {
             return false;
+        }
+
+        $query = (string) ($parts['query'] ?? '');
+        if ($query === '') {
+            return false;
+        }
+
+        parse_str($query, $params);
+        if (!is_array($params)) {
+            return false;
+        }
+
+        $action = trim($this->scalar_string($params['Action'] ?? '', ''));
+        $token = trim($this->scalar_string($params['Token'] ?? '', ''));
+        $topicArn = trim($this->scalar_string($params['TopicArn'] ?? '', ''));
+        if ($action !== 'ConfirmSubscription' || $token === '') {
+            return false;
+        }
+
+        if ($topicArn !== '' && !$this->is_valid_topic_arn($topicArn)) {
+            return false;
+        }
+
+        if ($expectedTopicArn !== '') {
+            if ($topicArn === '' || !$this->topic_arn_matches($topicArn, $expectedTopicArn)) {
+                return false;
+            }
+        }
+
+        $hostRegion = $this->extract_sns_host_region($host);
+        if ($hostRegion === false) {
+            return false;
+        }
+
+        $topicRegion = $topicArn !== '' ? $this->extract_sns_topic_region($topicArn) : '';
+        if ($topicArn !== '' && $topicRegion === false) {
+            return false;
+        }
+
+        if ($hostRegion !== '' && $topicRegion !== '' && $hostRegion !== $topicRegion) {
+            return false;
+        }
+
+        if ($expectedRegion !== '') {
+            if ($hostRegion !== '' && $hostRegion !== $expectedRegion) {
+                return false;
+            }
+
+            if ($topicRegion !== '' && $topicRegion !== $expectedRegion) {
+                return false;
+            }
         }
 
         return true;
     }
 
-    protected function is_safe_sns_host($host)
+    protected function is_safe_sns_host($host, $allowGlobalHost = false)
     {
         $host = strtolower(trim((string) $host));
         if ($host === '') {
             return false;
         }
 
+        if ($allowGlobalHost && $host === 'sns.amazonaws.com') {
+            return true;
+        }
+
         return preg_match('/^sns\.[a-z0-9-]+\.amazonaws\.com$/', $host) === 1;
+    }
+
+    protected function extract_sns_host_region($host)
+    {
+        $host = strtolower(trim((string) $host));
+        if ($host === 'sns.amazonaws.com') {
+            return '';
+        }
+
+        if (preg_match('/^sns\.([a-z0-9-]+)\.amazonaws\.com$/', $host, $matches) !== 1) {
+            return false;
+        }
+
+        return strtolower((string) ($matches[1] ?? ''));
+    }
+
+    protected function is_valid_topic_arn($topicArn)
+    {
+        return $this->extract_sns_topic_region($topicArn) !== false;
+    }
+
+    protected function extract_sns_topic_region($topicArn)
+    {
+        $topicArn = trim((string) $topicArn);
+        if ($topicArn === '') {
+            return false;
+        }
+
+        if (preg_match('/^arn:aws[a-z-]*:sns:([a-z0-9-]+):[0-9]{12}:[A-Za-z0-9_-]+(?:\.fifo)?$/i', $topicArn, $matches) !== 1) {
+            return false;
+        }
+
+        return strtolower((string) ($matches[1] ?? ''));
     }
 
     protected function build_canonical_string(array $message)

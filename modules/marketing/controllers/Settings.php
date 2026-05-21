@@ -46,6 +46,8 @@ class Settings extends AdminController
             'marketing_ses_verify_signature'    => get_option('marketing_ses_verify_signature'),
             'marketing_ses_sns_topic_arn'       => get_option('marketing_ses_sns_topic_arn'),
             'marketing_ses_sns_signing_mode'    => get_option('marketing_ses_sns_signing_mode'),
+            'marketing_ses_sns_replay_window_seconds' => get_option('marketing_ses_sns_replay_window_seconds'),
+            'marketing_ses_sns_future_skew_seconds' => get_option('marketing_ses_sns_future_skew_seconds'),
             'marketing_bounce_auto_suppress'    => get_option('marketing_bounce_auto_suppress'),
             'marketing_complaint_auto_suppress' => get_option('marketing_complaint_auto_suppress'),
             'marketing_smtp_enabled'            => get_option('marketing_smtp_enabled'),
@@ -97,6 +99,7 @@ class Settings extends AdminController
         $data['reply_lead_dependencies_available'] = !empty($data['lead_status_options'])
             && !empty($data['lead_source_options'])
             && !empty($data['lead_staff_options']);
+        $data['smtp_password_configured'] = trim((string) get_option('marketing_smtp_password')) !== '';
         $data['inbound_email_secret_configured'] = trim((string) get_option('marketing_inbound_email_secret')) !== '';
         $data['whatsapp_settings'] = $this->marketing_whatsapp->get_settings();
         if (is_array($submittedWhatsappSettings) && !empty($submittedWhatsappSettings)) {
@@ -171,6 +174,12 @@ class Settings extends AdminController
         $sesSignatureEnabled = (string) get_option('marketing_ses_verify_signature') === '1';
         $sesRegionConfigured = trim((string) get_option('marketing_ses_region')) !== '';
         $sesTopicConfigured = trim((string) get_option('marketing_ses_sns_topic_arn')) !== '';
+        $sesConfigurationSetConfigured = trim((string) get_option('marketing_ses_configuration_set')) !== '';
+        $sesSigningMode = trim((string) get_option('marketing_ses_sns_signing_mode'));
+        $sesSigningModeConfigured = $sesSigningMode !== '';
+        $sesSigningModeLabel = $sesSigningModeConfigured && in_array($sesSigningMode, ['strict', 'compatibility'], true)
+            ? _l('marketing_ses_sns_signing_mode_' . $sesSigningMode)
+            : _l('marketing_provider_readiness_check_missing');
         $whatsappEnabled = !empty($whatsappSettings['enabled']);
         $whatsappWebhookTokenConfigured = trim((string) ($whatsappSettings['webhook_verify_token'] ?? '')) !== '';
         $whatsappPhoneIdConfigured = trim((string) ($whatsappSettings['phone_number_id'] ?? '')) !== '';
@@ -206,13 +215,13 @@ class Settings extends AdminController
             ],
             [
                 'title' => _l('marketing_provider_readiness_ses_webhooks'),
-                'status_key' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured)
+                'status_key' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured && $sesConfigurationSetConfigured && $sesSigningModeConfigured)
                     ? 'ready'
                     : ($sesSignatureEnabled ? 'needs_configuration' : 'optional'),
-                'status_label' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured)
+                'status_label' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured && $sesConfigurationSetConfigured && $sesSigningModeConfigured)
                     ? _l('marketing_provider_readiness_status_ready')
                     : ($sesSignatureEnabled ? _l('marketing_provider_readiness_status_needs_configuration') : _l('marketing_provider_readiness_status_optional')),
-                'note' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured)
+                'note' => ($sesSignatureEnabled && $sesRegionConfigured && $sesTopicConfigured && $sesConfigurationSetConfigured && $sesSigningModeConfigured)
                     ? _l('marketing_provider_readiness_ses_ready_note')
                     : ($sesSignatureEnabled ? _l('marketing_provider_readiness_ses_config_note') : _l('marketing_provider_readiness_ses_optional_note')),
                 'checks' => [
@@ -229,6 +238,14 @@ class Settings extends AdminController
                     [
                         'label' => _l('marketing_ses_sns_topic_arn'),
                         'value' => $sesTopicConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_ses_configuration_set'),
+                        'value' => $sesConfigurationSetConfigured ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'),
+                    ],
+                    [
+                        'label' => _l('marketing_ses_sns_signing_mode'),
+                        'value' => $sesSigningModeLabel,
                     ],
                 ],
             ],
@@ -479,6 +496,10 @@ class Settings extends AdminController
             'marketing_track_opens' => (string) ($getValue('marketing_track_opens') === '1' ? '1' : '0'),
             'marketing_track_clicks' => (string) ($getValue('marketing_track_clicks') === '1' ? '1' : '0'),
             'marketing_ses_verify_signature' => (string) ($getValue('marketing_ses_verify_signature') === '1' ? '1' : '0'),
+            'marketing_ses_sns_topic_arn' => (string) $getValue('marketing_ses_sns_topic_arn'),
+            'marketing_ses_sns_signing_mode' => (string) $getValue('marketing_ses_sns_signing_mode'),
+            'marketing_ses_sns_replay_window_seconds' => (string) $getValue('marketing_ses_sns_replay_window_seconds'),
+            'marketing_ses_sns_future_skew_seconds' => (string) $getValue('marketing_ses_sns_future_skew_seconds'),
             'marketing_smtp_enabled' => (string) ($getValue('marketing_smtp_enabled') === '1' ? '1' : '0'),
             'marketing_smtp_host' => (string) $getValue('marketing_smtp_host'),
             'marketing_smtp_port' => (string) $getValue('marketing_smtp_port'),
@@ -517,7 +538,6 @@ class Settings extends AdminController
             'marketing_default_reply_to_email' => $posted['marketing_default_reply_to_email'],
             'marketing_track_opens' => $posted['marketing_track_opens'],
             'marketing_track_clicks' => $posted['marketing_track_clicks'],
-            'marketing_ses_verify_signature' => $posted['marketing_ses_verify_signature'],
         ];
     }
 
@@ -537,6 +557,11 @@ class Settings extends AdminController
             'marketing_smtp_reply_to' => $posted['marketing_smtp_reply_to'],
             'marketing_ses_region' => $posted['marketing_ses_region'],
             'marketing_ses_configuration_set' => $posted['marketing_ses_configuration_set'],
+            'marketing_ses_verify_signature' => $posted['marketing_ses_verify_signature'],
+            'marketing_ses_sns_topic_arn' => $posted['marketing_ses_sns_topic_arn'],
+            'marketing_ses_sns_signing_mode' => $posted['marketing_ses_sns_signing_mode'],
+            'marketing_ses_sns_replay_window_seconds' => $posted['marketing_ses_sns_replay_window_seconds'],
+            'marketing_ses_sns_future_skew_seconds' => $posted['marketing_ses_sns_future_skew_seconds'],
         ];
     }
 
@@ -554,8 +579,6 @@ class Settings extends AdminController
         $this->form_validation->set_rules('marketing_default_from_name', _l('marketing_default_from_name'), 'trim');
         $this->form_validation->set_rules('marketing_default_from_email', _l('marketing_default_from_email'), 'trim|valid_email');
         $this->form_validation->set_rules('marketing_default_reply_to_email', _l('marketing_default_reply_to_email'), 'trim|valid_email');
-        // Marketing-specific company address fields removed: use Perfex global Company Information instead.
-        $this->form_validation->set_rules('marketing_ses_verify_signature', _l('marketing_ses_verify_signature'), 'in_list[0,1]');
 
         if ($this->form_validation->run() === false) {
             $this->session->set_tempdata('marketing_settings_general_form_data', $posted, 60);
@@ -569,7 +592,7 @@ class Settings extends AdminController
             redirect(admin_url('marketing/settings'));
         }
 
-        foreach ([$posted['marketing_send_enabled'], $posted['marketing_track_opens'], $posted['marketing_track_clicks'], $posted['marketing_ses_verify_signature']] as $boolValue) {
+        foreach ([$posted['marketing_send_enabled'], $posted['marketing_track_opens'], $posted['marketing_track_clicks']] as $boolValue) {
             if (!in_array($boolValue, ['0', '1'], true)) {
                 set_alert('danger', _l('marketing_settings_save_failure'));
                 redirect(admin_url('marketing/settings'));
@@ -589,7 +612,6 @@ class Settings extends AdminController
             'marketing_default_reply_to_email' => $posted['marketing_default_reply_to_email'],
             'marketing_track_opens'            => $posted['marketing_track_opens'],
             'marketing_track_clicks'           => $posted['marketing_track_clicks'],
-            'marketing_ses_verify_signature'   => $posted['marketing_ses_verify_signature'],
         ];
 
         $this->persist_settings($settings);
@@ -602,8 +624,18 @@ class Settings extends AdminController
     {
         $posted = $this->get_smtp_settings_post_data();
         $marketingSmtpEnabled = $posted['marketing_smtp_enabled'] === '1' ? '1' : '0';
+        $posted['marketing_ses_sns_signing_mode'] = $this->normalize_ses_sns_signing_mode($posted['marketing_ses_sns_signing_mode']);
+        $posted['marketing_ses_sns_replay_window_seconds'] = (string) $this->normalize_integer_setting($posted['marketing_ses_sns_replay_window_seconds'], 900, 1, 86400);
+        $posted['marketing_ses_sns_future_skew_seconds'] = (string) $this->normalize_integer_setting($posted['marketing_ses_sns_future_skew_seconds'], 300, 0, 3600);
         $this->form_validation->set_data($posted);
         $this->form_validation->set_rules('marketing_smtp_enabled', _l('marketing_smtp_enabled'), 'in_list[0,1]');
+        $this->form_validation->set_rules('marketing_ses_verify_signature', _l('marketing_ses_verify_signature'), 'in_list[0,1]');
+        $this->form_validation->set_rules('marketing_ses_region', _l('marketing_ses_region'), 'trim|regex_match[/^[A-Za-z0-9-]*$/]');
+        $this->form_validation->set_rules('marketing_ses_configuration_set', _l('marketing_ses_configuration_set'), 'trim|max_length[64]|regex_match[/^[A-Za-z0-9._-]*$/]');
+        $this->form_validation->set_rules('marketing_ses_sns_topic_arn', _l('marketing_ses_sns_topic_arn'), 'trim|max_length[512]|regex_match[/^(|arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+(?:\.fifo)?)$/]');
+        $this->form_validation->set_rules('marketing_ses_sns_signing_mode', _l('marketing_ses_sns_signing_mode'), 'required|in_list[strict,compatibility]');
+        $this->form_validation->set_rules('marketing_ses_sns_replay_window_seconds', _l('marketing_ses_sns_replay_window_seconds'), 'required|integer|greater_than_equal_to[1]|less_than_equal_to[86400]');
+        $this->form_validation->set_rules('marketing_ses_sns_future_skew_seconds', _l('marketing_ses_sns_future_skew_seconds'), 'required|integer|greater_than_equal_to[0]|less_than_equal_to[3600]');
 
         $existingStoredSmtpPassword = trim((string) get_option('marketing_smtp_password'));
         $smtpPasswordRule = $marketingSmtpEnabled === '1' && $existingStoredSmtpPassword === '' ? 'trim|required' : 'trim';
@@ -617,8 +649,6 @@ class Settings extends AdminController
             $this->form_validation->set_rules('marketing_smtp_from_name', _l('marketing_smtp_from_name'), 'trim');
             $this->form_validation->set_rules('marketing_smtp_reply_to', _l('marketing_smtp_reply_to'), 'trim|valid_email');
             $this->form_validation->set_rules('marketing_smtp_encryption', _l('marketing_smtp_encryption'), 'in_list[none,ssl,tls]');
-            $this->form_validation->set_rules('marketing_ses_region', _l('marketing_ses_region'), 'trim|regex_match[/^[A-Za-z0-9_-]*$/]');
-            $this->form_validation->set_rules('marketing_ses_configuration_set', _l('marketing_ses_configuration_set'), 'trim|max_length[64]|regex_match[/^[A-Za-z0-9_-]*$/]');
         }
 
         if ($this->form_validation->run() === false) {
@@ -643,6 +673,11 @@ class Settings extends AdminController
             'marketing_smtp_reply_to'         => $posted['marketing_smtp_reply_to'],
             'marketing_ses_region'            => $posted['marketing_ses_region'],
             'marketing_ses_configuration_set' => $posted['marketing_ses_configuration_set'],
+            'marketing_ses_verify_signature'  => $posted['marketing_ses_verify_signature'],
+            'marketing_ses_sns_topic_arn'     => $posted['marketing_ses_sns_topic_arn'],
+            'marketing_ses_sns_signing_mode'  => $posted['marketing_ses_sns_signing_mode'],
+            'marketing_ses_sns_replay_window_seconds' => (int) $posted['marketing_ses_sns_replay_window_seconds'],
+            'marketing_ses_sns_future_skew_seconds' => (int) $posted['marketing_ses_sns_future_skew_seconds'],
         ];
 
         $smtpPassword = $posted['marketing_smtp_password_raw'];
@@ -657,6 +692,32 @@ class Settings extends AdminController
         log_message('info', 'Marketing SMTP settings updated: ' . implode(', ', array_keys($settings)));
         set_alert('success', _l('marketing_smtp_settings_saved'));
         redirect(admin_url('marketing/settings'));
+    }
+
+    protected function normalize_ses_sns_signing_mode($value)
+    {
+        $value = strtolower(trim((string) $value));
+
+        return in_array($value, ['strict', 'compatibility'], true) ? $value : 'strict';
+    }
+
+    protected function normalize_integer_setting($value, $default, $minimum, $maximum)
+    {
+        $normalized = trim((string) $value);
+        if ($normalized === '' || preg_match('/^-?\d+$/', $normalized) !== 1) {
+            return $default;
+        }
+
+        $normalized = (int) $normalized;
+        if ($normalized < $minimum) {
+            return $minimum;
+        }
+
+        if ($normalized > $maximum) {
+            return $maximum;
+        }
+
+        return $normalized;
     }
 
     protected function save_reply_leads()
