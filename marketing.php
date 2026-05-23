@@ -5,15 +5,20 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Marketing
 Description: Email marketing and lead capture module scaffold for Perfex CRM.
-Version: 1.0.0
+Version: 1.1.0
 Requires at least: 3.2.*
 */
 
 define('MARKETING_MODULE_NAME', 'marketing');
+define('MARKETING_MODULE_VERSION', '1.1.0');
+define('MARKETING_COMMERCIAL_PREPARE_THRESHOLD', 100);
+define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-23-reply-mailbox-v13');
 
 hooks()->add_action('admin_init', 'marketing_module_init_menu_items');
 hooks()->add_action('admin_init', 'marketing_register_permissions');
+hooks()->add_action('admin_init', 'marketing_ensure_required_options');
 hooks()->add_action('admin_init', 'marketing_bootstrap_safe_schema');
+hooks()->add_action('admin_init', 'marketing_sync_module_installed_version');
 hooks()->add_action('admin_init', 'marketing_seed_reply_lead_defaults');
 hooks()->add_action('admin_init', 'marketing_normalize_reply_created_leads');
 hooks()->add_action('app_init', 'marketing_register_csrf_exclusions');
@@ -29,6 +34,7 @@ register_language_files(MARKETING_MODULE_NAME, [MARKETING_MODULE_NAME]);
 function marketing_module_activation_hook()
 {
     require_once __DIR__ . '/install.php';
+    marketing_ensure_required_options();
     marketing_bootstrap_safe_schema(true);
     marketing_seed_reply_lead_defaults();
     marketing_normalize_reply_created_leads();
@@ -116,6 +122,14 @@ function marketing_module_init_menu_items()
             'badge'    => [],
         ]);
 
+        $CI->app_menu->add_sidebar_children_item('marketing', [
+            'slug'     => 'marketing-reports',
+            'name'     => _l('marketing_reports'),
+            'href'     => admin_url('marketing/reports'),
+            'position' => 27,
+            'badge'    => [],
+        ]);
+
         if (staff_can('settings', 'marketing')) {
             $CI->app_menu->add_sidebar_children_item('marketing', [
                 'slug'     => 'marketing-settings',
@@ -148,38 +162,153 @@ function module_marketing_action_links($actions)
 
 function marketing_cron_process_queue($manually = false)
 {
+    $cronRunAt = date('Y-m-d H:i:s');
+    $replySnapshot = [
+        'status' => 'idle',
+        'processed_messages' => 0,
+        'warnings' => [],
+    ];
+    $importSnapshot = [
+        'status' => 'idle',
+        'job_found' => false,
+        'job_id' => 0,
+        'processed_rows' => 0,
+        'imported_rows' => 0,
+        'skipped_rows' => 0,
+        'failed_rows' => 0,
+        'warnings' => [],
+    ];
+    $campaignSnapshot = [
+        'status' => 'skipped_disabled',
+        'processed' => 0,
+        'accepted' => 0,
+        'failed' => 0,
+        'suppressed' => 0,
+        'skipped' => 0,
+        'recovered' => 0,
+        'campaigns_considered' => 0,
+        'campaigns_started' => 0,
+        'campaigns_completed' => 0,
+        'warnings' => [],
+    ];
+
+    marketing_update_runtime_option('marketing_cron_last_run_at', $cronRunAt);
+
     try {
         marketing_bootstrap_safe_schema();
-
-        if (get_option('marketing_send_enabled') != 1) {
-            return true;
-        }
-
-        $CI = &get_instance();
-        $CI->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
-
-        $limit = (int) get_option('marketing_send_per_cron_run');
-        if ($limit <= 0) {
-            $limit = 1;
-        }
-
-        log_message('info', 'Marketing campaign queue started: mode=cron limit=' . $limit);
-        $summary = $CI->marketing_campaigns_model->process_due_recipients($limit);
-        log_message('info', 'Marketing campaign queue completed: ' . json_encode([
-            'processed' => (int) ($summary['processed'] ?? 0),
-            'accepted' => (int) ($summary['accepted'] ?? 0),
-            'failed' => (int) ($summary['failed'] ?? 0),
-            'suppressed' => (int) ($summary['suppressed'] ?? 0),
-            'skipped' => (int) ($summary['skipped'] ?? 0),
-            'recovered' => (int) ($summary['recovered'] ?? 0),
-            'campaigns_considered' => (int) ($summary['campaigns_considered'] ?? 0),
-            'campaigns_started' => (int) ($summary['campaigns_started'] ?? 0),
-            'campaigns_completed' => (int) ($summary['campaigns_completed'] ?? 0),
-            'warnings' => array_values($summary['warnings'] ?? []),
-        ]));
     } catch (Throwable $exception) {
+        $replySnapshot['status'] = 'failed';
+        $replySnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
+        log_message('error', 'Marketing safe schema bootstrap failed during cron: ' . marketing_sanitize_log_message($exception->getMessage()));
+    }
+
+    try {
+        $CI = &get_instance();
+        $CI->load->library('marketing/Marketing_reply_mailbox');
+        $replySummary = $CI->marketing_reply_mailbox->poll_mailbox();
+        $replySnapshot = array_merge($replySnapshot, [
+            'status' => (string) ($replySummary['status'] ?? 'idle'),
+            'processed_messages' => (int) ($replySummary['processed_count'] ?? 0),
+            'warnings' => array_values($replySummary['warnings'] ?? []),
+        ]);
+    } catch (Throwable $exception) {
+        $replySnapshot['status'] = 'failed';
+        $replySnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
+        log_message('error', 'Marketing reply mailbox polling failed: ' . marketing_sanitize_log_message($exception->getMessage()));
+    }
+
+    try {
+        $CI = &get_instance();
+        $CI->load->model('marketing/Marketing_imports_model', 'marketing_imports_model');
+        $importSummary = $CI->marketing_imports_model->process_queued_imports([
+            'batch_size' => (int) get_option('marketing_import_batch_size'),
+            'max_runtime_seconds' => (int) get_option('marketing_import_max_runtime_seconds'),
+            'stale_lock_seconds' => (int) get_option('marketing_import_stale_lock_seconds'),
+        ]);
+        marketing_update_runtime_option('marketing_cron_last_import_run_at', $cronRunAt);
+        $importSnapshot = array_merge($importSnapshot, [
+            'status' => (string) ($importSummary['status'] ?? 'idle'),
+            'job_found' => !empty($importSummary['job_found']),
+            'job_id' => (int) ($importSummary['job_id'] ?? 0),
+            'processed_rows' => (int) ($importSummary['processed_rows'] ?? 0),
+            'imported_rows' => (int) ($importSummary['imported_rows'] ?? 0),
+            'skipped_rows' => (int) ($importSummary['skipped_rows'] ?? 0),
+            'failed_rows' => (int) ($importSummary['failed_rows'] ?? 0),
+            'warnings' => array_values($importSummary['warnings'] ?? []),
+        ]);
+
+        if (!empty($importSummary['job_found'])) {
+            log_message('info', 'Marketing import queue completed: ' . json_encode([
+                'job_id' => (int) ($importSummary['job_id'] ?? 0),
+                'status' => (string) ($importSummary['status'] ?? 'idle'),
+                'processed_rows' => (int) ($importSummary['processed_rows'] ?? 0),
+                'imported_rows' => (int) ($importSummary['imported_rows'] ?? 0),
+                'skipped_rows' => (int) ($importSummary['skipped_rows'] ?? 0),
+                'failed_rows' => (int) ($importSummary['failed_rows'] ?? 0),
+                'warnings' => array_values($importSummary['warnings'] ?? []),
+            ]));
+        }
+    } catch (Throwable $exception) {
+        marketing_update_runtime_option('marketing_cron_last_import_run_at', $cronRunAt);
+        $importSnapshot['status'] = 'failed';
+        $importSnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
+        log_message('error', 'Marketing import queue failed: ' . marketing_sanitize_log_message($exception->getMessage()));
+    }
+
+    try {
+        if (get_option('marketing_send_enabled') != 1) {
+            $campaignSnapshot['status'] = 'skipped_disabled';
+        } else {
+            $CI = &get_instance();
+            $CI->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
+
+            $limit = (int) get_option('marketing_send_per_cron_run');
+            if ($limit <= 0) {
+                $limit = 1;
+            }
+
+            log_message('info', 'Marketing campaign queue started: mode=cron limit=' . $limit);
+            $summary = $CI->marketing_campaigns_model->process_due_recipients($limit);
+            $campaignSnapshot = array_merge($campaignSnapshot, [
+                'status' => 'processed',
+                'processed' => (int) ($summary['processed'] ?? 0),
+                'accepted' => (int) ($summary['accepted'] ?? 0),
+                'failed' => (int) ($summary['failed'] ?? 0),
+                'suppressed' => (int) ($summary['suppressed'] ?? 0),
+                'skipped' => (int) ($summary['skipped'] ?? 0),
+                'recovered' => (int) ($summary['recovered'] ?? 0),
+                'campaigns_considered' => (int) ($summary['campaigns_considered'] ?? 0),
+                'campaigns_started' => (int) ($summary['campaigns_started'] ?? 0),
+                'campaigns_completed' => (int) ($summary['campaigns_completed'] ?? 0),
+                'warnings' => array_values($summary['warnings'] ?? []),
+            ]);
+            log_message('info', 'Marketing campaign queue completed: ' . json_encode([
+                'processed' => (int) ($summary['processed'] ?? 0),
+                'accepted' => (int) ($summary['accepted'] ?? 0),
+                'failed' => (int) ($summary['failed'] ?? 0),
+                'suppressed' => (int) ($summary['suppressed'] ?? 0),
+                'skipped' => (int) ($summary['skipped'] ?? 0),
+                'recovered' => (int) ($summary['recovered'] ?? 0),
+                'campaigns_considered' => (int) ($summary['campaigns_considered'] ?? 0),
+                'campaigns_started' => (int) ($summary['campaigns_started'] ?? 0),
+                'campaigns_completed' => (int) ($summary['campaigns_completed'] ?? 0),
+                'warnings' => array_values($summary['warnings'] ?? []),
+            ]));
+        }
+        marketing_update_runtime_option('marketing_cron_last_campaign_run_at', $cronRunAt);
+    } catch (Throwable $exception) {
+        marketing_update_runtime_option('marketing_cron_last_campaign_run_at', $cronRunAt);
+        $campaignSnapshot['status'] = 'failed';
+        $campaignSnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
         log_message('error', 'Marketing campaign queue failed: ' . marketing_sanitize_log_message($exception->getMessage()));
     }
+
+    marketing_update_runtime_option('marketing_cron_last_summary_json', marketing_build_cron_summary_json([
+        'last_run_at' => $cronRunAt,
+        'reply_mailbox' => $replySnapshot,
+        'import' => $importSnapshot,
+        'campaign' => $campaignSnapshot,
+    ]));
 
     return true;
 }
@@ -203,9 +332,203 @@ function marketing_register_csrf_exclusions()
     $CI->config->set_item('csrf_exclude_uris', $merged);
 }
 
+function marketing_get_default_options()
+{
+    return [
+        'marketing_send_enabled' => '0',
+        'marketing_queue_paused' => '0',
+        'marketing_send_per_cron_run' => '20',
+        'marketing_import_batch_size' => '500',
+        'marketing_import_max_runtime_seconds' => '20',
+        'marketing_import_stale_lock_seconds' => '900',
+        'marketing_cron_warning_minutes' => '5',
+        'marketing_cron_critical_minutes' => '15',
+        'marketing_cron_last_run_at' => '',
+        'marketing_cron_last_import_run_at' => '',
+        'marketing_cron_last_campaign_run_at' => '',
+        'marketing_cron_last_summary_json' => '',
+        'marketing_send_sleep_ms' => '0',
+        'marketing_send_hourly_cap' => '0',
+        'marketing_send_daily_cap' => '0',
+        'marketing_event_retention_days' => '180',
+        'marketing_webhook_log_retention_days' => '180',
+        'marketing_send_start_hour' => '00:00',
+        'marketing_send_end_hour' => '23:59',
+        'marketing_default_from_name' => '',
+        'marketing_default_from_email' => '',
+        'marketing_default_reply_to_email' => '',
+        'marketing_track_opens' => '1',
+        'marketing_track_clicks' => '1',
+        'marketing_ses_verify_signature' => '1',
+        'marketing_ses_sns_topic_arn' => '',
+        'marketing_ses_sns_signing_mode' => 'strict',
+        'marketing_ses_sns_replay_window_seconds' => '900',
+        'marketing_ses_sns_future_skew_seconds' => '300',
+        'marketing_smtp_enabled' => '0',
+        'marketing_smtp_host' => '',
+        'marketing_smtp_port' => '',
+        'marketing_smtp_encryption' => '',
+        'marketing_smtp_username' => '',
+        'marketing_smtp_password' => '',
+        'marketing_smtp_from_email' => '',
+        'marketing_smtp_from_name' => '',
+        'marketing_smtp_reply_to' => '',
+        'marketing_ses_region' => '',
+        'marketing_ses_configuration_set' => '',
+        'marketing_reply_to_lead_enabled' => '0',
+        'marketing_reply_to_lead_unknown_only' => '1',
+        'marketing_reply_to_lead_status' => '0',
+        'marketing_reply_to_lead_source' => '0',
+        'marketing_reply_to_lead_assigned_staff' => '0',
+        'marketing_reply_to_lead_name_prefix' => 'Marketing Reply',
+        'marketing_inbound_email_secret' => '',
+        'marketing_reply_mailbox_host' => '',
+        'marketing_reply_mailbox_port' => '993',
+        'marketing_reply_mailbox_encryption' => 'ssl',
+        'marketing_reply_mailbox_username' => '',
+        'marketing_reply_mailbox_password' => '',
+        'marketing_reply_mailbox_folder' => 'INBOX',
+        'marketing_reply_mailbox_processed_folder' => '',
+        'marketing_reply_mailbox_last_poll_at' => '',
+        'marketing_reply_mailbox_last_processed_count' => '0',
+        'marketing_reply_mailbox_last_error' => '',
+        'marketing_whatsapp_enabled' => '0',
+        'marketing_whatsapp_graph_version' => 'v23.0',
+        'marketing_whatsapp_phone_number_id' => '',
+        'marketing_whatsapp_business_account_id' => '',
+        'marketing_whatsapp_access_token' => '',
+        'marketing_whatsapp_app_secret' => '',
+        'marketing_whatsapp_webhook_verify_token' => '',
+        'marketing_whatsapp_default_template_name' => '',
+        'marketing_whatsapp_default_template_language' => 'en_US',
+        'marketing_whatsapp_test_recipient' => '',
+        'marketing_license_key' => '',
+        'marketing_license_key_protected' => '',
+        'marketing_license_email' => '',
+        'marketing_license_status' => 'inactive',
+        'marketing_license_domain' => '',
+        'marketing_license_last_checked' => '',
+        'marketing_license_last_error' => '',
+        'marketing_license_grace_until' => '',
+        'marketing_license_instance_id' => '',
+        'marketing_license_api_base_url' => '',
+        'marketing_license_response_hmac_secret' => '',
+        'marketing_schema_bootstrap_version' => '',
+        'marketing_reply_lead_defaults_seeded' => '0',
+        'marketing_reply_lead_source_normalized' => '0',
+    ];
+}
+
+function marketing_get_option_names()
+{
+    return array_keys(marketing_get_default_options());
+}
+
+function marketing_ensure_required_options()
+{
+    foreach (marketing_get_default_options() as $name => $value) {
+        if (get_option($name) === false) {
+            add_option($name, $value);
+        }
+    }
+}
+
+function marketing_update_runtime_option($name, $value)
+{
+    $name = trim((string) $name);
+    if ($name === '') {
+        return false;
+    }
+
+    $stringValue = is_string($value) ? $value : (string) $value;
+    if (get_option($name) === false) {
+        return add_option($name, $stringValue);
+    }
+
+    if ((string) get_option($name) === $stringValue) {
+        return true;
+    }
+
+    return update_option($name, $stringValue);
+}
+
+function marketing_build_cron_summary_json(array $summary)
+{
+    $sanitizeList = static function ($items) {
+        $sanitized = [];
+        foreach ((array) $items as $item) {
+            $item = function_exists('marketing_sanitize_log_message')
+                ? marketing_sanitize_log_message($item)
+                : trim(strip_tags((string) $item));
+            if ($item !== '') {
+                $sanitized[] = $item;
+            }
+        }
+
+        return array_values(array_slice($sanitized, 0, 10));
+    };
+
+    $payload = [
+        'last_run_at' => trim((string) ($summary['last_run_at'] ?? '')),
+        'import' => [
+            'status' => trim((string) ($summary['import']['status'] ?? 'idle')),
+            'job_found' => !empty($summary['import']['job_found']),
+            'job_id' => (int) ($summary['import']['job_id'] ?? 0),
+            'processed_rows' => (int) ($summary['import']['processed_rows'] ?? 0),
+            'imported_rows' => (int) ($summary['import']['imported_rows'] ?? 0),
+            'skipped_rows' => (int) ($summary['import']['skipped_rows'] ?? 0),
+            'failed_rows' => (int) ($summary['import']['failed_rows'] ?? 0),
+            'warnings' => $sanitizeList($summary['import']['warnings'] ?? []),
+        ],
+        'campaign' => [
+            'status' => trim((string) ($summary['campaign']['status'] ?? 'idle')),
+            'processed' => (int) ($summary['campaign']['processed'] ?? 0),
+            'accepted' => (int) ($summary['campaign']['accepted'] ?? 0),
+            'failed' => (int) ($summary['campaign']['failed'] ?? 0),
+            'suppressed' => (int) ($summary['campaign']['suppressed'] ?? 0),
+            'skipped' => (int) ($summary['campaign']['skipped'] ?? 0),
+            'recovered' => (int) ($summary['campaign']['recovered'] ?? 0),
+            'campaigns_considered' => (int) ($summary['campaign']['campaigns_considered'] ?? 0),
+            'campaigns_started' => (int) ($summary['campaign']['campaigns_started'] ?? 0),
+            'campaigns_completed' => (int) ($summary['campaign']['campaigns_completed'] ?? 0),
+            'warnings' => $sanitizeList($summary['campaign']['warnings'] ?? []),
+        ],
+    ];
+
+    $json = json_encode($payload);
+
+    return is_string($json) ? $json : '';
+}
+
+function marketing_detect_cli_php_binary()
+{
+    $candidate = defined('PHP_BINARY') ? trim((string) PHP_BINARY) : '';
+    if ($candidate === '') {
+        return 'php';
+    }
+
+    $basename = strtolower(basename($candidate));
+    if ($basename === 'php' || preg_match('/^php[0-9.]*$/', $basename)) {
+        return $candidate;
+    }
+
+    return 'php';
+}
+
+function marketing_get_recommended_cron_command()
+{
+    $crmRoot = defined('FCPATH') && trim((string) FCPATH) !== ''
+        ? rtrim(str_replace('\\', '/', (string) FCPATH), '/')
+        : '.';
+
+    return '* * * * * cd ' . $crmRoot . ' && ' . marketing_detect_cli_php_binary() . ' index.php cron/index >/dev/null 2>&1';
+}
+
 function marketing_bootstrap_safe_schema($force = false)
 {
-    $schemaVersion = '2026-05-03-safe-bootstrap-v2';
+    $schemaVersion = MARKETING_SCHEMA_BOOTSTRAP_VERSION;
+
+    marketing_ensure_required_options();
 
     if (!$force && get_option('marketing_schema_bootstrap_version') === $schemaVersion) {
         return;
@@ -228,8 +551,49 @@ function marketing_bootstrap_safe_schema($force = false)
         'skipped_columns' => array_values($result['skipped_columns'] ?? []),
         'added_indexes' => array_values($result['added_indexes'] ?? []),
         'skipped_indexes' => array_values($result['skipped_indexes'] ?? []),
+        'orphan_tables' => array_values(array_map(function ($item) {
+            return (string) ($item['table'] ?? '');
+        }, $result['report']['orphan_tables'] ?? [])),
         'errors' => array_values($result['errors'] ?? []),
     ]));
+}
+
+function marketing_sync_module_installed_version()
+{
+    $CI = &get_instance();
+
+    if (!isset($CI->app_modules) || !method_exists($CI->app_modules, 'get')) {
+        return;
+    }
+
+    $module = $CI->app_modules->get(MARKETING_MODULE_NAME);
+    if (!$module || $module['installed_version'] === false) {
+        return;
+    }
+
+    if ((string) $module['installed_version'] === MARKETING_MODULE_VERSION) {
+        return;
+    }
+
+    $CI->load->library('marketing/Marketing_schema');
+    $report = $CI->marketing_schema->get_readiness_report();
+
+    if (!empty($report['missing_tables']) || !empty($report['missing_columns']) || !empty($report['unsafe_missing_columns'])) {
+        log_message('warning', 'Marketing module version sync deferred because schema is not fully ready.');
+
+        return;
+    }
+
+    $CI->db->where('module_name', MARKETING_MODULE_NAME);
+    $CI->db->update(db_prefix() . 'modules', [
+        'installed_version' => MARKETING_MODULE_VERSION,
+    ]);
+
+    log_message(
+        'info',
+        'Marketing module installed_version synchronized to package version after safe bootstrap: from='
+        . (string) $module['installed_version'] . ' to=' . MARKETING_MODULE_VERSION
+    );
 }
 
 function marketing_sanitize_log_message($message)
@@ -243,6 +607,9 @@ function marketing_sanitize_log_message($message)
         trim((string) get_option('marketing_smtp_password')),
         trim((string) get_option('marketing_smtp_username')),
         trim((string) get_option('marketing_whatsapp_access_token')),
+        trim((string) get_option('marketing_license_key')),
+        trim((string) get_option('marketing_license_key_protected')),
+        trim((string) get_option('marketing_license_response_hmac_secret')),
     ];
 
     foreach ($redactions as $redaction) {
@@ -255,7 +622,70 @@ function marketing_sanitize_log_message($message)
     $message = preg_replace('/smtp_pass\s*[:=]\s*[^\s]+/i', 'smtp_pass=[redacted]', $message);
     $message = preg_replace('/password\s*[:=]\s*[^\s]+/i', 'password=[redacted]', $message);
 
-    return mb_substr($message, 0, 1000);
+    return function_exists('mb_substr')
+        ? mb_substr($message, 0, 1000)
+        : substr($message, 0, 1000);
+}
+
+function marketing_get_module_version()
+{
+    return defined('MARKETING_MODULE_VERSION') ? MARKETING_MODULE_VERSION : '1.0.0';
+}
+
+function marketing_get_perfex_version()
+{
+    if (function_exists('get_app_version')) {
+        return (string) get_app_version();
+    }
+
+    $CI = &get_instance();
+    $migrationVersion = (string) $CI->config->item('migration_version');
+
+    return $migrationVersion !== '' ? wordwrap($migrationVersion, 1, '.', true) : '';
+}
+
+function marketing_get_license_library()
+{
+    $libraryPath = __DIR__ . '/libraries/Marketing_license.php';
+    if (!is_file($libraryPath)) {
+        return null;
+    }
+
+    $CI = &get_instance();
+    try {
+        $CI->load->library('marketing/Marketing_license');
+    } catch (Throwable $exception) {
+        log_message('error', 'Marketing license library load failed: ' . marketing_sanitize_log_message($exception->getMessage()));
+
+        return null;
+    }
+
+    return isset($CI->marketing_license) && is_object($CI->marketing_license)
+        ? $CI->marketing_license
+        : null;
+}
+
+function marketing_license_block_message()
+{
+    return function_exists('_l')
+        ? _l('marketing_license_inactive_alert')
+        : 'Marketing license is not active. Please activate your license to use this feature.';
+}
+
+function marketing_is_feature_allowed($feature)
+{
+    try {
+        $library = marketing_get_license_library();
+        if (!$library || !method_exists($library, 'is_feature_allowed')) {
+            return true;
+        }
+
+        return $library->is_feature_allowed($feature);
+    } catch (Throwable $exception) {
+        log_message('error', 'Marketing license feature check failed: ' . marketing_sanitize_log_message($exception->getMessage()));
+
+        return true;
+    }
 }
 
 function marketing_seed_reply_lead_defaults()

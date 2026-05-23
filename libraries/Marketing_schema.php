@@ -46,11 +46,17 @@ class Marketing_schema
 
     public function get_missing_schema_report()
     {
+        return $this->get_readiness_report();
+    }
+
+    public function get_readiness_report()
+    {
         $report = [
             'ok' => true,
             'missing_tables' => [],
             'missing_columns' => [],
             'unsafe_missing_columns' => [],
+            'orphan_tables' => [],
             'inventory' => $this->get_schema_inventory(),
         ];
 
@@ -81,6 +87,11 @@ class Marketing_schema
                 ];
                 $report['ok'] = false;
             }
+        }
+
+        $report['orphan_tables'] = $this->get_orphan_duplicate_tables();
+        if (!empty($report['orphan_tables'])) {
+            $report['ok'] = false;
         }
 
         return $report;
@@ -132,7 +143,8 @@ class Marketing_schema
 
         $this->ensure_safe_indexes($result);
 
-        $result['report'] = $this->get_missing_schema_report();
+        $result['report'] = $this->get_readiness_report();
+        $this->log_orphan_table_warnings($result['report']['orphan_tables'] ?? []);
         $result['ok'] = empty($result['errors']) && $result['report']['ok'];
 
         return $result;
@@ -167,6 +179,9 @@ class Marketing_schema
                     'scheduled_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'send_started_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'send_completed_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'queue_worker_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true],
+                    'queue_worker_started_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'queue_worker_heartbeat_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'source_type' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'smtp'", 'repairable' => true],
                     'track_opens' => ['sql' => 'TINYINT(1) NOT NULL DEFAULT 1', 'repairable' => true],
                     'track_clicks' => ['sql' => 'TINYINT(1) NOT NULL DEFAULT 1', 'repairable' => true],
@@ -239,6 +254,8 @@ class Marketing_schema
                     'member_status' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'active'", 'repairable' => true],
                     'added_via' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'manual'", 'repairable' => true],
                     'dateadded' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
                     'PRIMARY KEY (`id`)',
@@ -258,6 +275,8 @@ class Marketing_schema
                     'destination' => ['sql' => 'VARCHAR(190) NULL', 'repairable' => true],
                     'email' => ['sql' => "VARCHAR(191) NOT NULL DEFAULT ''", 'repairable' => true],
                     'status' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'queued'", 'repairable' => true],
+                    'processing_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true],
+                    'outbound_attempt_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true],
                     'queued_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'sent_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'failed_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
@@ -266,7 +285,11 @@ class Marketing_schema
                     'failure_reason' => ['sql' => 'TEXT NULL', 'repairable' => true],
                     'open_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
                     'click_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
+                    'unique_click_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
+                    'last_clicked_url' => ['sql' => 'TEXT NULL', 'repairable' => true],
                     'last_event_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
                     'PRIMARY KEY (`id`)',
@@ -291,6 +314,7 @@ class Marketing_schema
                     'provider' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'smtp'", 'repairable' => true],
                     'provider_event_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
                     'provider_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'sns_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
                     'email' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
                     'url' => ['sql' => 'TEXT NULL', 'repairable' => true],
                     'ip_address' => ['sql' => 'VARCHAR(64) NULL', 'repairable' => true],
@@ -298,12 +322,45 @@ class Marketing_schema
                     'payload_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
                     'event_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
                     'PRIMARY KEY (`id`)',
                     'KEY `campaign_id` (`campaign_id`)',
                     'KEY `campaign_recipient_id` (`campaign_recipient_id`)',
                     'KEY `event_type` (`event_type`)',
+                ],
+            ],
+            'public_links' => [
+                'table' => db_prefix() . 'marketing_public_links',
+                'label' => 'Public Tracking Links',
+                'columns' => [
+                    'id' => ['sql' => 'BIGINT UNSIGNED NOT NULL AUTO_INCREMENT', 'repairable' => false],
+                    'token_hash' => ['sql' => "CHAR(64) NOT NULL DEFAULT ''", 'repairable' => true],
+                    'token_type' => ['sql' => "VARCHAR(30) NOT NULL DEFAULT 'click'", 'repairable' => true],
+                    'campaign_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
+                    'campaign_recipient_id' => ['sql' => 'BIGINT UNSIGNED NULL', 'repairable' => true],
+                    'marketing_contact_id' => ['sql' => 'BIGINT UNSIGNED NULL', 'repairable' => true],
+                    'normalized_email' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
+                    'original_url' => ['sql' => 'TEXT NULL', 'repairable' => true],
+                    'click_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
+                    'human_click_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
+                    'unique_click_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
+                    'last_clicked_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'last_human_clicked_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'last_used_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'is_active' => ['sql' => 'TINYINT(1) NOT NULL DEFAULT 1', 'repairable' => true],
+                    'payload_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
+                    'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                ],
+                'indexes' => [
+                    'PRIMARY KEY (`id`)',
+                    'UNIQUE KEY `token_hash_unique` (`token_hash`)',
+                    'KEY `token_type` (`token_type`)',
+                    'KEY `campaign_id` (`campaign_id`)',
+                    'KEY `campaign_recipient_id` (`campaign_recipient_id`)',
+                    'KEY `marketing_contact_id` (`marketing_contact_id`)',
                 ],
             ],
             'suppressions' => [
@@ -338,21 +395,56 @@ class Marketing_schema
                     'list_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
                     'filename' => ['sql' => "VARCHAR(255) NOT NULL DEFAULT ''", 'repairable' => true],
                     'stored_file_name' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
-                    'status' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'uploaded'", 'repairable' => true],
+                    'stored_file_path' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'file_size_bytes' => ['sql' => 'BIGINT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
+                    'job_type' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'csv_import'", 'repairable' => true],
+                    'source_import_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
+                    'status' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'queued'", 'repairable' => true],
                     'total_rows' => ['sql' => 'INT NOT NULL DEFAULT 0', 'repairable' => true],
+                    'processed_rows' => ['sql' => 'INT NOT NULL DEFAULT 0', 'repairable' => true],
                     'imported_rows' => ['sql' => 'INT NOT NULL DEFAULT 0', 'repairable' => true],
                     'skipped_rows' => ['sql' => 'INT NOT NULL DEFAULT 0', 'repairable' => true],
                     'failed_rows' => ['sql' => 'INT NOT NULL DEFAULT 0', 'repairable' => true],
+                    'current_offset' => ['sql' => 'INT NOT NULL DEFAULT 0', 'repairable' => true],
                     'mapping_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
                     'error_log' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
+                    'last_error_summary' => ['sql' => 'TEXT NULL', 'repairable' => true],
                     'uploaded_by' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
+                    'lease_token' => ['sql' => 'VARCHAR(96) NULL', 'repairable' => true],
+                    'lease_started_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'lease_heartbeat_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'processing_started_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'completed_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
                     'PRIMARY KEY (`id`)',
                     'KEY `list_id` (`list_id`)',
                     'KEY `status` (`status`)',
+                    'KEY `source_import_id` (`source_import_id`)',
+                    'KEY `status_lease_heartbeat_at` (`status`,`lease_heartbeat_at`)',
+                ],
+            ],
+            'import_failures' => [
+                'table' => db_prefix() . 'marketing_import_failures',
+                'label' => 'Import Failures',
+                'columns' => [
+                    'id' => ['sql' => 'BIGINT UNSIGNED NOT NULL AUTO_INCREMENT', 'repairable' => false],
+                    'import_id' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
+                    'row_number' => ['sql' => 'INT NOT NULL DEFAULT 0', 'repairable' => true],
+                    'row_excerpt_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
+                    'failure_reason' => ['sql' => 'TEXT NULL', 'repairable' => true],
+                    'retry_status' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'open'", 'repairable' => true],
+                    'retry_import_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
+                    'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                ],
+                'indexes' => [
+                    'PRIMARY KEY (`id`)',
+                    'UNIQUE KEY `import_row_unique` (`import_id`,`row_number`)',
+                    'KEY `retry_import_id` (`retry_import_id`)',
+                    'KEY `retry_status` (`retry_status`)',
                 ],
             ],
             'integrations' => [
@@ -384,16 +476,30 @@ class Marketing_schema
                     'marketing_contact_id' => ['sql' => 'BIGINT UNSIGNED NULL', 'repairable' => true],
                     'email' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
                     'contact_email' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
+                    'channel' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'email'", 'repairable' => true],
+                    'provider' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true],
+                    'contact_phone' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true],
+                    'normalized_phone' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true],
+                    'provider_thread_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'lead_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
+                    'assigned_staff_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
+                    'unread_count' => ['sql' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'repairable' => true],
                     'subject' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
                     'last_message_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'last_inbound_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'last_outbound_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'status' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'open'", 'repairable' => true],
                     'source_type' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'email_reply'", 'repairable' => true],
+                    'internal_notes' => ['sql' => 'TEXT NULL', 'repairable' => true],
                     'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
                     'PRIMARY KEY (`id`)',
                     'KEY `campaign_id` (`campaign_id`)',
                     'KEY `marketing_contact_id` (`marketing_contact_id`)',
+                    'KEY `normalized_phone` (`normalized_phone`)',
+                    'KEY `provider_thread_id` (`provider_thread_id`)',
                 ],
             ],
             'messages' => [
@@ -405,20 +511,39 @@ class Marketing_schema
                     'campaign_id' => ['sql' => 'INT UNSIGNED NULL', 'repairable' => true],
                     'marketing_contact_id' => ['sql' => 'BIGINT UNSIGNED NULL', 'repairable' => true],
                     'direction' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'inbound'", 'repairable' => true],
+                    'channel' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'email'", 'repairable' => true],
                     'email' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
                     'from_email' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
+                    'provider' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true],
+                    'message_type' => ['sql' => 'VARCHAR(50) NULL', 'repairable' => true],
+                    'provider_thread_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'provider_status' => ['sql' => 'VARCHAR(100) NULL', 'repairable' => true],
                     'subject' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
                     'message' => ['sql' => 'MEDIUMTEXT NULL', 'repairable' => true],
                     'body' => ['sql' => 'MEDIUMTEXT NULL', 'repairable' => true],
                     'body_text' => ['sql' => 'MEDIUMTEXT NULL', 'repairable' => true],
                     'body_html' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
+                    'media_meta_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
+                    'context_provider_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
                     'provider_message_id' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'message_identifier' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'in_reply_to' => ['sql' => 'VARCHAR(255) NULL', 'repairable' => true],
+                    'references_header' => ['sql' => 'TEXT NULL', 'repairable' => true],
+                    'mailbox_uid' => ['sql' => 'VARCHAR(64) NULL', 'repairable' => true],
+                    'mailbox_folder' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
+                    'received_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'headers_json' => ['sql' => 'LONGTEXT NULL', 'repairable' => true],
+                    'source_provider' => ['sql' => "VARCHAR(50) NOT NULL DEFAULT 'inbound_email'", 'repairable' => true],
+                    'dedupe_key' => ['sql' => 'VARCHAR(191) NULL', 'repairable' => true],
                     'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
                     'PRIMARY KEY (`id`)',
                     'KEY `conversation_id` (`conversation_id`)',
                     'KEY `campaign_id` (`campaign_id`)',
+                    'KEY `provider_message_id` (`provider_message_id`)',
+                    'KEY `dedupe_key` (`dedupe_key`)',
+                    'KEY `provider_thread_id` (`provider_thread_id`)',
                 ],
             ],
             'webhook_logs' => [
@@ -436,6 +561,7 @@ class Marketing_schema
                     'processed_at' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                     'error_message' => ['sql' => 'TEXT NULL', 'repairable' => true],
                     'datecreated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
+                    'dateupdated' => ['sql' => 'DATETIME NULL', 'repairable' => true],
                 ],
                 'indexes' => [
                     'PRIMARY KEY (`id`)',
@@ -579,6 +705,16 @@ class Marketing_schema
             ],
             [
                 'table' => db_prefix() . 'marketing_campaign_recipients',
+                'name' => 'message_id',
+                'columns' => ['message_id'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_campaign_recipients',
+                'name' => 'provider_message_id',
+                'columns' => ['provider_message_id'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_campaign_recipients',
                 'name' => 'destination',
                 'columns' => ['destination'],
             ],
@@ -603,6 +739,21 @@ class Marketing_schema
                 'columns' => ['event_type'],
             ],
             [
+                'table' => db_prefix() . 'marketing_events',
+                'name' => 'provider_message_id',
+                'columns' => ['provider_message_id'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_events',
+                'name' => 'provider_event_id',
+                'columns' => ['provider_event_id'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_events',
+                'name' => 'provider_sns_message_id',
+                'columns' => ['provider', 'sns_message_id'],
+            ],
+            [
                 'table' => db_prefix() . 'marketing_conversations',
                 'name' => 'campaign_id',
                 'columns' => ['campaign_id'],
@@ -623,14 +774,64 @@ class Marketing_schema
                 'columns' => ['conversation_id'],
             ],
             [
+                'table' => db_prefix() . 'marketing_messages',
+                'name' => 'dedupe_key',
+                'columns' => ['dedupe_key'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_messages',
+                'name' => 'message_identifier',
+                'columns' => ['message_identifier'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_messages',
+                'name' => 'mailbox_uid',
+                'columns' => ['mailbox_uid'],
+            ],
+            [
                 'table' => db_prefix() . 'marketing_suppressions',
                 'name' => 'email',
                 'columns' => ['email'],
             ],
             [
                 'table' => db_prefix() . 'marketing_suppressions',
+                'name' => 'normalized_email',
+                'columns' => ['normalized_email'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_suppressions',
                 'name' => 'phone',
                 'columns' => ['phone'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_suppressions',
+                'name' => 'active_reason',
+                'columns' => ['active', 'reason'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_imports',
+                'name' => 'status',
+                'columns' => ['status'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_imports',
+                'name' => 'source_import_id',
+                'columns' => ['source_import_id'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_imports',
+                'name' => 'status_lease_heartbeat_at',
+                'columns' => ['status', 'lease_heartbeat_at'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_import_failures',
+                'name' => 'retry_import_id',
+                'columns' => ['retry_import_id'],
+            ],
+            [
+                'table' => db_prefix() . 'marketing_import_failures',
+                'name' => 'retry_status',
+                'columns' => ['retry_status'],
             ],
         ];
     }
@@ -682,5 +883,60 @@ class Marketing_schema
         }
 
         return false;
+    }
+
+    protected function get_orphan_duplicate_tables()
+    {
+        $tables = $this->db->list_tables();
+        if (!is_array($tables) || empty($tables)) {
+            return [];
+        }
+
+        $prefix = (string) db_prefix();
+        if ($prefix === '') {
+            return [];
+        }
+
+        $duplicatePrefix = $prefix . $prefix . 'marketing_';
+        $orphans = [];
+
+        foreach ($tables as $table) {
+            $table = (string) $table;
+            if (strpos($table, $duplicatePrefix) !== 0) {
+                continue;
+            }
+
+            $canonicalTable = substr($table, strlen($prefix));
+            $orphans[] = [
+                'table' => $table,
+                'canonical_table' => $canonicalTable,
+                'label' => 'Legacy duplicate table',
+                'exists_canonical' => $canonicalTable !== '' ? $this->db->table_exists($canonicalTable) : false,
+            ];
+        }
+
+        usort($orphans, function ($left, $right) {
+            return strcmp((string) ($left['table'] ?? ''), (string) ($right['table'] ?? ''));
+        });
+
+        return $orphans;
+    }
+
+    protected function log_orphan_table_warnings(array $orphanTables)
+    {
+        foreach ($orphanTables as $item) {
+            $table = (string) ($item['table'] ?? '');
+            $canonicalTable = (string) ($item['canonical_table'] ?? '');
+
+            if ($table === '') {
+                continue;
+            }
+
+            log_message(
+                'warning',
+                'Marketing schema legacy duplicate table detected: table=' . $table
+                . ($canonicalTable !== '' ? ' canonical=' . $canonicalTable : '')
+            );
+        }
     }
 }

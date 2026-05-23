@@ -1,7 +1,54 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
 <?php
+$builderCssPath = module_dir_path('marketing', 'assets/css/marketing-builder.css');
+$builderCssUrl  = module_dir_url('marketing', 'assets/css/marketing-builder.css');
+$builderCssVer  = is_file($builderCssPath) ? (string) filemtime($builderCssPath) : '1';
 $isWhatsappCampaign = ($campaign['delivery_channel'] ?? 'email') === 'whatsapp';
+$showConfigurationWarnings = !empty($campaign_readiness['show_configuration_warnings']);
+$readinessGuidance = !empty($campaign_readiness['show_send_readiness_messages'])
+    ? array_values(array_unique(array_filter($campaign_readiness['guidance_messages'] ?? [])))
+    : [];
+$emailTelemetryMessages = !$isWhatsappCampaign
+    ? array_values(array_unique(array_filter($smtp_status['telemetry_messages'] ?? [])))
+    : [];
+$hasEmailTelemetryEvents = ((int) ($event_summary['delivered'] ?? 0)
+    + (int) ($event_summary['open'] ?? 0)
+    + (int) ($event_summary['click'] ?? 0)
+    + (int) ($event_summary['bounce'] ?? 0)
+    + (int) ($event_summary['complaint'] ?? 0)
+    + (int) ($event_summary['failed_rejected'] ?? 0)
+    + (int) ($event_summary['unsubscribe'] ?? 0)
+    + (int) ($event_summary['delivery_delay'] ?? 0)) > 0;
+$awaitingSesTelemetry = !$isWhatsappCampaign
+    && (int) ($recipient_summary['sent'] ?? 0) > 0
+    && !$hasEmailTelemetryEvents;
+$campaignStatusDisplay = ucfirst((string) ($campaign['status'] ?? 'draft'));
+$audienceNameDisplay = trim((string) ($campaign['audience_name'] ?? '')) !== '' ? (string) $campaign['audience_name'] : '-';
+$scheduledAtDisplay = !empty($campaign['scheduled_at']) ? (string) $campaign['scheduled_at'] : _l('marketing_campaign_send_now');
+$preparedRecipientCount = (int) ($recipient_summary['queued'] ?? 0)
+    + (int) ($recipient_summary['processing'] ?? 0)
+    + (int) ($recipient_summary['sent'] ?? 0)
+    + (int) ($recipient_summary['failed'] ?? 0)
+    + (int) ($recipient_summary['suppressed'] ?? 0)
+    + (int) ($recipient_summary['skipped'] ?? 0);
+$nextStepMessage = $campaign_readiness['primary_message'];
+
+if (!$send_enabled) {
+    $nextStepMessage = _l('marketing_campaign_command_next_delivery_disabled');
+} elseif ($campaign['status'] === 'scheduled') {
+    $nextStepMessage = _l('marketing_campaign_command_next_schedule');
+} elseif ($campaign['status'] === 'sending') {
+    $nextStepMessage = _l('marketing_campaign_command_next_processing');
+} elseif ($can_retry_failed) {
+    $nextStepMessage = _l('marketing_campaign_command_next_review_failures');
+} elseif ($can_send && (int) ($recipient_summary['queued'] ?? 0) > 0) {
+    $nextStepMessage = _l('marketing_campaign_command_next_send');
+} elseif ($can_prepare_recipients && (int) ($recipient_summary['queued'] ?? 0) === 0) {
+    $nextStepMessage = _l('marketing_campaign_command_next_prepare');
+} elseif ($can_edit_campaign) {
+    $nextStepMessage = _l('marketing_campaign_command_next_edit');
+}
 $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($campaign) {
     $query = [
         'recipient_page' => max(1, (int) $page),
@@ -15,6 +62,7 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
     return admin_url('marketing/campaigns/show/' . $campaign['id'] . '?' . http_build_query($query));
 };
 ?>
+<link rel="stylesheet" href="<?= html_escape($builderCssUrl . '?v=' . $builderCssVer); ?>">
 <style>
     .marketing-campaign-layout {
         display: grid;
@@ -69,6 +117,161 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                             <a href="<?= admin_url('marketing/campaigns'); ?>" class="btn btn-default pull-right"><?= _l('back'); ?></a>
                         </div>
                         <hr />
+                        <div class="marketing-campaign-command-center" data-marketing-campaign-command-center="1">
+                            <div class="marketing-campaign-command-header">
+                                <div>
+                                    <h4 class="marketing-campaign-command-title"><?= _l('marketing_campaign_command_center'); ?></h4>
+                                    <p class="marketing-campaign-command-helper no-margin"><?= _l('marketing_campaign_command_helper'); ?></p>
+                                </div>
+                                <span class="marketing-campaign-command-status-pill is-<?= html_escape($campaign_readiness['alert_type']); ?>"><?= html_escape($readiness_status); ?></span>
+                            </div>
+                            <div class="marketing-campaign-command-grid">
+                                <div class="marketing-campaign-command-card">
+                                    <span class="marketing-campaign-command-label"><?= _l('marketing_campaign_command_status'); ?></span>
+                                    <div class="marketing-campaign-command-value"><?= html_escape($campaignStatusDisplay); ?></div>
+                                    <p class="marketing-campaign-command-copy no-margin"><?= html_escape($campaign_readiness['primary_message']); ?></p>
+                                </div>
+                                <div class="marketing-campaign-command-card">
+                                    <span class="marketing-campaign-command-label"><?= _l('marketing_campaign_readiness_status'); ?></span>
+                                    <div class="marketing-campaign-command-value"><?= html_escape($readiness_status); ?></div>
+                                    <?php if (!$send_enabled) { ?>
+                                        <p class="marketing-campaign-command-copy marketing-campaign-command-copy--warning"><?= _l('marketing_campaign_send_disabled_exact'); ?></p>
+                                    <?php } ?>
+                                    <?php if ($showConfigurationWarnings && !$isWhatsappCampaign && !$smtp_status['valid']) { ?>
+                                        <p class="marketing-campaign-command-copy marketing-campaign-command-copy--warning">
+                                            <strong><?= _l('marketing_campaign_smtp_incomplete_warning'); ?></strong>
+                                            <?= html_escape(implode(' ', $smtp_status['messages'])); ?>
+                                        </p>
+                                    <?php } ?>
+                                    <?php if ($showConfigurationWarnings && $isWhatsappCampaign && !$whatsapp_status['valid']) { ?>
+                                        <p class="marketing-campaign-command-copy marketing-campaign-command-copy--warning"><?= html_escape(implode(' ', $whatsapp_status['messages'])); ?></p>
+                                    <?php } ?>
+                                    <p class="marketing-campaign-command-copy no-margin">
+                                        <?= !empty($readinessGuidance) ? html_escape(implode(' ', $readinessGuidance)) : html_escape($campaign_readiness['primary_message']); ?>
+                                    </p>
+                                </div>
+                                <div class="marketing-campaign-command-card">
+                                    <span class="marketing-campaign-command-label"><?= _l('marketing_campaign_command_audience'); ?></span>
+                                    <div class="marketing-campaign-command-value"><?= html_escape($audienceNameDisplay); ?></div>
+                                    <p class="marketing-campaign-command-copy no-margin">
+                                        <?= html_escape(sprintf(_l('marketing_campaign_command_recipients_summary'), $preparedRecipientCount, (int) ($send_readiness['eligible_recipients'] ?? 0))); ?>
+                                    </p>
+                                </div>
+                                <div class="marketing-campaign-command-card">
+                                    <span class="marketing-campaign-command-label"><?= _l('marketing_campaign_command_delivery'); ?></span>
+                                    <div class="marketing-campaign-command-value"><?= html_escape($isWhatsappCampaign ? _l('marketing_campaign_delivery_channel_whatsapp') : _l('marketing_campaign_delivery_channel_email')); ?></div>
+                                    <p class="marketing-campaign-command-copy no-margin">
+                                        <?= html_escape(sprintf(_l('marketing_campaign_command_schedule_summary'), $scheduledAtDisplay, $send_window['label'])); ?>
+                                    </p>
+                                </div>
+                                <div class="marketing-campaign-command-card">
+                                    <span class="marketing-campaign-command-label"><?= _l('marketing_campaign_command_next_step'); ?></span>
+                                    <div class="marketing-campaign-command-value"><?= html_escape($campaign_readiness['status_label']); ?></div>
+                                    <p class="marketing-campaign-command-copy no-margin"><?= html_escape($nextStepMessage); ?></p>
+                                </div>
+                                <div class="marketing-campaign-command-card">
+                                    <span class="marketing-campaign-command-label"><?= _l('marketing_campaign_command_actions'); ?></span>
+                                    <div class="marketing-campaign-send-workflow" data-marketing-campaign-send-workflow="1">
+                                        <div class="marketing-campaign-send-workflow-header">
+                                            <div>
+                                                <h5 class="marketing-campaign-send-workflow-title"><?= _l('marketing_campaign_send_workflow_heading'); ?></h5>
+                                                <p class="marketing-campaign-send-workflow-helper no-margin"><?= _l('marketing_campaign_send_workflow_helper'); ?></p>
+                                            </div>
+                                        </div>
+                                        <div class="marketing-campaign-send-workflow-steps">
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_review'); ?></span>
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_prepare'); ?></span>
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_send'); ?></span>
+                                            <span class="marketing-campaign-send-workflow-step"><?= _l('marketing_campaign_send_workflow_step_monitor'); ?></span>
+                                        </div>
+                                        <div class="marketing-campaign-send-workflow-actions">
+                                            <a href="<?= admin_url('marketing/campaigns/preview/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('marketing_preview_campaign_button'); ?></a>
+                                            <?php if ($can_edit_campaign) { ?>
+                                                <a href="<?= admin_url('marketing/campaigns/edit/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('edit'); ?></a>
+                                            <?php } ?>
+                                            <?php if (!empty($can_duplicate_campaign)) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="duplicate_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_duplicate_button'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                            <?php if ($can_prepare_recipients && (int) $recipient_summary['queued'] === 0) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="prepare_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-info btn-sm"><?= _l('marketing_campaign_prepare_recipients'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                            <?php if ($can_reprepare_recipients && (int) $recipient_summary['queued'] > 0) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="reprepare_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-info btn-sm"><?= _l('marketing_campaign_reprepare_recipients'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                            <?php if ($can_send && in_array($campaign['status'], ['draft', 'sending'], true) && (int) $recipient_summary['queued'] > 0) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="send_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-success btn-sm"><?= _l('marketing_campaign_send_campaign'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                            <?php if ($can_retry_failed) { ?>
+                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="retry_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                    <button type="submit" class="btn btn-warning btn-sm"><?= _l('marketing_campaign_retry_failed_button'); ?></button>
+                                                <?= form_close(); ?>
+                                            <?php } ?>
+                                        </div>
+                                        <?php if ($can_send && $campaign['status'] === 'draft') { ?>
+                                            <div class="marketing-campaign-command-schedule mtop15">
+                                                <span class="marketing-campaign-send-workflow-section-label"><?= _l('marketing_campaign_send_workflow_schedule_heading'); ?></span>
+                                                <p class="marketing-campaign-send-workflow-helper no-margin"><?= _l('marketing_campaign_send_workflow_schedule_helper'); ?></p>
+                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id'])); ?>
+                                                    <div class="form-group mtop15 no-margin">
+                                                        <label for="marketing-campaign-command-scheduled-at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
+                                                        <input type="datetime-local" id="marketing-campaign-command-scheduled-at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
+                                                        <p class="text-muted mtop5"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
+                                                    </div>
+                                                    <button type="submit" class="btn btn-success btn-sm mtop15"><?= _l('marketing_campaign_schedule'); ?></button>
+                                                <?= form_close(); ?>
+                                            </div>
+                                        <?php } ?>
+                                        <?php if ($can_send && $campaign['status'] === 'scheduled') { ?>
+                                            <div class="marketing-campaign-send-workflow-actions mtop15">
+                                                <span class="marketing-campaign-send-workflow-section-label marketing-campaign-send-workflow-section-label--full"><?= _l('marketing_campaign_send_workflow_schedule_heading'); ?></span>
+                                                <p class="marketing-campaign-send-workflow-helper marketing-campaign-send-workflow-helper--full no-margin"><?= _l('marketing_campaign_send_workflow_scheduled_helper'); ?></p>
+                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="action" value="draft">
+                                                    <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_move_to_draft'); ?></button>
+                                                <?= form_close(); ?>
+                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
+                                                    <input type="hidden" name="action" value="cancelled">
+                                                    <button type="submit" class="btn btn-danger btn-sm"><?= _l('marketing_campaign_cancel_scheduled'); ?></button>
+                                                <?= form_close(); ?>
+                                            </div>
+                                        <?php } ?>
+                                        <?php if ($can_reset_campaign || $can_delete_campaign) { ?>
+                                            <div class="marketing-campaign-danger-actions" data-marketing-campaign-danger-actions="1">
+                                                <span class="marketing-campaign-send-workflow-section-label marketing-campaign-send-workflow-section-label--danger"><?= _l('marketing_campaign_send_workflow_danger_heading'); ?></span>
+                                                <p class="marketing-campaign-send-workflow-helper marketing-campaign-send-workflow-helper--danger no-margin"><?= _l('marketing_campaign_send_workflow_danger_helper'); ?></p>
+                                                <div class="marketing-campaign-send-workflow-actions mtop15">
+                                                    <?php if ($can_reset_campaign) { ?>
+                                                        <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
+                                                            <input type="hidden" name="reset_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                            <button type="submit" class="btn btn-default btn-sm"><?= _l('marketing_campaign_reset_to_draft_button'); ?></button>
+                                                        <?= form_close(); ?>
+                                                    <?php } ?>
+                                                    <?php if ($can_delete_campaign) { ?>
+                                                        <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block', 'onsubmit' => "return confirm('Delete this campaign?');"]); ?>
+                                                            <input type="hidden" name="delete_campaign_id" value="<?= (int) $campaign['id']; ?>">
+                                                            <button type="submit" class="btn btn-danger btn-sm"><?= _l('delete'); ?></button>
+                                                        <?= form_close(); ?>
+                                                    <?php } ?>
+                                                </div>
+                                            </div>
+                                        <?php } ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <div class="marketing-campaign-layout">
                             <div class="marketing-campaign-stack">
                                 <div class="panel_s">
@@ -158,130 +361,24 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                     </div>
                                 </div>
 
-                                <div class="panel_s">
-                                    <div class="panel-body">
-                                        <h5 class="bold no-margin"><?= _l('marketing_campaign_readiness_status'); ?></h5>
-                                        <div class="mtop15">
-                                            <?php if (!$send_enabled) { ?>
-                                                <div class="alert alert-warning mbot15">
-                                                    <?= _l('marketing_campaign_send_disabled_exact'); ?>
-                                                </div>
-                                            <?php } ?>
-                                            <?php if (!$isWhatsappCampaign && !$smtp_status['valid']) { ?>
-                                                <div class="alert alert-warning mbot15">
-                                                    <strong><?= _l('marketing_campaign_smtp_incomplete_warning'); ?></strong><br>
-                                                    <?= html_escape(implode(' ', $smtp_status['messages'])); ?>
-                                                </div>
-                                            <?php } ?>
-                                            <?php if ($isWhatsappCampaign && !$whatsapp_status['valid']) { ?>
-                                                <div class="alert alert-warning mbot15">
-                                                    <?= html_escape(implode(' ', $whatsapp_status['messages'])); ?>
-                                                </div>
-                                            <?php } ?>
-                                            <?php if (!empty($send_readiness['messages'])) { ?>
-                                                <div class="alert alert-info mbot15">
-                                                    <?= html_escape(implode(' ', $send_readiness['messages'])); ?>
-                                                </div>
-                                            <?php } ?>
-                                            <?php if ($campaign['status'] === 'sent') { ?>
-                                                <div class="alert alert-info mbot15">
-                                                    Campaign completed.
-                                                </div>
-                                            <?php } elseif ($campaign['status'] === 'failed') { ?>
-                                                <div class="alert alert-warning mbot15">
-                                                    Campaign failed.
-                                                </div>
-                                            <?php } elseif ($campaign['status'] === 'cancelled') { ?>
-                                                <div class="alert alert-warning mbot15">
-                                                    Campaign cancelled.
-                                                </div>
-                                            <?php } elseif ($campaign['status'] === 'sending' && (int) $recipient_summary['queued'] === 0) { ?>
-                                                <div class="alert alert-warning mbot15">
-                                                    No recipients queued. Prepare recipients before sending.
-                                                </div>
-                                            <?php } elseif (in_array($campaign['status'], ['draft', 'scheduled'], true) && (int) $recipient_summary['queued'] === 0) { ?>
-                                                <div class="alert alert-warning mbot15">
-                                                    No recipients queued. Click 'Prepare Recipients' first.
-                                                </div>
-                                            <?php } ?>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="panel_s">
-                                    <div class="panel-body">
-                                        <h5 class="bold no-margin">Campaign Actions</h5>
-                                        <div class="marketing-campaign-actions mtop15">
-                                            <a href="<?= admin_url('marketing/campaigns/preview/' . $campaign['id']); ?>" class="btn btn-default"><?= _l('marketing_preview_campaign_button'); ?></a>
-                                            <?php if ($can_edit_campaign) { ?>
-                                                <a href="<?= admin_url('marketing/campaigns/edit/' . $campaign['id']); ?>" class="btn btn-default"><?= _l('edit'); ?></a>
-                                            <?php } ?>
-                                            <?php if ($can_prepare_recipients && (int) $recipient_summary['queued'] === 0) { ?>
-                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                    <input type="hidden" name="prepare_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                    <button type="submit" class="btn btn-info"><?= _l('marketing_campaign_prepare_recipients'); ?></button>
-                                                <?= form_close(); ?>
-                                            <?php } ?>
-                                            <?php if ($can_send && in_array($campaign['status'], ['draft', 'sending'], true) && (int) $recipient_summary['queued'] > 0) { ?>
-                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                    <input type="hidden" name="send_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                    <button type="submit" class="btn btn-success"><?= _l('marketing_campaign_send_campaign'); ?></button>
-                                                <?= form_close(); ?>
-                                            <?php } ?>
-                                            <?php if ($can_retry_failed) { ?>
-                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                    <input type="hidden" name="retry_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                    <button type="submit" class="btn btn-warning"><?= _l('marketing_campaign_retry_failed_button'); ?></button>
-                                                <?= form_close(); ?>
-                                            <?php } ?>
-                                            <?php if ($can_reset_campaign) { ?>
-                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block']); ?>
-                                                    <input type="hidden" name="reset_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                    <button type="submit" class="btn btn-default"><?= _l('marketing_campaign_reset_to_draft_button'); ?></button>
-                                                <?= form_close(); ?>
-                                            <?php } ?>
-                                            <?php if ($can_delete_campaign) { ?>
-                                                <?= form_open(admin_url('marketing/campaigns'), ['class' => 'inline-block', 'onsubmit' => "return confirm('Delete this campaign?');"]); ?>
-                                                    <input type="hidden" name="delete_campaign_id" value="<?= (int) $campaign['id']; ?>">
-                                                    <button type="submit" class="btn btn-danger"><?= _l('delete'); ?></button>
-                                                <?= form_close(); ?>
-                                            <?php } ?>
-                                        </div>
-                                        <?php if ($can_send && $campaign['status'] === 'draft') { ?>
-                                            <div class="mtop20">
-                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id'])); ?>
-                                                    <div class="form-group">
-                                                        <label for="scheduled_at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
-                                                        <input type="datetime-local" id="scheduled_at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
-                                                        <p class="text-muted mtop5"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
-                                                    </div>
-                                                    <button type="submit" class="btn btn-success"><?= _l('marketing_campaign_schedule'); ?></button>
-                                                <?= form_close(); ?>
-                                            </div>
-                                        <?php } ?>
-                                        <?php if ($can_send && $campaign['status'] === 'scheduled') { ?>
-                                            <div class="marketing-campaign-actions mtop20">
-                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
-                                                    <input type="hidden" name="action" value="draft">
-                                                    <button type="submit" class="btn btn-default"><?= _l('marketing_campaign_move_to_draft'); ?></button>
-                                                <?= form_close(); ?>
-                                                <?= form_open(admin_url('marketing/campaigns/schedule/' . $campaign['id']), ['class' => 'inline-block']); ?>
-                                                    <input type="hidden" name="action" value="cancelled">
-                                                    <button type="submit" class="btn btn-danger"><?= _l('marketing_campaign_cancel_scheduled'); ?></button>
-                                                <?= form_close(); ?>
-                                            </div>
-                                        <?php } ?>
-                                    </div>
-                                </div>
-
                                 <?php if (!$isWhatsappCampaign) { ?>
                                 <div class="panel_s">
                                     <div class="panel-body">
-                                        <h5 class="bold no-margin">Email Design Preview</h5>
+                                        <div class="marketing-campaign-preview-shell" data-marketing-campaign-preview-frame-shell="1">
+                                            <div class="marketing-campaign-preview-header">
+                                                <div>
+                                                    <h5 class="marketing-campaign-preview-title"><?= _l('marketing_campaign_preview_review_heading'); ?></h5>
+                                                    <p class="marketing-campaign-review-note no-margin"><?= _l('marketing_campaign_preview_review_note'); ?></p>
+                                                </div>
+                                                <div class="marketing-campaign-preview-actions">
+                                                    <a href="<?= admin_url('marketing/campaigns/preview/' . $campaign['id']); ?>" class="btn btn-default btn-sm"><?= _l('marketing_preview_campaign_button'); ?></a>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <?php if (!empty($preview_html)) { ?>
-                                            <div class="mtop15" style="border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;background:#f8fafc;">
+                                            <div class="marketing-campaign-preview-frame mtop15" data-marketing-campaign-preview-frame="1">
                                                 <iframe
-                                                    title="Email Design Preview"
+                                                    title="<?= html_escape(_l('marketing_campaign_preview_review_heading')); ?>"
                                                     sandbox=""
                                                     srcdoc="<?= html_escape($preview_html); ?>"
                                                     style="display:block;width:100%;min-height:720px;border:0;background:#ffffff;"
@@ -378,6 +475,20 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                 <div class="panel_s">
                                     <div class="panel-body">
                                         <h5 class="bold no-margin"><?= _l('marketing_delivery_analytics'); ?></h5>
+                                        <?php if (!$isWhatsappCampaign && !empty($emailTelemetryMessages)) { ?>
+                                            <div class="mtop15">
+                                                <?php foreach ($emailTelemetryMessages as $telemetryMessage) { ?>
+                                                    <div class="alert alert-<?= !empty($smtp_status['telemetry_ready']) ? 'info' : 'warning'; ?> mbot10">
+                                                        <?= html_escape($telemetryMessage); ?>
+                                                    </div>
+                                                <?php } ?>
+                                            </div>
+                                        <?php } ?>
+                                        <?php if ($awaitingSesTelemetry) { ?>
+                                            <div class="alert alert-warning mtop15 mbot15">
+                                                <?= _l('marketing_ses_tracking_pending_diagnostic'); ?>
+                                            </div>
+                                        <?php } ?>
                                         <table class="table table-striped table-borderless marketing-compact-table mtop15">
                                             <tbody>
                                                 <?php if ($isWhatsappCampaign) { ?>
@@ -400,7 +511,12 @@ $buildRecipientPageUrl = static function ($page, $statusFilter, $perPage) use ($
                                                 <?php } else { ?>
                                                 <tr>
                                                     <th><?= _l('marketing_accepted_sent'); ?></th>
-                                                    <td><?= (int) $event_summary['accepted_sent']; ?></td>
+                                                    <td>
+                                                        <?= (int) $event_summary['accepted_sent']; ?>
+                                                        <?php if ((int) ($event_summary['accepted_sent_events'] ?? 0) !== (int) $event_summary['accepted_sent']) { ?>
+                                                            <div class="text-muted small"><?= sprintf(_l('marketing_campaign_raw_sent_events_helper'), (int) $event_summary['accepted_sent_events']); ?></div>
+                                                        <?php } ?>
+                                                    </td>
                                                 </tr>
                                                 <tr>
                                                     <th><?= _l('marketing_campaign_delivered_recipients'); ?></th>

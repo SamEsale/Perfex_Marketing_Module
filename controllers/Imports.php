@@ -4,6 +4,8 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Imports extends AdminController
 {
+    const MAX_UPLOAD_SIZE_BYTES = 5242880;
+
     public function __construct()
     {
         parent::__construct();
@@ -35,12 +37,17 @@ class Imports extends AdminController
             redirect(admin_url('marketing/imports'));
         }
 
-        $data['title']       = _l('marketing_imports');
-        $data['imports']     = $this->marketing_imports_model->get_recent(10);
-        $data['can_import']  = staff_can('import', 'marketing');
-        $data['can_delete']  = staff_can('delete', 'marketing');
+        $selectedImportId = (int) $this->input->get('view_import_id');
+        $selectedImport = $selectedImportId > 0 ? $this->marketing_imports_model->get_import($selectedImportId) : null;
+
+        $data['title'] = _l('marketing_imports');
+        $data['imports'] = $this->marketing_imports_model->get_recent(25);
+        $data['can_import'] = staff_can('import', 'marketing');
+        $data['can_delete'] = staff_can('delete', 'marketing');
         $data['total_count'] = $this->marketing_imports_model->count_all();
-        $data['lists']       = $this->marketing_audiences_model->get_all_lists();
+        $data['lists'] = $this->marketing_audiences_model->get_all_lists();
+        $data['selected_import'] = $selectedImport;
+        $data['selected_failures'] = $selectedImport ? $this->marketing_imports_model->get_failures((int) $selectedImport['id'], 200) : [];
 
         $this->load->view('marketing/imports/index', $data);
     }
@@ -91,7 +98,7 @@ class Imports extends AdminController
         }
 
         $originalFilename = basename($_FILES['import_file']['name']);
-        $extension        = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
+        $extension = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
 
         if ($extension !== 'csv') {
             set_alert('danger', _l('marketing_import_file_invalid'));
@@ -100,7 +107,7 @@ class Imports extends AdminController
 
         $mimeType = null;
         if (function_exists('finfo_open')) {
-            $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
             $mimeType = finfo_file($finfo, $_FILES['import_file']['tmp_name']);
             finfo_close($finfo);
         } elseif (function_exists('mime_content_type')) {
@@ -120,12 +127,12 @@ class Imports extends AdminController
             redirect(admin_url('marketing/imports'));
         }
 
-        if ($_FILES['import_file']['size'] > (5 * 1024 * 1024)) {
+        if ((int) $_FILES['import_file']['size'] > self::MAX_UPLOAD_SIZE_BYTES) {
             set_alert('danger', _l('marketing_import_file_too_large'));
             redirect(admin_url('marketing/imports'));
         }
 
-        $uploadPath = FCPATH . 'uploads/marketing_imports/';
+        $uploadPath = $this->marketing_imports_model->get_storage_directory();
         if (!is_dir($uploadPath) && !mkdir($uploadPath, 0755, true)) {
             set_alert('danger', _l('marketing_import_file_move_failed'));
             redirect(admin_url('marketing/imports'));
@@ -139,205 +146,90 @@ class Imports extends AdminController
             redirect(admin_url('marketing/imports'));
         }
 
+        $inspection = $this->marketing_imports_model->inspect_csv_file($storedFilePath);
+        if (empty($inspection['ok'])) {
+            @unlink($storedFilePath);
+            set_alert('danger', !empty($inspection['error_summary']) ? $inspection['error_summary'] : _l('marketing_import_failed'));
+            redirect(admin_url('marketing/imports'));
+        }
+
         $importId = $this->marketing_imports_model->create_import([
-            'list_id'          => $listId,
-            'filename'         => $originalFilename,
+            'list_id' => $listId,
+            'filename' => $originalFilename,
             'stored_file_name' => $storedFileName,
-            'status'           => 'processing',
-            'total_rows'       => 0,
-            'imported_rows'    => 0,
-            'skipped_rows'     => 0,
-            'failed_rows'      => 0,
-            'mapping_json'     => null,
-            'error_log'        => null,
-            'uploaded_by'      => get_staff_user_id(),
-            'datecreated'      => date('Y-m-d H:i:s'),
+            'stored_file_path' => $storedFilePath,
+            'file_size_bytes' => (int) $_FILES['import_file']['size'],
+            'job_type' => Marketing_imports_model::JOB_TYPE_IMPORT,
+            'source_import_id' => null,
+            'status' => Marketing_imports_model::STATUS_QUEUED,
+            'total_rows' => (int) ($inspection['total_rows'] ?? 0),
+            'processed_rows' => 0,
+            'imported_rows' => 0,
+            'skipped_rows' => 0,
+            'failed_rows' => 0,
+            'current_offset' => 2,
+            'mapping_json' => !empty($inspection['mapping']) ? json_encode($inspection['mapping']) : null,
+            'error_log' => null,
+            'last_error_summary' => null,
+            'uploaded_by' => get_staff_user_id(),
+            'lease_token' => null,
+            'lease_started_at' => null,
+            'lease_heartbeat_at' => null,
+            'processing_started_at' => null,
+            'completed_at' => null,
         ]);
 
-        if (!$importId) {
+        if ($importId <= 0) {
+            @unlink($storedFilePath);
             set_alert('danger', _l('marketing_import_failed'));
             redirect(admin_url('marketing/imports'));
         }
 
-        $summary = $this->process_csv_import($storedFilePath, $listId);
+        set_alert('success', sprintf(_l('marketing_import_queued'), (int) ($inspection['total_rows'] ?? 0)));
 
-        $this->marketing_imports_model->update_import($importId, [
-            'total_rows'    => $summary['total_rows'],
-            'imported_rows' => $summary['imported_rows'],
-            'skipped_rows'  => $summary['skipped_rows'],
-            'failed_rows'   => $summary['failed_rows'],
-            'error_log'     => $summary['error_log'],
-            'status'        => $summary['status'],
-            'completed_at'  => date('Y-m-d H:i:s'),
-        ]);
+        redirect(admin_url('marketing/imports?view_import_id=' . $importId));
+    }
 
-        if ($summary['status'] === 'completed') {
-            set_alert('success', _l('marketing_import_success'));
+    public function retry($id)
+    {
+        if (staff_cant('import', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $result = $this->marketing_imports_model->queue_failed_rows_retry((int) $id, get_staff_user_id());
+
+        if (!empty($result['success'])) {
+            set_alert('success', sprintf(_l('marketing_import_retry_queued'), (int) ($result['row_count'] ?? 0)));
+            redirect(admin_url('marketing/imports?view_import_id=' . (int) ($result['import_id'] ?? 0)));
+        }
+
+        set_alert('warning', !empty($result['message']) ? $result['message'] : _l('marketing_import_retry_unavailable'));
+
+        redirect(admin_url('marketing/imports?view_import_id=' . (int) $id));
+    }
+
+    public function requeue($id)
+    {
+        if (staff_cant('import', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $result = $this->marketing_imports_model->requeue_failed_import((int) $id, get_staff_user_id());
+
+        if (!empty($result['success'])) {
+            set_alert('success', _l('marketing_import_requeued'));
         } else {
-            set_alert('warning', _l('marketing_import_failed'));
+            set_alert('warning', !empty($result['message']) ? $result['message'] : _l('marketing_import_requeue_unavailable'));
         }
 
-        redirect(admin_url('marketing/imports'));
-    }
-
-    protected function process_csv_import($filePath, $listId)
-    {
-        $summary = [
-            'total_rows'    => 0,
-            'imported_rows' => 0,
-            'skipped_rows'  => 0,
-            'failed_rows'   => 0,
-            'error_log'     => '',
-            'status'        => 'completed',
-        ];
-
-        if (!file_exists($filePath)) {
-            $summary['status']    = 'failed';
-            $summary['error_log'] = 'Import file not found.';
-            return $summary;
-        }
-
-        $handle = fopen($filePath, 'r');
-
-        if ($handle === false) {
-            $summary['status']    = 'failed';
-            $summary['error_log'] = 'Unable to open import file.';
-            return $summary;
-        }
-
-        $rawHeaders = fgetcsv($handle);
-
-        if ($rawHeaders === false) {
-            fclose($handle);
-            $summary['status']    = 'failed';
-            $summary['error_log'] = 'CSV file is empty or invalid.';
-            return $summary;
-        }
-
-        $headers = array_map([$this, 'normalize_csv_header'], $rawHeaders);
-
-        $aliases = [
-            'email' => ['email', 'e mail', 'email address', 'mail', 'contact email'],
-            'first_name' => ['first name', 'firstname', 'given name'],
-            'last_name' => ['last name', 'lastname', 'surname', 'family name'],
-            'full_name' => ['full name', 'name', 'contact name'],
-            'phone' => ['phone', 'phone number', 'mobile', 'telephone'],
-            'company' => ['company', 'company name', 'organization', 'business'],
-        ];
-
-        $headerIndex = [];
-
-        foreach ($headers as $index => $header) {
-            foreach ($aliases as $field => $acceptedHeaders) {
-                if (($header === $field || in_array($header, $acceptedHeaders, true)) && !isset($headerIndex[$field])) {
-                    $headerIndex[$field] = $index;
-                }
-            }
-        }
-
-        if (!isset($headerIndex['email'])) {
-            fclose($handle);
-            $summary['status']    = 'failed';
-            $summary['error_log'] = 'CSV must contain an email column. Accepted headers include: email, email address, e-mail.';
-            return $summary;
-        }
-
-        $rowNumber = 1;
-
-        while (($row = fgetcsv($handle)) !== false) {
-            $rowNumber++;
-
-            if ($this->csv_row_is_blank($row)) {
-                continue;
-            }
-
-            $summary['total_rows']++;
-
-            if (strlen(implode('', $row)) > 100000) {
-                $summary['skipped_rows']++;
-                $summary['error_log'] .= "Row {$rowNumber}: Row is too large.\n";
-                continue;
-            }
-
-            $email           = trim($this->csv_value($row, $headerIndex, 'email'));
-            $normalizedEmail = mb_strtolower($email);
-
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $summary['failed_rows']++;
-                $summary['error_log'] .= "Row {$rowNumber}: Invalid email.\n";
-                continue;
-            }
-
-            if ($this->marketing_audiences_model->is_contact_suppressed($normalizedEmail)) {
-                $summary['skipped_rows']++;
-                $summary['error_log'] .= "Row {$rowNumber}: Contact suppressed.\n";
-                continue;
-            }
-
-            $contactId = $this->marketing_audiences_model->upsert_contact([
-                'email'       => $email,
-                'first_name'  => $this->csv_value($row, $headerIndex, 'first_name'),
-                'last_name'   => $this->csv_value($row, $headerIndex, 'last_name'),
-                'full_name'   => $this->csv_value($row, $headerIndex, 'full_name'),
-                'phone'       => $this->csv_value($row, $headerIndex, 'phone'),
-                'company'     => $this->csv_value($row, $headerIndex, 'company'),
-                'source_type' => 'csv',
-            ]);
-
-            if (!$contactId) {
-                $summary['failed_rows']++;
-                $summary['error_log'] .= "Row {$rowNumber}: Failed to create or update contact.\n";
-                continue;
-            }
-
-            if (!$this->marketing_audiences_model->add_contact_to_list($listId, $contactId)) {
-                $summary['skipped_rows']++;
-                $summary['error_log'] .= "Row {$rowNumber}: Contact already exists in audience or could not be added.\n";
-                continue;
-            }
-
-            $summary['imported_rows']++;
-        }
-
-        fclose($handle);
-
-        if ($summary['failed_rows'] > 0) {
-            $summary['status'] = 'failed';
-        }
-
-        return $summary;
-    }
-
-    protected function normalize_csv_header($header)
-    {
-        $header = preg_replace('/^\xEF\xBB\xBF/', '', (string) $header);
-        $header = trim($header);
-        $header = mb_strtolower($header);
-        $header = str_replace(['_', '-'], ' ', $header);
-        $header = preg_replace('/\s+/', ' ', $header);
-
-        return trim($header);
-    }
-
-    protected function csv_row_is_blank($row)
-    {
-        foreach ($row as $cell) {
-            if (trim((string) $cell) !== '') {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    protected function csv_value($row, $headerIndex, $field)
-    {
-        if (!isset($headerIndex[$field])) {
-            return null;
-        }
-
-        $index = $headerIndex[$field];
-
-        return isset($row[$index]) ? trim($row[$index]) : null;
+        redirect(admin_url('marketing/imports?view_import_id=' . (int) $id));
     }
 }

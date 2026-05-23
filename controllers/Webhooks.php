@@ -25,206 +25,216 @@ class Webhooks extends CI_Controller
     public function ses_sns()
     {
         if ($this->input->method() !== 'post') {
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(405)
-                ->set_output(json_encode([
-                    'status'  => 'error',
-                    'message' => 'Method not allowed. POST required.',
-                ]));
-
-            return;
+            return $this->respondJson([
+                'status' => 'error',
+                'message' => 'Method not allowed. POST required.',
+            ], 405);
         }
 
-        $rawBody = trim(file_get_contents('php://input'));
-        if ($rawBody === '') {
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(400)
-                ->set_output(json_encode([
-                    'status'  => 'error',
-                    'message' => 'Empty request body.',
-                ]));
-
-            return;
+        $rawBody = (string) file_get_contents('php://input');
+        if (trim($rawBody) === '') {
+            return $this->respondJson([
+                'status' => 'error',
+                'message' => 'Empty request body.',
+            ], 400);
         }
 
         $body = json_decode($rawBody, true);
-        if ($body === null) {
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(400)
-                ->set_output(json_encode([
-                    'status'  => 'error',
-                    'message' => 'Invalid JSON payload.',
-                ]));
-
-            return;
+        if (!is_array($body)) {
+            return $this->respondJson([
+                'status' => 'error',
+                'message' => 'Invalid JSON payload.',
+            ], 400);
         }
 
         $headers = $this->getRequestHeaders();
-        $rawMessageType = $body['Type'] ?? $headers['x-amz-sns-message-type'] ?? null;
+        $rawMessageType = $this->scalarString($body['Type'] ?? null, $this->scalarString($headers['x-amz-sns-message-type'] ?? null, null));
         $messageType = $this->marketing_ses_sns->normalize_event_name($rawMessageType);
+        $snsMessageId = $this->scalarString($body['MessageId'] ?? null, 'n/a');
         $signatureValid = 0;
+        $signatureVerificationRequired = $this->shouldRequireSesSnsSignatureVerification();
+        $verificationOptions = $this->getSesSnsVerificationOptions();
 
-        log_message('info', 'Marketing SES/SNS webhook received: type=' . $messageType . ' sns_message_id=' . ($body['MessageId'] ?? 'n/a'));
+        log_message('info', 'Marketing SES/SNS webhook received: type=' . ($messageType !== '' ? $messageType : 'unknown') . ' sns_message_id=' . $snsMessageId);
 
-        if ($messageType === 'subscription_confirmation') {
-            $webhookLogId = $this->logWebhook([
-                'provider'        => 'ses_sns',
-                'event_type'      => 'subscription_confirmation',
-                'message_type'    => $rawMessageType,
-                'signature_valid' => $signatureValid,
-                'payload_json'    => $rawBody,
-                'headers_json'    => json_encode($headers),
-            ]);
+        if ($signatureVerificationRequired) {
+            $verification = $this->marketing_ses_sns->verify($rawBody, $headers, $verificationOptions);
+            $messageType = !empty($verification['type']) ? $verification['type'] : $messageType;
 
-            log_message('info', 'Marketing SES/SNS subscription confirmation received. Auto-confirmation is not implemented; confirm manually in AWS/SNS if needed. sns_message_id=' . ($body['MessageId'] ?? 'n/a'));
+            if (empty($verification['valid'])) {
+                $verificationError = $this->sanitizeWebhookError($verification['error'] ?? 'SNS signature verification failed.');
 
-            $this->updateWebhookLog($webhookLogId, [
-                'event_type'   => 'subscription_confirmation',
-                'processed'    => 1,
-                'processed_at' => date('Y-m-d H:i:s'),
-            ]);
+                log_message('warning', 'Marketing SES/SNS signature rejected: type=' . ($messageType !== '' ? $messageType : 'unknown') . ' sns_message_id=' . $snsMessageId . ' reason=' . $verificationError);
 
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(200)
-                ->set_output(json_encode([
-                    'status'  => 'ok',
-                    'message' => 'Subscription confirmation received. Manual confirmation is required or auto-confirmation is disabled.',
-                ]));
-
-            return;
-        }
-
-        if (get_option('marketing_ses_verify_signature') == 1) {
-            $verification = $this->marketing_ses_sns->verify($body, $headers);
-
-            if (!$verification['implemented']) {
-                $this->logWebhook([
-                    'provider'        => 'ses_sns',
-                    'event_type'      => null,
-                    'message_type'    => $messageType,
-                    'signature_valid' => 0,
-                    'payload_json'    => $rawBody,
-                    'headers_json'    => json_encode($headers),
-                    'processed'       => 0,
-                    'error_message'   => $verification['message'],
-                ]);
-
-                $this->output
-                    ->set_content_type('application/json')
-                    ->set_status_header(501)
-                    ->set_output(json_encode([
-                        'status'  => 'error',
-                    'message' => 'SES SNS signature verification is not implemented.',
-                ]));
-
-                return;
-            }
-
-            if (!$verification['valid']) {
                 $webhookLogId = $this->logWebhook([
-                    'provider'        => 'ses_sns',
-                    'event_type'      => null,
-                    'message_type'    => $messageType,
+                    'provider' => 'ses_sns',
+                    'event_type' => null,
+                    'message_type' => $rawMessageType,
                     'signature_valid' => 0,
-                    'payload_json'    => $rawBody,
-                    'headers_json'    => json_encode($headers),
-                    'processed'       => 1,
-                    'processed_at'    => date('Y-m-d H:i:s'),
-                    'error_message'   => $verification['message'],
+                    'payload_json' => $rawBody,
+                    'headers_json' => $this->safeJsonEncode($headers),
+                    'processed' => 1,
+                    'processed_at' => date('Y-m-d H:i:s'),
+                    'error_message' => $verificationError,
                 ]);
 
-                $this->output
-                    ->set_content_type('application/json')
-                    ->set_status_header(403)
-                    ->set_output(json_encode([
-                        'status'  => 'error',
-                        'message' => 'SNS signature verification failed.',
-                        'log_id'  => $webhookLogId,
-                    ]));
-
-                return;
+                return $this->respondJson([
+                    'status' => 'error',
+                    'message' => 'SNS signature verification failed.',
+                    'log_id' => $webhookLogId,
+                ], 403);
             }
 
             $signatureValid = 1;
         }
 
+        if ($messageType === 'subscription_confirmation') {
+            $webhookLogId = $this->logWebhook([
+                'provider' => 'ses_sns',
+                'event_type' => 'subscription_confirmation',
+                'message_type' => $rawMessageType,
+                'signature_valid' => $signatureValid,
+                'payload_json' => $rawBody,
+                'headers_json' => $this->safeJsonEncode($headers),
+            ]);
+
+            if ($signatureVerificationRequired) {
+                $confirmation = $this->marketing_ses_sns->confirm_subscription($body['SubscribeURL'] ?? '', $verificationOptions);
+                if (!empty($confirmation['success'])) {
+                    log_message('info', 'Marketing SES/SNS subscription confirmed: sns_message_id=' . $snsMessageId);
+
+                    $this->updateWebhookLog($webhookLogId, [
+                        'event_type' => 'subscription_confirmation',
+                        'processed' => 1,
+                        'processed_at' => date('Y-m-d H:i:s'),
+                    ]);
+
+                    return $this->respondJson([
+                        'status' => 'ok',
+                        'message' => 'Subscription confirmed.',
+                        'type' => 'subscription_confirmation',
+                    ], 200);
+                }
+
+                $confirmationError = $this->sanitizeWebhookError($confirmation['error'] ?? 'SNS subscription confirmation request failed.');
+
+                log_message('error', 'Marketing SES/SNS subscription confirmation failed: sns_message_id=' . $snsMessageId . ' reason=' . $confirmationError);
+
+                $this->updateWebhookLog($webhookLogId, [
+                    'event_type' => 'subscription_confirmation',
+                    'processed' => 1,
+                    'processed_at' => date('Y-m-d H:i:s'),
+                    'error_message' => $confirmationError,
+                ]);
+
+                return $this->respondJson([
+                    'status' => 'error',
+                    'message' => 'Subscription confirmation request failed.',
+                ], 502);
+            }
+
+            log_message('info', 'Marketing SES/SNS subscription confirmation received without signature verification. Manual confirmation is required. sns_message_id=' . $snsMessageId);
+
+            $this->updateWebhookLog($webhookLogId, [
+                'event_type' => 'subscription_confirmation',
+                'processed' => 1,
+                'processed_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            return $this->respondJson([
+                'status' => 'ok',
+                'message' => 'Subscription confirmation received. Manual confirmation is required or signature verification is disabled.',
+                'type' => 'subscription_confirmation',
+            ], 200);
+        }
+
+        if ($messageType === 'unsubscribe_confirmation') {
+            $webhookLogId = $this->logWebhook([
+                'provider' => 'ses_sns',
+                'event_type' => 'unsubscribe_confirmation',
+                'message_type' => $rawMessageType,
+                'signature_valid' => $signatureValid,
+                'payload_json' => $rawBody,
+                'headers_json' => $this->safeJsonEncode($headers),
+            ]);
+
+            log_message('info', 'Marketing SES/SNS unsubscribe confirmation received: sns_message_id=' . $snsMessageId);
+
+            $this->updateWebhookLog($webhookLogId, [
+                'event_type' => 'unsubscribe_confirmation',
+                'processed' => 1,
+                'processed_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            return $this->respondJson([
+                'status' => 'ok',
+                'message' => 'Unsubscribe confirmation received.',
+                'type' => 'unsubscribe_confirmation',
+            ], 200);
+        }
+
         $webhookLogId = $this->logWebhook([
-            'provider'        => 'ses_sns',
-            'event_type'      => null,
-            'message_type'    => $rawMessageType,
+            'provider' => 'ses_sns',
+            'event_type' => null,
+            'message_type' => $rawMessageType,
             'signature_valid' => $signatureValid,
-            'payload_json'    => $rawBody,
-            'headers_json'    => json_encode($headers),
+            'payload_json' => $rawBody,
+            'headers_json' => $this->safeJsonEncode($headers),
         ]);
 
         if ($messageType !== 'notification') {
             $this->updateWebhookLog($webhookLogId, [
-                'processed'     => 1,
-                'processed_at'  => date('Y-m-d H:i:s'),
+                'processed' => 1,
+                'processed_at' => date('Y-m-d H:i:s'),
                 'error_message' => 'Unsupported SNS message type.',
             ]);
 
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(400)
-                ->set_output(json_encode([
-                    'status'  => 'error',
-                    'message' => 'Unsupported SNS message type.',
-                ]));
-
-            return;
+            return $this->respondJson([
+                'status' => 'error',
+                'message' => 'Unsupported SNS message type.',
+            ], 400);
         }
 
-        $message = json_decode($body['Message'] ?? '', true);
-        if ($message === null) {
+        $message = json_decode($this->scalarString($body['Message'] ?? '', ''), true);
+        if (!is_array($message)) {
             $this->updateWebhookLog($webhookLogId, [
-                'processed'     => 1,
-                'processed_at'  => date('Y-m-d H:i:s'),
+                'processed' => 1,
+                'processed_at' => date('Y-m-d H:i:s'),
                 'error_message' => 'Invalid Message payload.',
             ]);
 
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(400)
-                ->set_output(json_encode([
-                    'status'  => 'error',
-                    'message' => 'Invalid Message payload.',
-                ]));
-
-            return;
+            return $this->respondJson([
+                'status' => 'error',
+                'message' => 'Invalid Message payload.',
+            ], 400);
         }
 
         $event = $this->parseSesNotification($message);
         if ($event === null) {
             $this->updateWebhookLog($webhookLogId, [
-                'processed'     => 1,
-                'processed_at'  => date('Y-m-d H:i:s'),
+                'processed' => 1,
+                'processed_at' => date('Y-m-d H:i:s'),
                 'error_message' => 'Unrecognized SES notification.',
             ]);
 
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(400)
-                ->set_output(json_encode([
-                    'status'  => 'error',
-                    'message' => 'Unrecognized SES notification.',
-                ]));
-
-            return;
+            return $this->respondJson([
+                'status' => 'error',
+                'message' => 'Unrecognized SES notification.',
+            ], 400);
         }
 
-        log_message('info', 'Marketing SES/SNS event normalized: raw=' . ($message['notificationType'] ?? 'n/a') . ' normalized=' . ($event['event_type'] ?? 'n/a') . ' email=' . ($event['email'] ?? 'n/a'));
+        log_message(
+            'info',
+            'Marketing SES/SNS event normalized: raw=' . ($message['notificationType'] ?? ($message['eventType'] ?? 'n/a'))
+            . ' normalized=' . ($event['event_type'] ?? 'n/a')
+        );
 
         $message['_sns_message_id'] = $body['MessageId'] ?? null;
         $event['sns_message_id'] = $body['MessageId'] ?? null;
         $event['payload_json'] = $this->safeJsonEncode($message);
         $event['event_at'] = $event['event_at'] ?? date('Y-m-d H:i:s');
 
-        $dedupeCriteria = [
+        $dedupeCriteria = $this->marketing_events_model->build_event_dedupe_criteria([
             'provider' => 'ses_sns',
             'event_type' => $event['event_type'],
             'provider_message_id' => $event['provider_message_id'] ?? null,
@@ -233,96 +243,196 @@ class Webhooks extends CI_Controller
             'url' => $event['url'] ?? null,
             'event_at' => $event['event_at'] ?? null,
             'sns_message_id' => $event['sns_message_id'] ?? null,
-        ];
+        ]);
 
-        if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
-            log_message('info', 'Marketing SES/SNS duplicate event skipped: type=' . $event['event_type'] . ' email=' . ($event['email'] ?? 'n/a') . ' sns_message_id=' . ($event['sns_message_id'] ?? 'n/a'));
-            $this->updateWebhookLog($webhookLogId, [
-                'event_type'   => $event['event_type'],
-                'processed'    => 1,
-                'processed_at' => date('Y-m-d H:i:s'),
-                'error_message' => 'Duplicate SES/SNS event skipped.',
+        $eventLockKey = '';
+        if ($this->hasStableDedupeCriteria($dedupeCriteria)) {
+            $eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);
+            if (!empty($eventLock['acquired'])) {
+                $eventLockKey = (string) ($eventLock['lock_key'] ?? '');
+            } else {
+                log_message(
+                    'warning',
+                    'Marketing SES/SNS event lock unavailable; continuing with best-effort dedupe. type=' . $event['event_type']
+                    . ' sns_message_id=' . ($event['sns_message_id'] ?? 'n/a')
+                );
+            }
+        }
+
+        try {
+            if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
+                log_message('info', 'Marketing SES/SNS duplicate event skipped: type=' . $event['event_type'] . ' sns_message_id=' . ($event['sns_message_id'] ?? 'n/a'));
+                $this->updateWebhookLog($webhookLogId, [
+                    'event_type' => $event['event_type'],
+                    'processed' => 1,
+                    'processed_at' => date('Y-m-d H:i:s'),
+                    'error_message' => 'Duplicate SES/SNS event skipped.',
+                ]);
+
+                return $this->respondJson([
+                    'status' => 'ok',
+                    'message' => 'Duplicate event skipped.',
+                    'event' => $event['event_type'],
+                ], 200);
+            }
+
+            if (!$this->hasStableDedupeCriteria($dedupeCriteria)) {
+                log_message('warning', 'Marketing SES/SNS event missing stable dedupe fields; inserting with best effort. type=' . $event['event_type']);
+            }
+
+            $recipient = $this->marketing_campaigns_model->find_recipient_for_event(
+                $event['provider_message_id'] ?? null,
+                $event['message_id'] ?? null,
+                $event['email'] ?? null,
+                [
+                    'campaign_id' => $event['campaign_id'] ?? null,
+                    'recipient_id' => $event['recipient_id'] ?? null,
+                    'correlation_id' => $event['correlation_id'] ?? null,
+                    'header_message_id' => $event['header_message_id'] ?? null,
+                    'outbound_attempt_token' => $event['outbound_attempt_token'] ?? null,
+                    'prefer_campaign_email' => ($event['event_type'] ?? '') === 'delivered',
+                ]
+            );
+
+            $campaignId = !empty($event['campaign_id']) ? (int) $event['campaign_id'] : null;
+            $recipientId = !empty($event['recipient_id']) ? (int) $event['recipient_id'] : null;
+            $contactId = null;
+            $reconciliation = [
+                'matched' => false,
+                'mutated' => false,
+                'skipped' => false,
+                'reason' => 'recipient_not_found',
+            ];
+
+            if ($recipient) {
+                $recipientId = $recipient['id'];
+                $campaignId = $recipient['campaign_id'];
+                $contactId = $recipient['marketing_contact_id'];
+
+                $reconciliation = $this->marketing_campaigns_model->apply_recipient_event($recipientId, array_merge($event, [
+                    'provider' => 'ses_sns',
+                ]));
+                log_message(
+                    !empty($reconciliation['mutated']) ? 'info' : 'warning',
+                    'Marketing SES/SNS recipient reconciliation: recipient_id=' . $recipientId
+                    . ' campaign_id=' . $campaignId
+                    . ' event=' . $event['event_type']
+                    . ' mutated=' . (!empty($reconciliation['mutated']) ? '1' : '0')
+                    . ' reason=' . ($reconciliation['reason'] ?? 'none')
+                );
+            } else {
+                $contact = $this->findContactByEmail($event['email'] ?? null);
+                if ($contact) {
+                    $contactId = $contact['id'];
+                }
+
+                log_message(
+                    'warning',
+                    'Marketing SES/SNS event could not be correlated to a recipient: event=' . $event['event_type']
+                    . ' campaign_id=' . (int) ($campaignId ?? 0)
+                    . ' recipient_id=' . (int) ($recipientId ?? 0)
+                    . ' provider_message_id=' . ($event['provider_message_id'] ?? 'n/a')
+                    . ' correlation_id=' . ($event['correlation_id'] ?? 'n/a')
+                    . ' config_set=' . ($event['configuration_set'] ?? 'n/a')
+                );
+            }
+
+            $message['_recipient_reconciliation'] = [
+                'matched' => !empty($reconciliation['matched']),
+                'mutated' => !empty($reconciliation['mutated']),
+                'skipped' => !empty($reconciliation['skipped']),
+                'reason' => $reconciliation['reason'] ?? null,
+                'recipient_id' => $recipientId,
+                'campaign_id' => $campaignId,
+                'outbound_attempt_token' => $event['outbound_attempt_token'] ?? null,
+            ];
+            $message['_failure_metrics'] = [
+                'normalized_failure_code' => $this->marketing_campaigns_model->normalize_provider_failure_metric_code([
+                    'event_type' => $event['event_type'] ?? null,
+                    'reconciliation_skipped' => !empty($reconciliation['skipped']),
+                    'normalized_failure_code' => $reconciliation['normalized_failure_code'] ?? null,
+                ]),
+                'reconciliation_skipped' => !empty($reconciliation['skipped']),
+                'reconciliation_reason' => $reconciliation['reason'] ?? null,
+            ];
+            $event['payload_json'] = $this->safeJsonEncode($message);
+
+            if (in_array($event['event_type'], ['bounce', 'complaint'], true) && !empty($event['email'])) {
+                $suppressionId = $this->marketing_suppressions_model->upsert_suppression(
+                    $event['email'],
+                    $event['event_type'],
+                    $event['provider_message_id'] ?? null,
+                    'ses_sns'
+                );
+                if ($suppressionId) {
+                    log_message('info', 'Marketing SES/SNS suppression created or updated: suppression_id=' . $suppressionId . ' reason=' . $event['event_type']);
+                }
+            }
+
+            $storeResult = $this->marketing_events_model->add_event_idempotent([
+                'campaign_id' => $campaignId,
+                'campaign_recipient_id' => $recipientId,
+                'marketing_contact_id' => $contactId,
+                'event_type' => $event['event_type'],
+                'provider' => 'ses_sns',
+                'provider_event_id' => $event['provider_event_id'] ?? null,
+                'provider_message_id' => $event['provider_message_id'] ?? null,
+                'sns_message_id' => $event['sns_message_id'] ?? null,
+                'email' => $event['email'] ?? null,
+                'url' => $event['url'] ?? null,
+                'payload_json' => $event['payload_json'] ?? null,
+                'event_at' => $event['event_at'],
             ]);
 
-            $this->output
-                ->set_content_type('application/json')
-                ->set_status_header(200)
-                ->set_output(json_encode([
-                    'status'  => 'ok',
+            if (!empty($storeResult['duplicate'])) {
+                log_message('info', 'Marketing SES/SNS duplicate event skipped: type=' . $event['event_type'] . ' sns_message_id=' . ($event['sns_message_id'] ?? 'n/a'));
+                $this->updateWebhookLog($webhookLogId, [
+                    'event_type' => $event['event_type'],
+                    'processed' => 1,
+                    'processed_at' => date('Y-m-d H:i:s'),
+                    'error_message' => 'Duplicate SES/SNS event skipped.',
+                ]);
+
+                return $this->respondJson([
+                    'status' => 'ok',
                     'message' => 'Duplicate event skipped.',
-                    'event'   => $event['event_type'],
-                ]));
-
-            return;
-        }
-
-        if (!$this->hasStableDedupeCriteria($dedupeCriteria)) {
-            log_message('warning', 'Marketing SES/SNS event missing stable dedupe fields; inserting with best effort. type=' . $event['event_type'] . ' email=' . ($event['email'] ?? 'n/a'));
-        }
-
-        $recipient = $this->marketing_campaigns_model->find_recipient_for_event(
-            $event['provider_message_id'] ?? null,
-            $event['message_id'] ?? null,
-            $event['email'] ?? null
-        );
-
-        $campaignId = null;
-        $recipientId = null;
-        $contactId = null;
-
-        if ($recipient) {
-            $recipientId = $recipient['id'];
-            $campaignId = $recipient['campaign_id'];
-            $contactId = $recipient['marketing_contact_id'];
-            $this->marketing_campaigns_model->apply_recipient_event($recipientId, $event);
-            log_message('info', 'Marketing SES/SNS recipient updated: recipient_id=' . $recipientId . ' campaign_id=' . $campaignId . ' event=' . $event['event_type']);
-        } else {
-            $contact = $this->findContactByEmail($event['email'] ?? null);
-            if ($contact) {
-                $contactId = $contact['id'];
+                    'event' => $event['event_type'],
+                ], 200);
             }
-        }
 
-        if (in_array($event['event_type'], ['bounce', 'complaint'], true) && !empty($event['email'])) {
-            $suppressionId = $this->marketing_suppressions_model->upsert_suppression(
-                $event['email'],
-                $event['event_type'],
-                $event['provider_message_id'] ?? null,
-                'ses_sns'
-            );
-            if ($suppressionId) {
-                log_message('info', 'Marketing SES/SNS suppression created or updated: suppression_id=' . $suppressionId . ' reason=' . $event['event_type'] . ' email=' . $event['email']);
+            if (empty($storeResult['success'])) {
+                $storeError = $this->sanitizeWebhookError($storeResult['error'] ?? 'SES/SNS event storage failed.');
+                log_message('error', 'Marketing SES/SNS event storage failed after processing: type=' . $event['event_type'] . ' sns_message_id=' . ($event['sns_message_id'] ?? 'n/a') . ' reason=' . $storeError);
+                $this->updateWebhookLog($webhookLogId, [
+                    'event_type' => $event['event_type'],
+                    'processed' => 1,
+                    'processed_at' => date('Y-m-d H:i:s'),
+                    'error_message' => $storeError,
+                ]);
+
+                return $this->respondJson([
+                    'status' => 'ok',
+                    'message' => 'Notification processed.',
+                    'event' => $event['event_type'],
+                ], 200);
             }
-        }
 
-        $this->marketing_events_model->add_event([
-            'campaign_id'           => $campaignId,
-            'campaign_recipient_id' => $recipientId,
-            'marketing_contact_id'  => $contactId,
-            'event_type'            => $event['event_type'],
-            'provider'              => 'ses_sns',
-            'provider_event_id'     => $event['provider_event_id'] ?? null,
-            'provider_message_id'   => $event['provider_message_id'] ?? null,
-            'email'                 => $event['email'] ?? null,
-            'url'                   => $event['url'] ?? null,
-            'payload_json'          => $event['payload_json'] ?? null,
-            'event_at'              => $event['event_at'],
-        ]);
+            $this->updateWebhookLog($webhookLogId, [
+                'event_type' => $event['event_type'],
+                'processed' => 1,
+                'processed_at' => date('Y-m-d H:i:s'),
+            ]);
 
-        $this->updateWebhookLog($webhookLogId, [
-            'event_type'   => $event['event_type'],
-            'processed'    => 1,
-            'processed_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        $this->output
-            ->set_content_type('application/json')
-            ->set_status_header(200)
-            ->set_output(json_encode([
-                'status'  => 'ok',
+            return $this->respondJson([
+                'status' => 'ok',
                 'message' => 'Notification processed.',
-                'event'   => $event['event_type'],
-            ]));
+                'event' => $event['event_type'],
+            ], 200);
+        } finally {
+            if ($eventLockKey !== '') {
+                $this->marketing_events_model->release_event_lock($eventLockKey);
+            }
+        }
     }
 
     public function whatsapp()
@@ -359,21 +469,38 @@ class Webhooks extends CI_Controller
             ], 405);
         }
 
-        $rawBody = trim(file_get_contents('php://input'));
+        $rawBody = (string) file_get_contents('php://input');
         $headers = $this->getRequestHeaders();
-        $payload = $rawBody !== '' ? json_decode($rawBody, true) : null;
+        $trimmedRawBody = trim($rawBody);
+        $payload = $trimmedRawBody !== '' ? json_decode($rawBody, true) : null;
         $webhookLogId = $this->logWebhook([
             'provider' => 'whatsapp_business',
             'event_type' => 'whatsapp_webhook',
             'message_type' => 'notification',
             'signature_valid' => 0,
-            'payload_json' => $rawBody !== '' ? $rawBody : json_encode([]),
+            'payload_json' => $trimmedRawBody !== '' ? $rawBody : json_encode([]),
             'headers_json' => json_encode($headers),
         ]);
+
+        $signatureVerification = $this->marketing_whatsapp->verify_post_signature($rawBody, $headers);
+        if (empty($signatureVerification['accepted'])) {
+            $this->updateWebhookLog($webhookLogId, [
+                'processed' => 1,
+                'signature_valid' => 0,
+                'error_message' => 'WhatsApp POST signature verification failed.',
+            ]);
+
+            return $this->respondJson([
+                'success' => false,
+                'status' => 'error',
+                'message' => $signatureVerification['message'] ?? 'WhatsApp webhook signature verification failed.',
+            ], 401);
+        }
 
         if (!is_array($payload)) {
             $this->updateWebhookLog($webhookLogId, [
                 'processed' => 1,
+                'signature_valid' => !empty($signatureVerification['authenticated']) ? 1 : 0,
                 'error_message' => 'Invalid WhatsApp webhook payload.',
             ]);
 
@@ -389,6 +516,7 @@ class Webhooks extends CI_Controller
         if (empty($parsed['valid'])) {
             $this->updateWebhookLog($webhookLogId, [
                 'processed' => 1,
+                'signature_valid' => !empty($signatureVerification['authenticated']) ? 1 : 0,
                 'error_message' => 'WhatsApp webhook payload was not recognized.',
             ]);
 
@@ -417,6 +545,7 @@ class Webhooks extends CI_Controller
         $this->updateWebhookLog($webhookLogId, [
             'processed' => 1,
             'event_type' => 'whatsapp_webhook',
+            'signature_valid' => !empty($signatureVerification['authenticated']) ? 1 : 0,
         ]);
 
         return $this->respondJson([
@@ -425,6 +554,8 @@ class Webhooks extends CI_Controller
             'message' => 'WhatsApp webhook processed.',
             'messages_processed' => $processedMessages,
             'statuses_processed' => $processedStatuses,
+            'authenticated' => !empty($signatureVerification['authenticated']),
+            'warning' => $signatureVerification['warning'] ?? null,
         ], 200);
     }
 
@@ -447,222 +578,88 @@ class Webhooks extends CI_Controller
             ], 400);
         }
 
-        $senderEmail = $this->normalizeEmail($payload['sender_email'] ?? $payload['from'] ?? '');
-        $subject = $this->sanitizeInboundSubject($payload['subject'] ?? '');
-        $bodyHtml = $this->sanitizeInboundHtml($payload['body_html'] ?? $payload['html'] ?? '');
-        $bodyText = $this->sanitizeInboundText($payload['body_text'] ?? $payload['text'] ?? $bodyHtml);
-        $headers = is_array($payload['headers'] ?? null) ? $payload['headers'] : [];
-        $rawBody = (string) ($payload['_raw_body'] ?? '');
-        $providerMessageId = trim((string) ($payload['message_id'] ?? $payload['provider_message_id'] ?? ''));
-        $receivedAt = date('Y-m-d H:i:s');
+        $headers = $this->getRequestHeaders();
+        $authentication = $this->validateInboundEmailAuthentication($payload, $headers);
+        if (empty($authentication['accepted'])) {
+            log_message('warning', 'Marketing inbound email rejected due to authentication failure.');
 
-        if ($senderEmail === '' || ($bodyText === '' && $bodyHtml === '')) {
             return $this->respondJson([
                 'success' => false,
                 'status' => 'error',
-                'message' => 'Sender email and message body are required.',
-            ], 400);
+                'message' => 'Inbound email authentication failed.',
+            ], 401);
         }
 
-        log_message('info', 'Marketing inbound email received: sender=' . $senderEmail . ' subject=' . ($subject !== '' ? mb_substr($subject, 0, 120) : 'n/a'));
-
-        $replyMatch = $this->extractReplyTrackingIdentifier($subject, $bodyHtml, $bodyText, $headers, $rawBody);
-        $recipient = null;
-        $campaignId = null;
-        $contactId = null;
-        $matchMode = 'fallback_email';
-        $warning = null;
-        $campaign = null;
-
-        if ($replyMatch !== null) {
-            log_message('info', 'Marketing inbound email reply_id parsed: campaign_id=' . (int) $replyMatch['campaign_id'] . ' recipient_id=' . (int) $replyMatch['recipient_id']);
-            $candidateRecipient = $this->marketing_campaigns_model->get_recipient_by_id((int) $replyMatch['recipient_id']);
-            if ($candidateRecipient
-                && (int) $candidateRecipient['campaign_id'] === (int) $replyMatch['campaign_id']) {
-                $recipient = $candidateRecipient;
-                $campaignId = (int) $replyMatch['campaign_id'];
-                $contactId = (int) $candidateRecipient['marketing_contact_id'];
-                $matchMode = 'reply_id';
-                log_message('info', 'Marketing inbound email matched by reply_id: campaign_id=' . $campaignId . ' recipient_id=' . (int) $recipient['id']);
-            } else {
-                $warning = 'reply_id_not_matched';
-                log_message('warning', 'Marketing inbound email reply_id did not resolve to a valid campaign recipient: campaign_id=' . (int) $replyMatch['campaign_id'] . ' recipient_id=' . (int) $replyMatch['recipient_id']);
-            }
+        log_message('info', 'Marketing inbound email received.');
+        if (!empty($authentication['warning'])) {
+            log_message('warning', 'Marketing inbound email accepted in compatibility mode: warning=' . $authentication['warning']);
         }
 
-        if ($recipient === null) {
-            $recipient = $this->findLatestRecipientByEmail($senderEmail);
-            if ($recipient) {
-                $campaignId = (int) $recipient['campaign_id'];
-                $contactId = (int) $recipient['marketing_contact_id'];
-                log_message('info', 'Marketing inbound email matched by sender fallback: campaign_id=' . $campaignId . ' recipient_id=' . (int) $recipient['id']);
-            }
-        }
-
-        $contact = $this->findContactByEmail($senderEmail);
-        $senderWasExistingMarketingContact = !empty($contact);
-        if ($contact) {
-            $contactId = (int) $contact['id'];
-        } elseif ($contactId <= 0) {
-            $createdContactId = $this->marketing_audiences_model->upsert_contact([
-                'email' => $senderEmail,
-                'full_name' => trim((string) ($payload['sender_name'] ?? '')),
-                'status' => 'active',
-                'consent_status' => 'unknown',
-                'source_type' => 'reply',
-            ]);
-            if ($createdContactId) {
-                $contactId = (int) $createdContactId;
-                log_message('info', 'Marketing inbound unknown sender created as contact: contact_id=' . $contactId . ' email=' . $senderEmail);
-            }
-        }
-
-        $conversation = null;
-        $messageId = 0;
-        if ($this->marketing_conversations_model->tables_available()) {
-            $conversation = $this->marketing_conversations_model->find_or_create_conversation([
-                'campaign_id' => $campaignId,
-                'marketing_contact_id' => $contactId,
-                'email' => $senderEmail,
-                'subject' => $subject,
-                'last_message_at' => $receivedAt,
-                'status' => 'open',
-                'source_type' => 'email_reply',
-            ]);
-
-            if ($conversation) {
-                $messageId = (int) $this->marketing_conversations_model->add_message([
-                    'conversation_id' => (int) $conversation['id'],
-                    'campaign_id' => $campaignId,
-                    'marketing_contact_id' => $contactId,
-                    'direction' => 'inbound',
-                    'email' => $senderEmail,
-                    'subject' => $subject,
-                    'message' => $bodyText !== '' ? $bodyText : strip_tags($bodyHtml),
-                    'body_text' => $bodyText,
-                    'body_html' => $bodyHtml !== '' ? $bodyHtml : null,
-                    'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-                    'datecreated' => $receivedAt,
-                ]);
-                log_message('info', 'Marketing conversation stored for inbound email: conversation_id=' . (int) $conversation['id'] . ' message_id=' . $messageId);
-            }
-        } else {
-            log_message('warning', 'Marketing inbound email could not create conversation because conversation tables are unavailable.');
-        }
-
-        if ($campaignId > 0) {
-            $campaign = $this->marketing_campaigns_model->get($campaignId);
-        }
-
-        $leadResult = [
-            'lead_id' => null,
-            'lead_status' => 'not_converted',
-            'lead_action' => 'disabled',
-            'event_type' => 'reply_lead_skipped',
-            'lead_error' => null,
-        ];
-
-        try {
-            $leadResult = $this->marketing_reply_leads_model->convert_reply_to_lead([
-                'email' => $senderEmail,
-                'sender_name' => trim((string) ($payload['sender_name'] ?? '')),
-                'subject' => $subject,
-                'preview' => $bodyText !== '' ? $bodyText : strip_tags($bodyHtml),
-                'campaign_id' => $campaignId,
-                'campaign_name' => $campaign['name'] ?? '',
-                'conversation_id' => $conversation['id'] ?? null,
-                'message_id' => $messageId ?: null,
-                'existing_marketing_contact' => $senderWasExistingMarketingContact,
-            ]);
-        } catch (Throwable $e) {
-            $safeLeadError = mb_substr(preg_replace('/\s+/', ' ', trim(strip_tags((string) $e->getMessage()))), 0, 200);
-            log_message('error', 'Marketing reply-to-lead failed safely: email=' . $senderEmail . ' message=' . $safeLeadError);
-            $leadResult = [
-                'lead_id' => null,
-                'lead_status' => 'failed',
-                'lead_action' => 'failed',
-                'event_type' => 'reply_lead_failed',
-                'lead_error' => 'Native Perfex lead creation failed.',
-            ];
-        }
-
-        if (!empty($leadResult['event_type'])) {
-            $this->marketing_events_model->add_event([
-                'campaign_id' => $campaignId,
-                'campaign_recipient_id' => $recipient ? (int) $recipient['id'] : null,
-                'marketing_contact_id' => $contactId ?: null,
-                'event_type' => $leadResult['event_type'],
-                'provider' => 'inbound_email',
-                'email' => $senderEmail,
-                'event_at' => $receivedAt,
-                'payload_json' => json_encode([
-                    'lead_id' => $leadResult['lead_id'] ?? null,
-                    'lead_status' => $leadResult['lead_status'] ?? null,
-                    'lead_action' => $leadResult['lead_action'] ?? null,
-                    'lead_error' => $leadResult['lead_error'] ?? null,
-                    'conversation_id' => $conversation['id'] ?? null,
-                    'message_id' => $messageId ?: null,
-                    'subject' => $subject,
-                ]),
-            ]);
-        }
-
-        $this->marketing_events_model->add_event([
-            'campaign_id' => $campaignId,
-            'campaign_recipient_id' => $recipient ? (int) $recipient['id'] : null,
-            'marketing_contact_id' => $contactId ?: null,
-            'event_type' => 'reply',
-            'provider' => 'inbound_email',
-            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-            'email' => $senderEmail,
-            'event_at' => $receivedAt,
-            'payload_json' => json_encode([
-                'match_mode' => $matchMode,
-                'conversation_id' => $conversation['id'] ?? null,
-                'message_id' => $messageId ?: null,
-                'subject' => $subject,
-            ]),
+        $this->load->library('marketing/Marketing_inbound_replies');
+        $result = $this->marketing_inbound_replies->process($payload, [
+            'headers' => $headers,
+            'raw_body' => $payload['_raw_body'] ?? '',
+            'source_provider' => 'inbound_email',
+            'event_provider' => 'inbound_email',
+            'authenticated' => !empty($authentication['authenticated']),
+            'lead_conversion_allowed' => !empty($authentication['lead_conversion_allowed']),
+            'authentication_warning' => $authentication['warning'] ?? null,
         ]);
 
-        return $this->respondJson([
-            'success' => true,
-            'status' => 'ok',
-            'message' => 'Inbound email processed.',
-            'campaign_id' => $campaignId,
-            'contact_id' => $contactId ?: null,
-            'conversation_id' => $conversation['id'] ?? null,
-            'match_mode' => $matchMode,
-            'matched_by' => $matchMode,
-            'warning' => $warning,
-            'lead_id' => $leadResult['lead_id'] ?? null,
-            'lead_status' => $leadResult['lead_status'] ?? null,
-            'lead_action' => $leadResult['lead_action'] ?? null,
-            'lead_error' => $leadResult['lead_error'] ?? null,
-        ], 200);
+        $statusCode = !empty($result['success']) ? 200 : 400;
+        if (($result['status'] ?? '') === 'processing') {
+            $statusCode = 202;
+        } elseif (($result['status'] ?? '') === 'invalid') {
+            $statusCode = 400;
+        }
+
+        return $this->respondJson($result, $statusCode);
     }
 
     protected function parseSesNotification(array $message)
     {
         $mail = $message['mail'] ?? [];
+        $mailMetadata = $this->extractSesMailMetadata($mail);
+        $rawType = $this->scalarString($message['notificationType'] ?? ($message['eventType'] ?? null), '');
+        $normalizedType = $this->normalizeSesNotificationType($rawType);
+        if ($normalizedType === '') {
+            return null;
+        }
+
         $event = [
             'event_type'          => 'failed',
-            'message_id'          => $mail['messageId'] ?? null,
-            'provider_message_id' => $mail['messageId'] ?? null,
+            'message_id'          => $mailMetadata['correlation_message_id'] ?? ($mailMetadata['header_message_id'] ?? null),
+            'provider_message_id' => $mailMetadata['provider_message_id'] ?? null,
+            'header_message_id'   => $mailMetadata['header_message_id'] ?? null,
+            'correlation_id'      => $mailMetadata['correlation_message_id'] ?? null,
+            'outbound_attempt_token' => $mailMetadata['outbound_attempt_token'] ?? null,
+            'campaign_id'         => $mailMetadata['campaign_id'] ?? null,
+            'recipient_id'        => $mailMetadata['recipient_id'] ?? null,
+            'configuration_set'   => $mailMetadata['configuration_set'] ?? null,
             'email'               => null,
             'provider_event_id'   => null,
             'url'                 => null,
-            'event_at'            => isset($mail['timestamp']) ? date('Y-m-d H:i:s', strtotime($mail['timestamp'])) : null,
+            'event_at'            => $this->extractSesEventTimestamp($message, $mail, $normalizedType),
         ];
 
         if (!empty($mail['destination']) && is_array($mail['destination'])) {
             $event['email'] = $mail['destination'][0];
         }
 
-        $type = $message['notificationType'] ?? null;
-        $normalizedType = $this->marketing_ses_sns->normalize_event_name($type);
         switch ($normalizedType) {
+            case 'provider_send':
+                $event['event_type'] = 'provider_send';
+                $send = is_array($message['send'] ?? null) ? $message['send'] : [];
+                if (!empty($send['recipients'][0])) {
+                    $event['email'] = $send['recipients'][0];
+                }
+                break;
             case 'delivered':
                 $event['event_type'] = 'delivered';
+                $delivery = is_array($message['delivery'] ?? null) ? $message['delivery'] : [];
+                if (!empty($delivery['recipients'][0])) {
+                    $event['email'] = $delivery['recipients'][0];
+                }
                 break;
             case 'bounce':
                 $event['event_type'] = 'bounce';
@@ -692,10 +689,34 @@ class Webhooks extends CI_Controller
                 $event['url'] = $click['link'] ?? $click['url'] ?? null;
                 break;
             case 'rejected':
-            case 'rendering_failure':
+                $event['event_type'] = 'rejected';
+                $reject = is_array($message['reject'] ?? null) ? $message['reject'] : [];
+                if (!empty($reject['recipient'])) {
+                    $event['email'] = $reject['recipient'];
+                }
+                break;
+            case 'rendering_failed':
+                $event['event_type'] = 'rendering_failed';
+                $failure = is_array($message['failure'] ?? null) ? $message['failure'] : [];
+                if (!empty($failure['recipient'])) {
+                    $event['email'] = $failure['recipient'];
+                }
+                break;
             case 'delivery_delay':
-                $event['event_type'] = $normalizedType;
-                $event['provider_event_id'] = isset($message[$type]) ? $message[$type] : ($message[str_replace('_', '', $type)] ?? null);
+                $event['event_type'] = 'delivery_delay';
+                $deliveryDelay = is_array($message['deliveryDelay'] ?? ($message['delivery_delay'] ?? null))
+                    ? ($message['deliveryDelay'] ?? $message['delivery_delay'])
+                    : [];
+                if (!empty($deliveryDelay['delayedRecipients'][0]['emailAddress'])) {
+                    $event['email'] = $deliveryDelay['delayedRecipients'][0]['emailAddress'];
+                } elseif (!empty($deliveryDelay['recipient'])) {
+                    $event['email'] = $deliveryDelay['recipient'];
+                } elseif (!empty($deliveryDelay['recipients'][0])) {
+                    $event['email'] = $deliveryDelay['recipients'][0];
+                }
+                break;
+            case 'subscription':
+                $event['event_type'] = 'subscription';
                 break;
             default:
                 return null;
@@ -710,76 +731,320 @@ class Webhooks extends CI_Controller
         return $event;
     }
 
+    protected function normalizeSesNotificationType($rawType)
+    {
+        $normalized = $this->marketing_ses_sns->normalize_event_name($rawType);
+        $map = [
+            'sent' => 'provider_send',
+            'send' => 'provider_send',
+            'delivered' => 'delivered',
+            'bounce' => 'bounce',
+            'complaint' => 'complaint',
+            'rejected' => 'rejected',
+            'rendering_failure' => 'rendering_failed',
+            'rendering_failed' => 'rendering_failed',
+            'delivery_delay' => 'delivery_delay',
+            'open' => 'open',
+            'click' => 'click',
+            'subscription' => 'subscription',
+        ];
+
+        return $map[$normalized] ?? '';
+    }
+
+    protected function extractSesEventTimestamp(array $message, array $mail, $normalizedType)
+    {
+        $sectionMap = [
+            'provider_send' => ['send'],
+            'delivered' => ['delivery'],
+            'bounce' => ['bounce'],
+            'complaint' => ['complaint'],
+            'rejected' => ['reject'],
+            'rendering_failed' => ['failure', 'renderingFailure', 'rendering_failure'],
+            'delivery_delay' => ['deliveryDelay', 'delivery_delay'],
+            'open' => ['open'],
+            'click' => ['click'],
+            'subscription' => ['subscription'],
+        ];
+
+        foreach ($sectionMap[$normalizedType] ?? [] as $sectionKey) {
+            $section = $message[$sectionKey] ?? null;
+            if (is_array($section) && !empty($section['timestamp'])) {
+                $timestamp = strtotime((string) $section['timestamp']);
+                if ($timestamp !== false) {
+                    return date('Y-m-d H:i:s', $timestamp);
+                }
+            }
+        }
+
+        if (!empty($mail['timestamp'])) {
+            $timestamp = strtotime((string) $mail['timestamp']);
+            if ($timestamp !== false) {
+                return date('Y-m-d H:i:s', $timestamp);
+            }
+        }
+
+        return date('Y-m-d H:i:s');
+    }
+
+    protected function extractSesMailMetadata(array $mail)
+    {
+        $headers = $this->extractSesHeaderMap($mail);
+        $tags = is_array($mail['tags'] ?? null) ? $mail['tags'] : [];
+        $providerMessageId = $this->normalizeMessageIdentifier(
+            $mail['messageId'] ?? $this->extractSesHeaderValue($headers, ['Message-ID'])
+        );
+        $headerMessageId = $this->normalizeMessageIdentifier($this->extractSesHeaderValue($headers, ['Message-ID']));
+        $correlationId = $this->normalizeMessageIdentifier(
+            $this->extractSesHeaderValue($headers, ['X-Marketing-Correlation-ID', 'X-Marketing-Message-ID'])
+            ?: $this->extractSesTagValue($tags, ['correlation_id'])
+            ?: $headerMessageId
+        );
+        $outboundAttemptToken = trim((string) (
+            $this->extractSesTagValue($tags, ['outbound_attempt_token'])
+            ?: $this->extractSesHeaderValue($headers, ['X-Marketing-Outbound-Attempt-ID'])
+        ));
+        $campaignId = $this->extractPositiveInt(
+            $this->extractSesTagValue($tags, ['campaign_id', 'campaign'])
+            ?: $this->extractSesHeaderValue($headers, ['X-Marketing-Campaign-ID'])
+        );
+        $recipientId = $this->extractPositiveInt(
+            $this->extractSesTagValue($tags, ['recipient_id', 'recipient'])
+            ?: $this->extractSesHeaderValue($headers, ['X-Marketing-Recipient-ID'])
+        );
+        $configurationSet = trim((string) (
+            $this->extractSesTagValue($tags, ['ses:configuration-set', 'configuration_set'])
+            ?: $this->extractSesHeaderValue($headers, ['X-SES-CONFIGURATION-SET'])
+        ));
+
+        return [
+            'provider_message_id' => $providerMessageId,
+            'header_message_id' => $headerMessageId,
+            'correlation_message_id' => $correlationId,
+            'outbound_attempt_token' => $outboundAttemptToken !== '' ? $outboundAttemptToken : null,
+            'campaign_id' => $campaignId > 0 ? $campaignId : null,
+            'recipient_id' => $recipientId > 0 ? $recipientId : null,
+            'configuration_set' => $configurationSet !== '' ? $configurationSet : null,
+        ];
+    }
+
+    protected function extractSesHeaderMap(array $mail)
+    {
+        $headerMap = [];
+        $headerRows = is_array($mail['headers'] ?? null) ? $mail['headers'] : [];
+        foreach ($headerRows as $headerRow) {
+            if (!is_array($headerRow)) {
+                continue;
+            }
+
+            $name = strtolower(trim((string) ($headerRow['name'] ?? '')));
+            $value = trim((string) ($headerRow['value'] ?? ''));
+            if ($name === '' || $value === '') {
+                continue;
+            }
+
+            $headerMap[$name] = $value;
+        }
+
+        $commonHeaders = is_array($mail['commonHeaders'] ?? null) ? $mail['commonHeaders'] : [];
+        foreach ($commonHeaders as $name => $value) {
+            $normalizedName = strtolower(trim((string) $name));
+            if ($normalizedName === '') {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $value = reset($value);
+            }
+
+            if (!isset($headerMap[$normalizedName]) && is_scalar($value)) {
+                $headerMap[$normalizedName] = trim((string) $value);
+            }
+        }
+
+        return $headerMap;
+    }
+
+    protected function extractSesHeaderValue(array $headerMap, array $headerNames)
+    {
+        foreach ($headerNames as $headerName) {
+            $normalizedName = strtolower(trim((string) $headerName));
+            if ($normalizedName !== '' && isset($headerMap[$normalizedName]) && trim((string) $headerMap[$normalizedName]) !== '') {
+                return trim((string) $headerMap[$normalizedName]);
+            }
+
+            $canonicalName = preg_replace('/[^a-z0-9]+/', '', $normalizedName);
+            foreach ($headerMap as $mapName => $mapValue) {
+                if ($canonicalName !== '' && preg_replace('/[^a-z0-9]+/', '', strtolower((string) $mapName)) === $canonicalName) {
+                    if (trim((string) $mapValue) !== '') {
+                        return trim((string) $mapValue);
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
+    protected function extractSesTagValue(array $tags, array $candidateKeys)
+    {
+        $normalizedTags = [];
+        foreach ($tags as $key => $value) {
+            $normalizedKey = strtolower(trim((string) $key));
+            if ($normalizedKey === '') {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $value = reset($value);
+            }
+
+            if (is_scalar($value)) {
+                $normalizedTags[$normalizedKey] = trim((string) $value);
+            }
+        }
+
+        foreach ($candidateKeys as $candidateKey) {
+            $normalizedKey = strtolower(trim((string) $candidateKey));
+            if ($normalizedKey !== '' && isset($normalizedTags[$normalizedKey]) && $normalizedTags[$normalizedKey] !== '') {
+                return $normalizedTags[$normalizedKey];
+            }
+        }
+
+        return '';
+    }
+
+    protected function extractPositiveInt($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '' || !ctype_digit($value)) {
+            return 0;
+        }
+
+        return (int) $value;
+    }
+
     protected function storeWhatsappInboundMessage(array $message)
     {
         $phone = $this->marketing_whatsapp->normalizePhone($message['from'] ?? '');
         $providerMessageId = trim((string) ($message['message_id'] ?? ''));
         $eventAt = $message['timestamp'] ?? date('Y-m-d H:i:s');
         $eventType = 'whatsapp_inbound_message';
+        $messageType = trim((string) ($message['type'] ?? 'text'));
+        $contextProviderMessageId = trim((string) ($message['context_message_id'] ?? ''));
+        $providerThreadId = trim((string) ($message['provider_thread_id'] ?? ''));
+        $mediaMeta = $this->buildWhatsappMessageMediaMeta($message);
+        $dedupeKey = $this->buildWhatsappInboundMessageDedupeKey($message, $phone, $providerMessageId, $eventAt, $messageType, $contextProviderMessageId);
+        $providerEventId = $this->buildWhatsappInboundProviderEventId($providerMessageId, $dedupeKey);
 
         $dedupeCriteria = [
             'provider' => 'whatsapp_business',
             'event_type' => $eventType,
             'provider_message_id' => $providerMessageId,
+            'provider_event_id' => $providerEventId,
             'email' => $phone,
             'event_at' => $eventAt,
         ];
 
-        if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
-            log_message('info', 'Marketing WhatsApp duplicate inbound message skipped: phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
-            return false;
-        }
-
-        $conversation = null;
-        $messageId = 0;
-        if ($this->marketing_conversations_model->tables_available()) {
-            $conversation = $this->marketing_conversations_model->find_or_create_conversation([
-                'campaign_id' => null,
-                'marketing_contact_id' => null,
-                'email' => $phone,
-                'subject' => 'WhatsApp',
-                'last_message_at' => $eventAt,
-                'status' => 'open',
-                'source_type' => 'whatsapp',
-            ]);
-
-            if ($conversation) {
-                $messageId = (int) $this->marketing_conversations_model->add_message([
-                    'conversation_id' => (int) $conversation['id'],
-                    'campaign_id' => null,
-                    'marketing_contact_id' => null,
-                    'direction' => 'inbound',
-                    'email' => $phone,
-                    'subject' => 'WhatsApp',
-                    'message' => trim((string) ($message['text'] ?? '')),
-                    'body_text' => trim((string) ($message['text'] ?? '')),
-                    'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-                    'datecreated' => $eventAt,
-                ]);
+        $eventLockKey = '';
+        if ($this->hasStableDedupeCriteria($dedupeCriteria)) {
+            $eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);
+            if (!empty($eventLock['acquired'])) {
+                $eventLockKey = (string) ($eventLock['lock_key'] ?? '');
             }
         }
 
-        $this->marketing_events_model->add_event([
-            'campaign_id' => null,
-            'campaign_recipient_id' => null,
-            'marketing_contact_id' => null,
-            'event_type' => $eventType,
-            'provider' => 'whatsapp_business',
-            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-            'email' => $phone !== '' ? $phone : null,
-            'event_at' => $eventAt,
-            'payload_json' => json_encode([
-                'message_id' => $providerMessageId,
-                'sender_name' => $message['sender_name'] ?? '',
-                'type' => $message['type'] ?? '',
-                'conversation_id' => $conversation['id'] ?? null,
-                'stored_message_id' => $messageId ?: null,
-            ]),
-        ]);
+        try {
+            $conversation = null;
+            $messageId = 0;
+            $messageStored = false;
+            $duplicateMessage = false;
+            if ($this->marketing_conversations_model->tables_available()) {
+                $conversation = $this->marketing_conversations_model->find_or_create_conversation([
+                    'campaign_id' => null,
+                    'marketing_contact_id' => null,
+                    'email' => $phone,
+                    'channel' => 'whatsapp',
+                    'provider' => 'whatsapp_cloud',
+                    'contact_phone' => $phone,
+                    'normalized_phone' => $phone,
+                    'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,
+                    'subject' => 'WhatsApp',
+                    'last_message_at' => $eventAt,
+                    'last_inbound_at' => $eventAt,
+                    'status' => 'open',
+                    'source_type' => 'whatsapp',
+                ]);
 
-        log_message('info', 'Marketing WhatsApp inbound message stored: phone=' . $phone . ' conversation_id=' . (int) ($conversation['id'] ?? 0));
+                if ($conversation) {
+                    $messageStoreResult = $this->marketing_conversations_model->add_message_idempotent([
+                        'conversation_id' => (int) $conversation['id'],
+                        'campaign_id' => null,
+                        'marketing_contact_id' => null,
+                        'direction' => 'inbound',
+                        'email' => $phone,
+                        'from_email' => $phone,
+                        'channel' => 'whatsapp',
+                        'provider' => 'whatsapp_cloud',
+                        'contact_phone' => $phone,
+                        'normalized_phone' => $phone,
+                        'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,
+                        'message_type' => $messageType !== '' ? $messageType : 'text',
+                        'subject' => 'WhatsApp',
+                        'message' => trim((string) ($message['text'] ?? '')),
+                        'body_text' => trim((string) ($message['text'] ?? '')),
+                        'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                        'dedupe_key' => $dedupeKey,
+                        'context_provider_message_id' => $contextProviderMessageId !== '' ? $contextProviderMessageId : null,
+                        'media_meta_json' => $mediaMeta,
+                        'datecreated' => $eventAt,
+                    ]);
+                    $messageId = (int) ($messageStoreResult['id'] ?? 0);
+                    $messageStored = !empty($messageStoreResult['success']);
+                    $duplicateMessage = !empty($messageStoreResult['duplicate']);
+                }
+            }
 
-        return true;
+            $eventStoreResult = $this->marketing_events_model->add_event_idempotent([
+                'campaign_id' => null,
+                'campaign_recipient_id' => null,
+                'marketing_contact_id' => null,
+                'event_type' => $eventType,
+                'provider' => 'whatsapp_business',
+                'provider_event_id' => $providerEventId,
+                'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                'email' => $phone !== '' ? $phone : null,
+                'event_at' => $eventAt,
+                'payload_json' => json_encode([
+                    'message_id' => $providerMessageId,
+                    'sender_name' => $message['sender_name'] ?? '',
+                    'type' => $messageType,
+                    'channel' => 'whatsapp',
+                    'provider' => 'whatsapp_cloud',
+                    'contact_phone' => $phone,
+                    'normalized_phone' => $phone,
+                    'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,
+                    'context_provider_message_id' => $contextProviderMessageId !== '' ? $contextProviderMessageId : null,
+                    'media_meta' => $mediaMeta,
+                    'conversation_id' => $conversation['id'] ?? null,
+                    'stored_message_id' => $messageId ?: null,
+                    'duplicate_message' => $duplicateMessage,
+                ]),
+            ]);
+
+            if ($duplicateMessage && !empty($eventStoreResult['duplicate'])) {
+                log_message('info', 'Marketing WhatsApp duplicate inbound message skipped: phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
+                return false;
+            }
+
+            log_message('info', 'Marketing WhatsApp inbound message stored: phone=' . $phone . ' conversation_id=' . (int) ($conversation['id'] ?? 0));
+
+            return $messageStored || !empty($eventStoreResult['inserted']);
+        } finally {
+            if ($eventLockKey !== '') {
+                $this->marketing_events_model->release_event_lock($eventLockKey);
+            }
+        }
     }
 
     protected function storeWhatsappStatusEvent(array $statusEvent)
@@ -788,38 +1053,53 @@ class Webhooks extends CI_Controller
         $providerMessageId = trim((string) ($statusEvent['message_id'] ?? ''));
         $eventAt = $statusEvent['timestamp'] ?? date('Y-m-d H:i:s');
         $eventType = trim((string) ($statusEvent['event_type'] ?? 'whatsapp_status'));
+        $providerEventId = $this->buildWhatsappStatusProviderEventId($statusEvent, $phone, $providerMessageId, $eventAt, $eventType);
+        $reconcileResult = $this->marketing_conversations_model->reconcile_whatsapp_status_update($statusEvent);
 
         $dedupeCriteria = [
             'provider' => 'whatsapp_business',
             'event_type' => $eventType,
             'provider_message_id' => $providerMessageId,
+            'provider_event_id' => $providerEventId,
             'email' => $phone,
             'event_at' => $eventAt,
         ];
 
-        if ($this->hasStableDedupeCriteria($dedupeCriteria) && $this->marketing_events_model->event_exists($dedupeCriteria)) {
-            log_message('info', 'Marketing WhatsApp duplicate status skipped: event=' . $eventType . ' phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
-            return false;
+        $eventLockKey = '';
+        if ($this->hasStableDedupeCriteria($dedupeCriteria)) {
+            $eventLock = $this->marketing_events_model->acquire_event_lock($dedupeCriteria);
+            if (!empty($eventLock['acquired'])) {
+                $eventLockKey = (string) ($eventLock['lock_key'] ?? '');
+            }
         }
 
-        $this->marketing_events_model->add_event([
-            'campaign_id' => null,
-            'campaign_recipient_id' => null,
-            'marketing_contact_id' => null,
-            'event_type' => $eventType,
-            'provider' => 'whatsapp_business',
-            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
-            'email' => $phone !== '' ? $phone : null,
-            'event_at' => $eventAt,
-            'payload_json' => json_encode([
-                'status' => $statusEvent['status'] ?? '',
-                'conversation_id' => $statusEvent['conversation_id'] ?? '',
-            ]),
-        ]);
+        try {
+            $storeResult = $this->marketing_events_model->add_event_idempotent([
+                'campaign_id' => null,
+                'campaign_recipient_id' => null,
+                'marketing_contact_id' => null,
+                'event_type' => $eventType,
+                'provider' => 'whatsapp_business',
+                'provider_event_id' => $providerEventId,
+                'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+                'email' => $phone !== '' ? $phone : null,
+                'event_at' => $eventAt,
+                'payload_json' => $this->safeJsonEncode($this->buildWhatsappStatusPayload($statusEvent)),
+            ]);
 
-        log_message('info', 'Marketing WhatsApp status stored: event=' . $eventType . ' phone=' . $phone);
+            if (!empty($storeResult['duplicate'])) {
+                log_message('info', 'Marketing WhatsApp duplicate status skipped: event=' . $eventType . ' phone=' . $phone . ' provider_message_id=' . ($providerMessageId !== '' ? $providerMessageId : 'n/a'));
+                return !empty($reconcileResult['updated']);
+            }
 
-        return true;
+            log_message('info', 'Marketing WhatsApp status stored: event=' . $eventType . ' phone=' . $phone);
+
+            return !empty($storeResult['success']) || !empty($reconcileResult['updated']);
+        } finally {
+            if ($eventLockKey !== '') {
+                $this->marketing_events_model->release_event_lock($eventLockKey);
+            }
+        }
     }
 
     protected function hasStableDedupeCriteria(array $criteria)
@@ -849,29 +1129,72 @@ class Webhooks extends CI_Controller
         }
 
         $normalizedEmail = $this->normalizeEmail($email);
+        if ($normalizedEmail === '') {
+            return null;
+        }
 
         return $this->db->where('normalized_email', $normalizedEmail)
             ->get(db_prefix() . 'marketing_contacts')
             ->row_array();
     }
 
-    protected function findLatestRecipientByEmail($email)
+    protected function findUnambiguousRecipientByEmail($email)
     {
-        if (empty($email)) {
-            return null;
+        $normalizedEmail = $this->normalizeEmail($email);
+        if ($normalizedEmail === '') {
+            return [
+                'recipient' => null,
+                'ambiguous' => false,
+                'count' => 0,
+            ];
         }
 
-        return $this->db->from(db_prefix() . 'marketing_campaign_recipients')
-            ->where('email', $this->normalizeEmail($email))
+        $rows = $this->db->from(db_prefix() . 'marketing_campaign_recipients')
+            ->where('email', $normalizedEmail)
             ->order_by('id', 'DESC')
-            ->limit(1)
+            ->limit(2)
             ->get()
-            ->row_array();
+            ->result_array();
+
+        if (count($rows) === 1) {
+            return [
+                'recipient' => $rows[0],
+                'ambiguous' => false,
+                'count' => 1,
+            ];
+        }
+
+        return [
+            'recipient' => null,
+            'ambiguous' => count($rows) > 1,
+            'count' => count($rows),
+        ];
     }
 
     protected function normalizeEmail($email)
     {
-        return trim(strtolower((string) $email));
+        $email = trim((string) $email);
+        if ($email === '') {
+            return '';
+        }
+
+        if (preg_match('/<([^<>@\s]+@[^<>@\s]+)>/', $email, $matches) === 1) {
+            $email = $matches[1];
+        }
+
+        $email = trim($email, "\"' \t\n\r\0\x0B");
+        $email = trim($email, '<>');
+        $email = mb_strtolower($email);
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+    }
+
+    protected function normalizeMessageIdentifier($messageId)
+    {
+        $messageId = trim((string) $messageId);
+        $messageId = trim($messageId, '<>');
+
+        return $messageId !== '' ? $messageId : null;
     }
 
     protected function getRequestHeaders()
@@ -896,6 +1219,25 @@ class Webhooks extends CI_Controller
         return $normalized;
     }
 
+    protected function shouldRequireSesSnsSignatureVerification()
+    {
+        if (defined('ENVIRONMENT') && ENVIRONMENT === 'production') {
+            return true;
+        }
+
+        return get_option('marketing_ses_verify_signature') == 1;
+    }
+
+    protected function getSesSnsVerificationOptions()
+    {
+        return [
+            'topic_arn' => trim((string) get_option('marketing_ses_sns_topic_arn')),
+            'region' => strtolower(trim((string) get_option('marketing_ses_region'))),
+            'replay_window_seconds' => max(1, (int) get_option('marketing_ses_sns_replay_window_seconds')),
+            'future_skew_seconds' => max(0, (int) get_option('marketing_ses_sns_future_skew_seconds')),
+        ];
+    }
+
     protected function safeJsonEncode($value)
     {
         $json = json_encode($value);
@@ -904,6 +1246,163 @@ class Webhooks extends CI_Controller
         }
 
         return $json;
+    }
+
+    protected function sanitizeWebhookError($message)
+    {
+        $message = preg_replace('/\s+/', ' ', trim(strip_tags((string) $message)));
+
+        return mb_substr($message, 0, 200);
+    }
+
+    protected function scalarString($value, $default = '')
+    {
+        if (is_array($value) || is_object($value) || $value === null) {
+            return $default;
+        }
+
+        return (string) $value;
+    }
+
+    protected function buildWhatsappMessageMediaMeta(array $message)
+    {
+        $messageType = trim((string) ($message['type'] ?? ''));
+        $meta = [];
+        $allowedRawKeys = [
+            'type' => 50,
+            'provider_media_type' => 50,
+            'id' => 255,
+            'mime_type' => 120,
+            'sha256' => 255,
+            'filename' => 255,
+            'caption' => 500,
+            'error_code' => 32,
+            'error_title' => 180,
+            'error_message' => 280,
+        ];
+
+        if ($messageType !== '') {
+            $meta['type'] = $messageType;
+        }
+
+        $contextProviderMessageId = trim((string) ($message['context_message_id'] ?? ''));
+        if ($contextProviderMessageId !== '') {
+            $meta['context_provider_message_id'] = $contextProviderMessageId;
+        }
+
+        if (!empty($message['raw']) && is_array($message['raw'])) {
+            foreach ($allowedRawKeys as $key => $maxLength) {
+                if (!array_key_exists($key, $message['raw'])) {
+                    continue;
+                }
+
+                $value = $message['raw'][$key];
+                if (is_bool($value)) {
+                    $meta[$key] = $value;
+                    continue;
+                }
+
+                $value = $this->scalarString($value, '');
+                $value = trim(strip_tags($value));
+                $value = preg_replace('/\s+/', ' ', $value);
+                if ($value !== '') {
+                    $meta[$key] = mb_substr($value, 0, $maxLength);
+                }
+            }
+
+            foreach (['voice', 'animated'] as $booleanKey) {
+                if (array_key_exists($booleanKey, $message['raw'])) {
+                    $meta[$booleanKey] = (bool) $message['raw'][$booleanKey];
+                }
+            }
+        }
+
+        if (empty($meta)) {
+            return null;
+        }
+
+        return $meta;
+    }
+
+    protected function buildWhatsappStatusPayload(array $statusEvent)
+    {
+        $payload = [
+            'status' => trim((string) ($statusEvent['status'] ?? '')),
+            'conversation_id' => trim((string) ($statusEvent['conversation_id'] ?? '')),
+        ];
+        $allowedRawKeys = [
+            'error_code' => 32,
+            'error_title' => 180,
+            'error_message' => 280,
+            'error_details' => 280,
+        ];
+        $raw = !empty($statusEvent['raw']) && is_array($statusEvent['raw']) ? $statusEvent['raw'] : [];
+        foreach ($allowedRawKeys as $key => $maxLength) {
+            if (!array_key_exists($key, $raw)) {
+                continue;
+            }
+
+            $value = $this->scalarString($raw[$key], '');
+            $value = trim(strip_tags($value));
+            $value = preg_replace('/\s+/', ' ', $value);
+            if ($value !== '') {
+                $payload[$key] = mb_substr($value, 0, $maxLength);
+            }
+        }
+
+        return array_filter($payload, static function ($value) {
+            return trim((string) $value) !== '';
+        });
+    }
+
+    protected function buildWhatsappInboundMessageDedupeKey(array $message, $phone, $providerMessageId, $eventAt, $messageType, $contextProviderMessageId)
+    {
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId !== '') {
+            return 'whatsapp_inbound:provider_message_id:' . $providerMessageId;
+        }
+
+        $bodyText = trim((string) ($message['text'] ?? ''));
+        $hashSource = implode('|', [
+            'whatsapp_cloud',
+            trim((string) $phone),
+            trim((string) $eventAt),
+            trim((string) $messageType),
+            trim((string) $contextProviderMessageId),
+            $bodyText,
+            json_encode($message['raw'] ?? []),
+        ]);
+
+        return 'whatsapp_inbound:fallback:' . sha1($hashSource);
+    }
+
+    protected function buildWhatsappInboundProviderEventId($providerMessageId, $dedupeKey)
+    {
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId !== '') {
+            return 'whatsapp_inbound:' . $providerMessageId;
+        }
+
+        return 'whatsapp_inbound:' . sha1((string) $dedupeKey);
+    }
+
+    protected function buildWhatsappStatusProviderEventId(array $statusEvent, $phone, $providerMessageId, $eventAt, $eventType)
+    {
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId !== '') {
+            return 'whatsapp_status:' . $eventType . ':' . $providerMessageId;
+        }
+
+        $hashSource = implode('|', [
+            'whatsapp_status',
+            trim((string) $eventType),
+            trim((string) $phone),
+            trim((string) $eventAt),
+            trim((string) ($statusEvent['status'] ?? '')),
+            trim((string) ($statusEvent['conversation_id'] ?? '')),
+        ]);
+
+        return 'whatsapp_status:' . sha1($hashSource);
     }
 
     protected function respondJson(array $data, $statusCode = 200)
@@ -928,6 +1427,107 @@ class Webhooks extends CI_Controller
         $post = $this->input->post(null, false);
 
         return is_array($post) && !empty($post) ? $post : null;
+    }
+
+    protected function validateInboundEmailAuthentication(array $payload, array $headers)
+    {
+        $configuredSecret = trim((string) get_option('marketing_inbound_email_secret'));
+        if ($configuredSecret === '') {
+            return [
+                'accepted' => true,
+                'authenticated' => false,
+                'lead_conversion_allowed' => true,
+                'mode' => 'compatibility',
+                'warning' => 'inbound_email_auth_not_configured',
+            ];
+        }
+
+        $presentedSecret = trim((string) ($headers['x-marketing-inbound-secret'] ?? ($payload['inbound_secret'] ?? ($payload['secret'] ?? ($payload['token'] ?? '')))));
+        if ($presentedSecret !== '' && hash_equals($configuredSecret, $presentedSecret)) {
+            return [
+                'accepted' => true,
+                'authenticated' => true,
+                'lead_conversion_allowed' => true,
+                'mode' => 'shared_secret',
+                'warning' => null,
+            ];
+        }
+
+        return [
+            'accepted' => false,
+            'authenticated' => false,
+            'lead_conversion_allowed' => false,
+            'mode' => 'shared_secret',
+            'warning' => 'inbound_email_auth_failed',
+        ];
+    }
+
+    protected function extractInboundProviderMessageId(array $payload, array $requestHeaders = [], array $payloadHeaders = [])
+    {
+        $candidates = [
+            $payload['message_id'] ?? null,
+            $payload['provider_message_id'] ?? null,
+            $requestHeaders['message-id'] ?? null,
+            $requestHeaders['x-message-id'] ?? null,
+            $payloadHeaders['Message-Id'] ?? ($payloadHeaders['Message-ID'] ?? ($payloadHeaders['message-id'] ?? null)),
+        ];
+
+        foreach ($candidates as $candidate) {
+            $normalized = $this->normalizeMessageIdentifier($candidate);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+
+        return '';
+    }
+
+    protected function resolveInboundReceivedAt(array $payload, array $requestHeaders = [], array $payloadHeaders = [])
+    {
+        $candidates = [
+            $payload['received_at'] ?? null,
+            $payload['timestamp'] ?? null,
+            $payload['date'] ?? null,
+            $requestHeaders['date'] ?? null,
+            $payloadHeaders['Date'] ?? ($payloadHeaders['date'] ?? null),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            $timestamp = is_numeric($candidate) ? (int) $candidate : strtotime((string) $candidate);
+            if ($timestamp !== false && $timestamp > 0) {
+                return date('Y-m-d H:i:s', $timestamp);
+            }
+        }
+
+        return date('Y-m-d H:i:s');
+    }
+
+    protected function buildInboundMessageDedupeKey($senderEmail, $subject, $messagePreview, array $payload = [], array $requestHeaders = [], array $payloadHeaders = [], $receivedAt = null)
+    {
+        $senderEmail = $this->normalizeEmail($senderEmail);
+        $subject = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $subject)));
+        $messagePreview = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $messagePreview)));
+        $messagePreview = mb_substr($messagePreview, 0, 500);
+        $bodyHash = sha1($messagePreview);
+        $receivedAt = $receivedAt ?: $this->resolveInboundReceivedAt($payload, $requestHeaders, $payloadHeaders);
+        $bucket = date('Y-m-d H:i', strtotime((string) $receivedAt));
+
+        return 'inbound_email:' . sha1(implode('|', [$senderEmail, $subject, $bodyHash, $bucket]));
+    }
+
+    protected function senderMatchesRecipient($senderEmail, array $recipient)
+    {
+        $senderEmail = $this->normalizeEmail($senderEmail);
+        $recipientEmail = $this->normalizeEmail($recipient['email'] ?? ($recipient['destination'] ?? ''));
+        if ($senderEmail === '' || $recipientEmail === '') {
+            return true;
+        }
+
+        return $senderEmail === $recipientEmail;
     }
 
     protected function extractReplyTrackingIdentifier($subject, $bodyHtml, $bodyText, array $headers = [], $rawBody = '')

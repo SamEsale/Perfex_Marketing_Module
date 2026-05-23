@@ -4,65 +4,235 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Subscriptions extends CI_Controller
 {
+    private const UNSUBSCRIBE_CONFIRM_VALUE = 'confirm';
+
     public function __construct()
     {
         parent::__construct();
+
+        if (function_exists('marketing_bootstrap_safe_schema')) {
+            marketing_bootstrap_safe_schema();
+        }
 
         $this->load->model('marketing/Marketing_campaigns_model', 'marketing_campaigns_model');
         $this->load->model('marketing/Marketing_audiences_model', 'marketing_audiences_model');
         $this->load->model('marketing/Marketing_suppressions_model', 'marketing_suppressions_model');
         $this->load->model('marketing/Marketing_events_model', 'marketing_events_model');
+        $this->load->model('marketing/Marketing_public_links_model', 'marketing_public_links_model');
         $this->load->library('marketing/Marketing_unsubscribe');
+        $this->ensure_public_language_loaded();
     }
 
     public function unsubscribe($token = null)
     {
-        $message = _l('marketing_unsubscribe_invalid');
-        $success = false;
-
         $payload = $this->marketing_unsubscribe->verify_token($token);
-        if ($payload !== null) {
-            $recipient = $this->marketing_campaigns_model->get_recipient_by_id($payload['recipient_id']);
+        $context = $payload !== null ? $this->build_unsubscribe_context($payload) : null;
+        $requestMethod = strtoupper((string) $this->input->method(true));
 
-            if ($recipient && (int) $recipient['campaign_id'] === $payload['campaign_id']
-                && (int) $recipient['marketing_contact_id'] === $payload['contact_id']
-                && mb_strtolower(trim((string) $recipient['email'])) === $payload['email']) {
-                $campaign = $this->marketing_campaigns_model->get($recipient['campaign_id']);
-                $contact = $this->marketing_audiences_model->get_contact($recipient['marketing_contact_id']);
+        $data = [
+            'title' => _l('marketing_unsubscribe_title'),
+            'mode' => 'result',
+            'success' => false,
+            'message' => _l('marketing_unsubscribe_invalid'),
+            'status_label' => _l('marketing_unsubscribe_status_error'),
+            'unsubscribe_url' => site_url('marketing/unsubscribe/' . rawurlencode((string) $token)),
+            'token' => (string) $token,
+            'email' => $context['normalized_email'] ?? '',
+            'campaign_name' => $context['campaign']['name'] ?? '',
+        ];
 
-                if ($contact) {
-                    $this->marketing_audiences_model->update_contact($contact['id'], [
-                        'status' => 'unsubscribed',
-                        'consent_status' => 'unsubscribed',
-                    ]);
-                }
+        if ($payload === null || $context === null) {
+            $this->render_public_unsubscribe_view($data);
+            return;
+        }
 
-                if ($campaign && !empty($campaign['list_id'])) {
-                    $this->marketing_audiences_model->remove_member((int) $campaign['list_id'], (int) $recipient['marketing_contact_id']);
-                }
+        if ($requestMethod !== 'POST') {
+            $data['mode'] = 'confirm';
+            $data['message'] = _l('marketing_unsubscribe_confirm_message');
+            $data['status_label'] = _l('marketing_unsubscribe_status_pending');
+            $data['title'] = _l('marketing_unsubscribe_confirm_title');
+            $this->render_public_unsubscribe_view($data);
+            return;
+        }
 
-                $this->marketing_suppressions_model->upsert_suppression($recipient['email'], 'unsubscribe');
+        $confirmation = trim((string) $this->input->post('unsubscribe_confirmation', false));
+        if ($confirmation !== self::UNSUBSCRIBE_CONFIRM_VALUE) {
+            $data['mode'] = 'confirm';
+            $data['title'] = _l('marketing_unsubscribe_confirm_title');
+            $data['message'] = _l('marketing_unsubscribe_confirm_required');
+            $data['status_label'] = _l('marketing_unsubscribe_status_pending');
+            $this->render_public_unsubscribe_view($data);
+            return;
+        }
 
-                $this->marketing_events_model->add_event([
-                    'campaign_id' => (int) $recipient['campaign_id'],
-                    'campaign_recipient_id' => (int) $recipient['id'],
-                    'marketing_contact_id' => (int) $recipient['marketing_contact_id'],
-                    'event_type' => 'unsubscribe',
-                    'provider' => 'marketing_unsubscribe',
-                    'email' => $recipient['email'],
-                    'event_at' => date('Y-m-d H:i:s'),
-                    'payload_json' => json_encode(['token' => 'verified']),
-                ]);
+        $result = $this->apply_confirmed_unsubscribe($payload, $context);
+        $data['message'] = !empty($result['success']) ? _l('marketing_unsubscribe_success') : _l('marketing_unsubscribe_invalid');
+        $data['status_label'] = !empty($result['success']) ? _l('marketing_unsubscribe_status_success') : _l('marketing_unsubscribe_status_error');
+        $data['success'] = !empty($result['success']);
 
-                $message = _l('marketing_unsubscribe_success');
-                $success = true;
+        $this->render_public_unsubscribe_view($data);
+    }
+
+    protected function build_unsubscribe_context(array $payload)
+    {
+        $recipientId = (int) ($payload['recipient_id'] ?? 0);
+        $campaignId = (int) ($payload['campaign_id'] ?? 0);
+        $contactId = (int) ($payload['contact_id'] ?? 0);
+        $normalizedEmail = mb_strtolower(trim((string) ($payload['email'] ?? '')));
+        $recipient = $recipientId > 0 ? $this->marketing_campaigns_model->get_recipient_by_id($recipientId) : null;
+
+        if ($recipient) {
+            if ($campaignId <= 0) {
+                $campaignId = (int) ($recipient['campaign_id'] ?? 0);
+            }
+            if ($contactId <= 0) {
+                $contactId = (int) ($recipient['marketing_contact_id'] ?? 0);
+            }
+            if ($normalizedEmail === '') {
+                $normalizedEmail = mb_strtolower(trim((string) ($recipient['email'] ?? '')));
             }
         }
 
-        $data['title'] = _l('marketing_unsubscribe_title');
-        $data['message'] = $message;
-        $data['success'] = $success;
+        $campaign = $campaignId > 0 ? $this->marketing_campaigns_model->get($campaignId) : null;
+        $contact = $contactId > 0
+            ? $this->marketing_audiences_model->get_contact($contactId)
+            : ($normalizedEmail !== '' ? $this->marketing_audiences_model->get_contact_by_normalized_email($normalizedEmail) : null);
 
-        $this->load->view('marketing/subscriptions/unsubscribe_result', $data);
+        if ($contact) {
+            $contactId = (int) $contact['id'];
+            if ($normalizedEmail === '') {
+                $normalizedEmail = mb_strtolower(trim((string) ($contact['normalized_email'] ?? ($contact['email'] ?? ''))));
+            }
+        }
+
+        return [
+            'recipient_id' => $recipientId,
+            'campaign_id' => $campaignId,
+            'contact_id' => $contactId,
+            'normalized_email' => $normalizedEmail,
+            'recipient' => $recipient,
+            'campaign' => $campaign,
+            'contact' => $contact,
+        ];
+    }
+
+    protected function apply_confirmed_unsubscribe(array $payload, array $context)
+    {
+        $recipientId = (int) ($context['recipient_id'] ?? 0);
+        $campaignId = (int) ($context['campaign_id'] ?? 0);
+        $contactId = (int) ($context['contact_id'] ?? 0);
+        $normalizedEmail = (string) ($context['normalized_email'] ?? '');
+        $campaign = $context['campaign'] ?? null;
+        $listMembershipChanged = false;
+
+        if ($contactId > 0) {
+            $this->marketing_audiences_model->mark_contact_unsubscribed($contactId);
+        }
+
+        if ($campaign && !empty($campaign['list_id']) && $contactId > 0) {
+            $listMembershipChanged = $this->marketing_audiences_model->mark_list_membership_unsubscribed((int) $campaign['list_id'], $contactId);
+        }
+
+        $suppressionId = false;
+        if ($normalizedEmail !== '') {
+            $suppressionId = $this->marketing_suppressions_model->upsert_suppression(
+                $normalizedEmail,
+                'unsubscribe',
+                null,
+                'marketing_unsubscribe'
+            );
+        }
+
+        if (!empty($payload['link_id'])) {
+            $this->marketing_public_links_model->touch_token_use((int) $payload['link_id']);
+        }
+
+        $hasActiveSuppression = $normalizedEmail !== ''
+            && ($suppressionId || $this->marketing_suppressions_model->get_active_suppression($normalizedEmail) !== null);
+
+        $unsubscribeApplied = $hasActiveSuppression || $contactId > 0 || $listMembershipChanged;
+
+        if (!$unsubscribeApplied) {
+            return ['success' => false];
+        }
+
+        $eventAt = date('Y-m-d H:i:s');
+        if (!$this->marketing_events_model->has_marketing_unsubscribe_event([
+            'campaign_recipient_id' => $recipientId > 0 ? $recipientId : null,
+            'marketing_contact_id' => $contactId > 0 ? $contactId : null,
+            'email' => $normalizedEmail,
+            'public_link_id' => (int) ($payload['link_id'] ?? 0),
+        ])) {
+            $this->marketing_events_model->add_event([
+                'campaign_id' => $campaignId > 0 ? $campaignId : null,
+                'campaign_recipient_id' => $recipientId > 0 ? $recipientId : null,
+                'marketing_contact_id' => $contactId > 0 ? $contactId : null,
+                'event_type' => 'unsubscribe',
+                'provider' => 'marketing_unsubscribe',
+                'email' => $normalizedEmail,
+                'event_at' => $eventAt,
+                'payload_json' => json_encode([
+                    'token_type' => (string) ($payload['token_type'] ?? 'unknown'),
+                    'public_link_id' => (int) ($payload['link_id'] ?? 0),
+                    'list_id' => $campaign && !empty($campaign['list_id']) ? (int) $campaign['list_id'] : 0,
+                    'list_membership_unsubscribed' => $listMembershipChanged,
+                ]),
+            ]);
+        }
+
+        if ($recipientId > 0) {
+            $this->marketing_campaigns_model->update_recipient_record($recipientId, [
+                'last_event_at' => $eventAt,
+            ]);
+        }
+
+        return ['success' => true];
+    }
+
+    protected function render_public_unsubscribe_view(array $data)
+    {
+        $viewPath = dirname(__DIR__) . '/views/subscriptions/unsubscribe_result.php';
+
+        if (!is_file($viewPath)) {
+            show_error('Marketing unsubscribe confirmation view is unavailable.', 500);
+
+            return;
+        }
+
+        extract($data, EXTR_SKIP);
+
+        ob_start();
+        include $viewPath;
+        $html = ob_get_clean();
+
+        $this->output
+            ->set_content_type('text/html', 'utf-8')
+            ->set_output($html);
+    }
+
+    protected function ensure_public_language_loaded()
+    {
+        $languageFile = dirname(__DIR__) . '/language/english/marketing_lang.php';
+
+        if (!is_file($languageFile)) {
+            return;
+        }
+
+        $lang = [];
+        include $languageFile;
+
+        if (!is_array($lang) || empty($lang)) {
+            return;
+        }
+
+        if (!isset($this->lang) || !is_object($this->lang)) {
+            return;
+        }
+
+        if (!isset($this->lang->language) || !is_array($this->lang->language)) {
+            $this->lang->language = [];
+        }
+
+        $this->lang->language = array_merge($lang, $this->lang->language);
     }
 }

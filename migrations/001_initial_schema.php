@@ -12,12 +12,17 @@ class Migration_Initial_schema
 
     public function up()
     {
-        // SAFE MODE: do nothing to avoid crashes on shared hosting
+        // Intentional no-op.
+        // This module uses Marketing_schema safe bootstrap and repair instead of CI_Migration
+        // so activation and upgrades stay non-destructive and isolated from Perfex core.
         log_message('info', 'Marketing module migration skipped (safe mode)');
+
+        return true;
     }
 
     public function down()
     {
-        // no-op
+        // Intentional no-op. Uninstall must not drop buyer data automatically.
+        return true;
     }
 }

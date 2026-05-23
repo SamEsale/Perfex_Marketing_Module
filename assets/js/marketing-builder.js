@@ -25,6 +25,62 @@
         return holder.firstElementChild;
     }
 
+    var EMAIL_SOCIAL_ICON_SIZE = 40;
+    var EMAIL_SOCIAL_ICON_MARGIN = 6;
+    var CANVAS_SOCIAL_ICON_SIZE = 34;
+
+    function getElementClassName(element) {
+        if (!element || element.nodeType !== 1 || typeof element.getAttribute !== 'function') {
+            return '';
+        }
+
+        return String(element.getAttribute('class') || '');
+    }
+
+    function setElementClassName(element, classValue) {
+        if (!element || element.nodeType !== 1 || typeof element.setAttribute !== 'function') {
+            return;
+        }
+
+        element.setAttribute('class', String(classValue || ''));
+    }
+
+    function getSocialLinkStyle(isVisible) {
+        return 'display:' + (isVisible ? 'inline-flex' : 'none')
+            + ';align-items:center;justify-content:center;width:' + CANVAS_SOCIAL_ICON_SIZE + 'px;height:' + CANVAS_SOCIAL_ICON_SIZE + 'px;margin:0 6px;border-radius:999px;vertical-align:middle;text-decoration:none;line-height:1;';
+    }
+
+    function normalizeSocialUrlValue(value) {
+        var normalized = String(value || '').trim();
+
+        if (normalized === '' || normalized === '#') {
+            return '';
+        }
+
+        return normalized;
+    }
+
+    function hasConfiguredSocialUrl(value) {
+        return normalizeSocialUrlValue(value) !== '';
+    }
+
+    function normalizeSocialLinkPresentation(link, isVisible) {
+        if (!link || link.nodeType !== 1 || !link.style) {
+            return;
+        }
+
+        link.style.display = isVisible ? 'inline-flex' : 'none';
+        link.style.alignItems = 'center';
+        link.style.justifyContent = 'center';
+        link.style.width = link.style.width || '34px';
+        link.style.height = link.style.height || '34px';
+        link.style.margin = link.style.margin || '0 6px';
+        link.style.borderRadius = link.style.borderRadius || '999px';
+        link.style.verticalAlign = 'middle';
+        link.style.textDecoration = link.style.textDecoration || 'none';
+        link.style.lineHeight = link.style.lineHeight || '1';
+    }
+
     function clampNumber(value, min, max, fallback) {
         var parsed = parseInt(value, 10);
         if (isNaN(parsed)) {
@@ -63,13 +119,90 @@
         return /^(https?:\/\/|mailto:|tel:|\{\{unsubscribe_url\}\})/i.test(normalized);
     }
 
-    function hasUnsubscribeToken(value) {
+    function containsUnsubscribeTokenOrLink(value) {
         var normalized = String(value || '');
-        return normalized.indexOf('{{unsubscribe_url}}') !== -1
-            || normalized.indexOf('%7B%7Bunsubscribe_url%7D%7D') !== -1
-            || normalized.indexOf('%7b%7bunsubscribe_url%7d%7d') !== -1
-            || normalized.indexOf('&#123;&#123;unsubscribe_url&#125;&#125;') !== -1
-            || normalized.indexOf('&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== -1;
+        var candidates = [normalized];
+        var decoder = document.createElement('textarea');
+        var patterns = [
+            '{{unsubscribe_url}}',
+            '%7b%7bunsubscribe_url%7d%7d',
+            '&#123;&#123;unsubscribe_url&#125;&#125;',
+            '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
+            '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
+            'href="{{unsubscribe_url}}"',
+            "href='{{unsubscribe_url}}'",
+            'href=&quot;{{unsubscribe_url}}&quot;',
+            'href=&#39;{{unsubscribe_url}}&#39;',
+            '/marketing/unsubscribe/',
+            '>unsubscribe<',
+            'unsubscribe here'
+        ];
+
+        try {
+            candidates.push(decodeURIComponent(normalized));
+        } catch (error) {
+        }
+
+        decoder.innerHTML = normalized;
+        candidates.push(decoder.value || '');
+
+        return candidates.some(function (candidate) {
+            var haystack = String(candidate || '').toLowerCase();
+            return patterns.some(function (pattern) {
+                return haystack.indexOf(pattern) !== -1;
+            });
+        });
+    }
+
+    function hasUnsubscribeToken(value) {
+        return containsUnsubscribeTokenOrLink(value);
+    }
+
+    function hasActualUnsubscribeLinkMarkup(value) {
+        var normalized = String(value || '');
+        var candidates = [normalized];
+        var decoder = document.createElement('textarea');
+        var patterns = [
+            '{{unsubscribe_url}}',
+            '%7b%7bunsubscribe_url%7d%7d',
+            '&#123;&#123;unsubscribe_url&#125;&#125;',
+            '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
+            '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
+            'href="{{unsubscribe_url}}"',
+            "href='{{unsubscribe_url}}'",
+            'href=&quot;{{unsubscribe_url}}&quot;',
+            'href=&#39;{{unsubscribe_url}}&#39;',
+            '/marketing/unsubscribe/'
+        ];
+
+        try {
+            candidates.push(decodeURIComponent(normalized));
+        } catch (error) {
+        }
+
+        decoder.innerHTML = normalized;
+        candidates.push(decoder.value || '');
+
+        return candidates.some(function (candidate) {
+            var haystack = String(candidate || '').toLowerCase();
+            return patterns.some(function (pattern) {
+                return haystack.indexOf(pattern) !== -1;
+            });
+        });
+    }
+
+    function normalizePlainTextValue(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function isUnsafeDefaultPlainText(value) {
+        var normalized = normalizePlainTextValue(value);
+        var signatures = [
+            'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action',
+            'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action Add your marketing copy here. Shop now Your Company 123 Market Street City, State Unsubscribe'
+        ];
+
+        return signatures.indexOf(normalized) !== -1;
     }
 
     function qrSvgDataUri(text, size, caption, foreground, background) {
@@ -129,7 +262,6 @@
         var textField = document.getElementById('text_content');
         var previewShell = document.getElementById('marketing-builder-preview-shell');
         var previewFrame = document.getElementById('marketing-builder-preview-frame');
-        var unsubscribeStatus = document.getElementById('marketing-builder-unsubscribe-status');
         var fileInput = document.getElementById('marketing-builder-image-input');
         var paletteSearch = document.getElementById('marketing-builder-search');
         var libraryHeader = document.getElementById('marketing-builder-library-header');
@@ -138,6 +270,8 @@
         var imageModal = window.jQuery ? window.jQuery('#marketingBuilderImageModal') : null;
         var qrModal = window.jQuery ? window.jQuery('#marketingBuilderQrModal') : null;
         var csrf = config.csrf || { name: '', hash: '' };
+        var companyAddressConfig = config.companyAddress || {};
+        var mergeTags = Array.isArray(config.mergeTags) ? config.mergeTags : [];
         var DEFAULT_PADDING = 5;
         var EMAIL_FONT_OPTIONS = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Courier New'];
 
@@ -165,7 +299,9 @@
                 contentBackground: '#ffffff',
                 textColor: '#0f172a',
                 linkColor: '#2563eb'
-            }
+            },
+            sidebarEditor: null,
+            suppressAutoSelect: false
         };
 
         var dropIndicator = createElement('<div class="marketing-builder-drop-indicator" aria-hidden="true"></div>');
@@ -248,11 +384,7 @@
             {
                 id: 'compliance',
                 title: strings.compliance || 'Compliance',
-                blocks: [
-                    { type: 'unsubscribe', label: strings.unsubscribe || 'Unsubscribe Link', hint: 'Required', icon: 'unsubscribe' },
-                    { type: 'company_address', label: strings.companyAddressBlock || 'Company Address', hint: 'Address', icon: 'address' },
-                    { type: 'email_footer', label: strings.emailFooterBlock || 'Email Footer', hint: 'Footer', icon: 'footer' }
-                ]
+                blocks: []
             }
         ];
 
@@ -268,8 +400,1181 @@
             return '<div class="mb-column-slot mb-dropzone" data-dropzone-slot="1"></div>';
         }
 
-        function createRichText(text) {
-            return '<div class="mb-richtext" contenteditable="true"><p style="margin:0;">' + escapeHtml(text) + '</p></div>';
+        function getMinimumContentPaddingStyle(extraStyle) {
+            return 'padding-left:10px;padding-right:10px;box-sizing:border-box;' + (extraStyle || '');
+        }
+
+        function createRichText(text, extraStyle) {
+            return '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle(extraStyle) + '"><p style="margin:0;">' + escapeHtml(text) + '</p></div>';
+        }
+
+        function getSavedCompanyAddressHtml() {
+            return String(companyAddressConfig.html || 'Your Company<br>123 Market Street<br>City, State');
+        }
+
+        function getSavedCompanyAddressText() {
+            return String(companyAddressConfig.text || 'Your Company\n123 Market Street\nCity, State');
+        }
+
+        function getSavedCompanyAddressPayload() {
+            var html = String(companyAddressConfig.html || '').trim();
+            var text = String(companyAddressConfig.text || '').trim();
+            var fallbackText;
+
+            if (!html && text) {
+                html = text.split(/\r?\n/).map(function (line) {
+                    return escapeHtml(line);
+                }).join('<br>');
+            }
+
+            if (!text && html) {
+                text = htmlToFallbackPlainText(html);
+            }
+
+            if (!html) {
+                html = 'Your Company<br>123 Market Street<br>City, State';
+            }
+
+            if (!text) {
+                fallbackText = htmlToFallbackPlainText(html);
+                text = fallbackText || 'Your Company\n123 Market Street\nCity, State';
+            }
+
+            return {
+                html: html,
+                text: text,
+                configured: !!companyAddressConfig.configured,
+                source: String(companyAddressConfig.source || 'marketing_module_fallback')
+            };
+        }
+
+        function isLegacyCompanyAddressPlaceholderValue(value) {
+            var normalized = String(value || '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+
+            return normalized === 'your company 123 market street city, state'
+                || normalized === 'your company 123 market street city,state';
+        }
+
+        function hasConfiguredCompanyAddress() {
+            return !!companyAddressConfig.configured;
+        }
+
+        function getMergeTagTokenByKey(key) {
+            var map = {
+                first_name: '{{first_name}}',
+                last_name: '{{last_name}}',
+                full_name: '{{full_name}}',
+                email: '{{email}}',
+                company: '{{company}}',
+                unsubscribe_url: '{{unsubscribe_url}}'
+            };
+
+            return map[key] || key;
+        }
+
+        function sanitizeEditableHtml(rawHtml) {
+            var parser = new window.DOMParser();
+            var doc = parser.parseFromString('<div>' + String(rawHtml || '') + '</div>', 'text/html');
+            var allowedTags = {
+                P: true,
+                BR: true,
+                UL: true,
+                OL: true,
+                LI: true,
+                STRONG: true,
+                B: true,
+                EM: true,
+                I: true,
+                U: true,
+                S: true,
+                BLOCKQUOTE: true,
+                A: true,
+                H1: true,
+                H2: true,
+                H3: true,
+                H4: true,
+                DIV: true,
+                SPAN: true
+            };
+            var allowedInlineStyles = {
+                color: true,
+                'background-color': true,
+                'text-align': true,
+                'padding-left': true,
+                'padding-right': true,
+                'box-sizing': true
+            };
+
+            function cleanInlineStyle(styleValue) {
+                var safeStyles = [];
+
+                String(styleValue || '').split(';').forEach(function (declaration) {
+                    var parts = declaration.split(':');
+                    var property;
+                    var value;
+
+                    if (parts.length < 2) {
+                        return;
+                    }
+
+                    property = String(parts.shift() || '').trim().toLowerCase();
+                    value = String(parts.join(':') || '').trim();
+
+                    if (!allowedInlineStyles[property] || value === '') {
+                        return;
+                    }
+
+                    if (property === 'padding-left' && !/^\d+(px|em|rem|%)$/.test(value)) {
+                        return;
+                    }
+
+                    if (property === 'padding-right' && !/^\d+(px|em|rem|%)$/.test(value)) {
+                        return;
+                    }
+
+                    if ((property === 'color' || property === 'background-color') && /expression|url\s*\(|javascript:/i.test(value)) {
+                        return;
+                    }
+
+                    if (property === 'text-align' && ['left', 'center', 'right', 'justify'].indexOf(value.toLowerCase()) === -1) {
+                        return;
+                    }
+
+                    if (property === 'box-sizing' && value.toLowerCase() !== 'border-box') {
+                        return;
+                    }
+
+                    safeStyles.push(property + ':' + value);
+                });
+
+                return safeStyles.join(';');
+            }
+
+            function extractQuillAlignment(node) {
+                var className = String(node.getAttribute('class') || '');
+                var alignMatch = className.match(/ql-align-(center|right|justify)/);
+
+                if (alignMatch) {
+                    return alignMatch[1];
+                }
+
+                return '';
+            }
+
+            function extractQuillIndent(node) {
+                var className = String(node.getAttribute('class') || '');
+                var indentMatch = className.match(/ql-indent-(\d+)/);
+                var depth = indentMatch ? parseInt(indentMatch[1], 10) : 0;
+
+                if (!depth || depth < 1) {
+                    return '';
+                }
+
+                return String(depth * 24) + 'px';
+            }
+
+            function sanitizeNode(node) {
+                if (!node) {
+                    return null;
+                }
+
+                if (node.nodeType === 3) {
+                    return document.createTextNode(node.nodeValue || '');
+                }
+
+                if (node.nodeType !== 1) {
+                    return null;
+                }
+
+                var tagName = String(node.tagName || '').toUpperCase();
+                if (!allowedTags[tagName]) {
+                    var fragment = document.createDocumentFragment();
+                    Array.prototype.forEach.call(node.childNodes || [], function (childNode) {
+                        var sanitizedChild = sanitizeNode(childNode);
+                        if (sanitizedChild) {
+                            fragment.appendChild(sanitizedChild);
+                        }
+                    });
+                    return fragment;
+                }
+
+                var safeTagName = tagName === 'DIV' ? 'P' : tagName;
+                var cleanNode = document.createElement(safeTagName.toLowerCase());
+
+                if (safeTagName === 'A') {
+                    var href = String(node.getAttribute('href') || '').trim();
+                    if (isValidLink(href)) {
+                        cleanNode.setAttribute('href', href);
+                    } else {
+                        cleanNode.setAttribute('href', '#');
+                    }
+                    cleanNode.setAttribute('target', '_blank');
+                    cleanNode.setAttribute('rel', 'noopener noreferrer');
+                }
+
+                var inlineStyles = cleanInlineStyle(node.getAttribute('style') || '');
+                var quillAlign = extractQuillAlignment(node);
+                var quillIndent = extractQuillIndent(node);
+                var mergedStyles = [];
+
+                if (inlineStyles) {
+                    mergedStyles.push(inlineStyles);
+                }
+                if (quillAlign && inlineStyles.toLowerCase().indexOf('text-align:') === -1) {
+                    mergedStyles.push('text-align:' + quillAlign);
+                }
+                if (quillIndent && inlineStyles.toLowerCase().indexOf('padding-left:') === -1) {
+                    mergedStyles.push('padding-left:' + quillIndent);
+                }
+
+                if (mergedStyles.length && safeTagName !== 'A') {
+                    cleanNode.setAttribute('style', mergedStyles.join(';'));
+                }
+
+                Array.prototype.forEach.call(node.childNodes || [], function (childNode) {
+                    var sanitizedChild = sanitizeNode(childNode);
+                    if (sanitizedChild) {
+                        cleanNode.appendChild(sanitizedChild);
+                    }
+                });
+
+                return cleanNode;
+            }
+
+            var holder = document.createElement('div');
+            Array.prototype.forEach.call(doc.body.firstChild ? doc.body.firstChild.childNodes : [], function (childNode) {
+                var sanitizedChild = sanitizeNode(childNode);
+                if (sanitizedChild) {
+                    holder.appendChild(sanitizedChild);
+                }
+            });
+
+            return holder.innerHTML.trim();
+        }
+
+        function plainTextToSanitizedHtml(text) {
+            var lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+            var html = '';
+            var paragraph = [];
+            var listType = '';
+            var listItems = [];
+
+            function flushParagraph() {
+                if (!paragraph.length) {
+                    return;
+                }
+                html += '<p>' + escapeHtml(paragraph.join('\n')).replace(/\n/g, '<br>') + '</p>';
+                paragraph = [];
+            }
+
+            function flushList() {
+                if (!listType || !listItems.length) {
+                    listType = '';
+                    listItems = [];
+                    return;
+                }
+
+                html += '<' + listType + '>' + listItems.map(function (item) {
+                    return '<li>' + escapeHtml(item) + '</li>';
+                }).join('') + '</' + listType + '>';
+                listType = '';
+                listItems = [];
+            }
+
+            lines.forEach(function (line) {
+                var trimmed = String(line || '').trim();
+                if (trimmed === '') {
+                    flushParagraph();
+                    flushList();
+                    return;
+                }
+
+                if (/^[-*]\s+/.test(trimmed)) {
+                    flushParagraph();
+                    if (listType !== 'ul') {
+                        flushList();
+                        listType = 'ul';
+                    }
+                    listItems.push(trimmed.replace(/^[-*]\s+/, ''));
+                    return;
+                }
+
+                if (/^\d+\.\s+/.test(trimmed)) {
+                    flushParagraph();
+                    if (listType !== 'ol') {
+                        flushList();
+                        listType = 'ol';
+                    }
+                    listItems.push(trimmed.replace(/^\d+\.\s+/, ''));
+                    return;
+                }
+
+                flushList();
+                paragraph.push(line);
+            });
+
+            flushParagraph();
+            flushList();
+
+            return html !== '' ? html : '<p>' + escapeHtml(String(text || '')) + '</p>';
+        }
+
+        function isSidebarRichTextBlockType(type) {
+            return ['text', 'feature_list', 'testimonial', 'inner_section', 'company_address', 'footer', 'email_footer'].indexOf(String(type || '')) !== -1;
+        }
+
+        function getSidebarTextEditableNode(block) {
+            if (!block) {
+                return null;
+            }
+
+            return block.querySelector('.mb-richtext')
+                || block.querySelector('.mb-company-address-text')
+                || block.querySelector('.mb-footer-text');
+        }
+
+        function htmlToFallbackPlainText(html) {
+            var parser = new window.DOMParser();
+            var doc = parser.parseFromString('<div>' + String(html || '') + '</div>', 'text/html');
+            var pieces = [];
+
+            function appendBreak(count) {
+                while (count-- > 0) {
+                    pieces.push('\n');
+                }
+            }
+
+            function walk(node, listContext) {
+                if (!node) {
+                    return;
+                }
+
+                if (node.nodeType === 3) {
+                    pieces.push(node.nodeValue || '');
+                    return;
+                }
+
+                if (node.nodeType !== 1) {
+                    return;
+                }
+
+                var tagName = String(node.tagName || '').toUpperCase();
+                if (tagName === 'BR') {
+                    appendBreak(1);
+                    return;
+                }
+
+                if (tagName === 'LI') {
+                    pieces.push(listContext === 'ol' ? '1. ' : '- ');
+                }
+
+                Array.prototype.forEach.call(node.childNodes || [], function (childNode) {
+                    walk(childNode, tagName === 'UL' || tagName === 'OL' ? tagName.toLowerCase() : listContext);
+                });
+
+                if (tagName === 'LI') {
+                    appendBreak(1);
+                } else if (tagName === 'P' || tagName === 'DIV' || tagName === 'H1' || tagName === 'H2' || tagName === 'H3' || tagName === 'H4') {
+                    appendBreak(2);
+                } else if (tagName === 'UL' || tagName === 'OL') {
+                    appendBreak(1);
+                }
+            }
+
+            Array.prototype.forEach.call(doc.body.firstChild ? doc.body.firstChild.childNodes : [], function (childNode) {
+                walk(childNode, '');
+            });
+
+            return pieces.join('')
+                .replace(/\n{3,}/g, '\n\n')
+                .replace(/[ \t]+\n/g, '\n')
+                .trim();
+        }
+
+        function destroySidebarTextEditor() {
+            if (state.sidebarEditor && state.sidebarEditor.quill && state.sidebarEditor.onTextChange) {
+                state.sidebarEditor.quill.off('text-change', state.sidebarEditor.onTextChange);
+            }
+
+            if (state.sidebarEditor && state.sidebarEditor.quill && state.sidebarEditor.onSelectionChange) {
+                state.sidebarEditor.quill.off('selection-change', state.sidebarEditor.onSelectionChange);
+            }
+
+            state.sidebarEditor = null;
+        }
+
+        function applySidebarEditorHtml(block, node, html) {
+            var sanitized = sanitizeEditableHtml(html);
+
+            if (!block || !node) {
+                return;
+            }
+
+            node.innerHTML = sanitized || '<p><br></p>';
+            syncFields();
+        }
+
+        function getCurrentUnsubscribeStatusNode() {
+            return document.getElementById('marketing-builder-unsubscribe-status');
+        }
+
+        function getSidebarEditorSelection(quill) {
+            var editorState = state.sidebarEditor;
+            var range;
+
+            if (!quill) {
+                return null;
+            }
+
+            range = quill.getSelection();
+            if (range) {
+                return range;
+            }
+
+            if (editorState && editorState.quill === quill && editorState.savedRange) {
+                return {
+                    index: editorState.savedRange.index,
+                    length: editorState.savedRange.length
+                };
+            }
+
+            return null;
+        }
+
+        function restoreSidebarEditorSelection(quill) {
+            var range = getSidebarEditorSelection(quill);
+
+            if (!quill || !range) {
+                return null;
+            }
+
+            quill.focus();
+            quill.setSelection(range.index, range.length, 'silent');
+            return range;
+        }
+
+        function applySidebarQuillFormat(quill, format, value) {
+            var range = restoreSidebarEditorSelection(quill);
+            var currentFormat;
+            var nextValue;
+            var currentLink;
+            var requestedLink;
+            var targetLength;
+
+            if (!quill || !range) {
+                return;
+            }
+
+            targetLength = range.length > 0 ? range.length : 0;
+
+            if (format === 'clean') {
+                if (targetLength > 0) {
+                    quill.removeFormat(range.index, targetLength, 'user');
+                    quill.setSelection(range.index, targetLength, 'silent');
+                }
+                quill.focus();
+                state.sidebarEditor.savedRange = {
+                    index: range.index,
+                    length: targetLength
+                };
+                return;
+            }
+
+            if (format === 'link') {
+                currentLink = (quill.getFormat(range.index, Math.max(targetLength, 1)) || {}).link || 'https://';
+                requestedLink = window.prompt(strings.linkUrl || 'Link URL', currentLink);
+
+                if (requestedLink === null) {
+                    return;
+                }
+
+                requestedLink = String(requestedLink || '').trim();
+                if (requestedLink !== '' && !isValidLink(requestedLink)) {
+                    window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
+                    return;
+                }
+
+                if (targetLength > 0) {
+                    quill.formatText(range.index, targetLength, format, requestedLink === '' ? false : requestedLink, 'user');
+                    quill.setSelection(range.index, targetLength, 'silent');
+                } else {
+                    quill.format(format, requestedLink === '' ? false : requestedLink, 'user');
+                    quill.setSelection(range.index, 0, 'silent');
+                }
+                quill.focus();
+                state.sidebarEditor.savedRange = {
+                    index: range.index,
+                    length: targetLength
+                };
+                return;
+            }
+
+            currentFormat = quill.getFormat(range.index, Math.max(targetLength, 1)) || {};
+            nextValue = typeof value !== 'undefined' ? value : !currentFormat[format];
+
+            if (targetLength > 0) {
+                quill.formatText(range.index, targetLength, format, nextValue, 'user');
+                quill.setSelection(range.index, targetLength, 'silent');
+            } else {
+                quill.format(format, nextValue, 'user');
+                quill.setSelection(range.index, 0, 'silent');
+            }
+
+            quill.focus();
+            state.sidebarEditor.savedRange = {
+                index: range.index,
+                length: targetLength
+            };
+        }
+
+        function syncSidebarEditorFromBlock() {
+            var editorState = state.sidebarEditor;
+            var sourceHtml;
+            var normalizedHtml;
+
+            if (!editorState || !editorState.block || !editorState.node) {
+                return;
+            }
+
+            sourceHtml = sanitizeEditableHtml(editorState.node.innerHTML || '');
+
+            if (editorState.mode === 'quill' && editorState.quill) {
+                normalizedHtml = sanitizeEditableHtml(editorState.quill.root.innerHTML || '');
+                if (normalizedHtml === sourceHtml) {
+                    return;
+                }
+
+                editorState.syncing = true;
+                editorState.quill.setContents([]);
+                editorState.quill.clipboard.dangerouslyPasteHTML(sourceHtml || '<p><br></p>');
+                editorState.syncing = false;
+                return;
+            }
+
+            if (editorState.mode === 'textarea' && editorState.textarea) {
+                editorState.textarea.value = htmlToFallbackPlainText(sourceHtml);
+            }
+        }
+
+        function initializeSidebarTextEditor(block) {
+            var editorHost;
+            var fallbackShell;
+            var fallbackTextarea;
+            var sourceNode;
+            var initialHtml;
+            var quill;
+            var textChangeHandler;
+
+            destroySidebarTextEditor();
+
+            if (!block || !isSidebarRichTextBlockType(block.dataset.builderBlock)) {
+                return;
+            }
+
+            sourceNode = getSidebarTextEditableNode(block);
+            editorHost = properties.querySelector('[data-marketing-builder-quill-editor="1"]');
+            fallbackShell = properties.querySelector('[data-marketing-builder-textarea-fallback-shell="1"]');
+            fallbackTextarea = properties.querySelector('[data-marketing-builder-textarea-fallback="1"]');
+            initialHtml = sanitizeEditableHtml(sourceNode ? sourceNode.innerHTML : '');
+
+            if (!sourceNode || !editorHost || !fallbackShell || !fallbackTextarea) {
+                return;
+            }
+
+            if (window.Quill) {
+                quill = new window.Quill(editorHost, {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: [
+                            [{ header: [false, 1, 2, 3] }],
+                            ['bold', 'italic', 'underline', 'strike'],
+                            [{ color: [] }, { background: [] }],
+                            [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+                            [{ align: [] }],
+                            ['link', 'blockquote'],
+                            ['clean']
+                        ]
+                    }
+                });
+
+                var quillToolbar = editorHost.parentNode.querySelector('.ql-toolbar');
+                var toolbarModule = quill.getModule('toolbar');
+                if (quillToolbar) {
+                    Array.prototype.forEach.call(quillToolbar.querySelectorAll('button'), function (buttonNode) {
+                        buttonNode.setAttribute('type', 'button');
+                        buttonNode.addEventListener('mousedown', function (event) {
+                            event.preventDefault();
+                            restoreSidebarEditorSelection(quill);
+                        });
+                        buttonNode.addEventListener('click', function () {
+                            restoreSidebarEditorSelection(quill);
+                        });
+                    });
+                }
+
+                fallbackShell.classList.add('hide');
+                editorHost.parentNode.classList.remove('hide');
+
+                state.sidebarEditor = {
+                    mode: 'quill',
+                    block: block,
+                    node: sourceNode,
+                    quill: quill,
+                    fallbackShell: fallbackShell,
+                    textarea: fallbackTextarea,
+                    syncing: true,
+                    onTextChange: null,
+                    onSelectionChange: null,
+                    savedRange: null
+                };
+
+                quill.clipboard.dangerouslyPasteHTML(initialHtml || '<p><br></p>');
+                state.sidebarEditor.syncing = false;
+
+                textChangeHandler = function () {
+                    if (!state.sidebarEditor || state.sidebarEditor.syncing || state.sidebarEditor.block !== block) {
+                        return;
+                    }
+
+                    applySidebarEditorHtml(block, sourceNode, quill.root.innerHTML || '');
+                };
+
+                state.sidebarEditor.onTextChange = textChangeHandler;
+                quill.on('text-change', textChangeHandler);
+
+                state.sidebarEditor.onSelectionChange = function (range) {
+                    if (!state.sidebarEditor || state.sidebarEditor.block !== block || !range) {
+                        return;
+                    }
+
+                    state.sidebarEditor.savedRange = {
+                        index: range.index,
+                        length: range.length
+                    };
+                };
+                quill.on('selection-change', state.sidebarEditor.onSelectionChange);
+
+                if (toolbarModule) {
+                    ['bold', 'italic', 'underline', 'strike'].forEach(function (format) {
+                        toolbarModule.addHandler(format, function (value) {
+                            applySidebarQuillFormat(quill, format, value);
+                        });
+                    });
+                    toolbarModule.addHandler('link', function (value) {
+                        applySidebarQuillFormat(quill, 'link', value);
+                    });
+                    toolbarModule.addHandler('clean', function () {
+                        applySidebarQuillFormat(quill, 'clean');
+                    });
+                }
+
+                quill.focus();
+                state.sidebarEditor.savedRange = quill.getSelection() || { index: Math.max(0, quill.getLength() - 1), length: 0 };
+                return;
+            }
+
+            editorHost.parentNode.classList.add('hide');
+            fallbackShell.classList.remove('hide');
+            fallbackTextarea.value = htmlToFallbackPlainText(initialHtml);
+            fallbackTextarea.addEventListener('input', function () {
+                if (!state.sidebarEditor || state.sidebarEditor.block !== block) {
+                    return;
+                }
+
+                applySidebarEditorHtml(block, sourceNode, plainTextToSanitizedHtml(fallbackTextarea.value));
+            });
+
+            state.sidebarEditor = {
+                mode: 'textarea',
+                block: block,
+                node: sourceNode,
+                textarea: fallbackTextarea,
+                fallbackShell: fallbackShell,
+                syncing: false
+            };
+        }
+
+        function getPrimaryEditableNode(block) {
+            if (!block) {
+                return null;
+            }
+
+            if (block.dataset.builderBlock === 'hero' && state.activeHeroChild) {
+                var activeHeroPart = block.querySelector('[data-hero-part="' + state.activeHeroChild + '"]');
+                if (activeHeroPart) {
+                    if (activeHeroPart.matches('[contenteditable="true"]')) {
+                        return activeHeroPart;
+                    }
+                    return activeHeroPart.querySelector('[contenteditable="true"]');
+                }
+            }
+
+            return block.querySelector('.mb-richtext')
+                || block.querySelector('.mb-company-address-text')
+                || block.querySelector('.mb-footer-text')
+                || block.querySelector('.mb-heading-text')
+                || block.querySelector('.mb-hero-headline')
+                || block.querySelector('.mb-hero-subheadline')
+                || block.querySelector('.mb-image-caption')
+                || block.querySelector('.mb-icon-title')
+                || block.querySelector('.mb-icon-description')
+                || block.querySelector('[contenteditable="true"]');
+        }
+
+        function focusEditableNode(node) {
+            if (!node) {
+                return false;
+            }
+
+            node.focus();
+            return true;
+        }
+
+        function insertContentAtCursor(node, content, asHtml) {
+            if (!node) {
+                return false;
+            }
+
+            focusEditableNode(node);
+            if (document.queryCommandSupported && document.queryCommandSupported(asHtml ? 'insertHTML' : 'insertText')) {
+                document.execCommand(asHtml ? 'insertHTML' : 'insertText', false, content);
+                return true;
+            }
+
+            var selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                return false;
+            }
+
+            var range = selection.getRangeAt(0);
+            range.deleteContents();
+
+            if (asHtml) {
+                var fragment = range.createContextualFragment(content);
+                range.insertNode(fragment);
+            } else {
+                range.insertNode(document.createTextNode(content));
+            }
+
+            selection.removeAllRanges();
+            return true;
+        }
+
+        function executeRichTextCommand(command, value) {
+            var editable = document.activeElement && document.activeElement.closest
+                ? document.activeElement.closest('[contenteditable="true"]')
+                : null;
+
+            if (!editable || !state.activeBlock || !state.activeBlock.contains(editable)) {
+                editable = getPrimaryEditableNode(state.activeBlock);
+            }
+
+            if (!editable) {
+                return;
+            }
+
+            focusEditableNode(editable);
+            document.execCommand(command, false, value || null);
+            if (editable.classList.contains('mb-richtext') || editable.classList.contains('mb-company-address-text') || editable.classList.contains('mb-footer-text')) {
+                editable.innerHTML = sanitizeEditableHtml(editable.innerHTML);
+            }
+            syncFields();
+            renderProperties();
+        }
+
+        function insertMergeTag(token) {
+            var normalizedToken = String(token || '').trim();
+            if (normalizedToken === '') {
+                window.alert(strings.mergeTagSelectPrompt || 'Select a merge tag first.');
+                return;
+            }
+
+            if (state.sidebarEditor && state.sidebarEditor.block === state.activeBlock) {
+                if (state.sidebarEditor.mode === 'quill' && state.sidebarEditor.quill) {
+                    var range = state.sidebarEditor.quill.getSelection(true);
+                    var index = range ? range.index : Math.max(0, state.sidebarEditor.quill.getLength() - 1);
+                    state.sidebarEditor.quill.insertText(index, normalizedToken, 'user');
+                    state.sidebarEditor.quill.setSelection(index + normalizedToken.length, 0, 'silent');
+                    state.sidebarEditor.quill.focus();
+                    return;
+                }
+
+                if (state.sidebarEditor.mode === 'textarea' && state.sidebarEditor.textarea) {
+                    var textarea = state.sidebarEditor.textarea;
+                    var start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
+                    var end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : textarea.value.length;
+                    textarea.value = textarea.value.slice(0, start) + normalizedToken + textarea.value.slice(end);
+                    textarea.selectionStart = textarea.selectionEnd = start + normalizedToken.length;
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    textarea.focus();
+                    return;
+                }
+            }
+
+            var activeElement = document.activeElement;
+            if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
+                var start = typeof activeElement.selectionStart === 'number' ? activeElement.selectionStart : activeElement.value.length;
+                var end = typeof activeElement.selectionEnd === 'number' ? activeElement.selectionEnd : activeElement.value.length;
+                var currentValue = String(activeElement.value || '');
+                activeElement.value = currentValue.slice(0, start) + normalizedToken + currentValue.slice(end);
+                activeElement.selectionStart = activeElement.selectionEnd = start + normalizedToken.length;
+                activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+                return;
+            }
+
+            if (!insertContentAtCursor(getPrimaryEditableNode(state.activeBlock), normalizedToken, false)) {
+                window.alert(strings.selectBlock || 'Select a block to edit it.');
+                return;
+            }
+
+            syncFields();
+        }
+
+        function applySavedCompanyAddress(block, options) {
+            var payload;
+            var sanitizedHtml;
+            var textValue;
+            var surfaceNode;
+            var sidebarEditorNode;
+            var settings = options || {};
+
+            if (!block) {
+                return;
+            }
+
+            payload = getSavedCompanyAddressPayload();
+            sanitizedHtml = sanitizeEditableHtml(payload.html || '');
+            textValue = String(payload.text || '');
+            var addressNode = block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text');
+            if (!addressNode) {
+                return;
+            }
+
+            addressNode.innerHTML = sanitizedHtml || '<p><br></p>';
+            addressNode.setAttribute('data-saved-company-address-source', payload.source);
+            addressNode.setAttribute('data-saved-company-address-text', textValue);
+
+            surfaceNode = getSurface(block);
+            if (surfaceNode) {
+                surfaceNode.setAttribute('data-company-address-source', payload.source);
+            }
+
+            sidebarEditorNode = getSidebarTextEditableNode(block);
+            if (state.sidebarEditor && state.sidebarEditor.block === block && sidebarEditorNode) {
+                state.sidebarEditor.node = sidebarEditorNode;
+                syncSidebarEditorFromBlock();
+            }
+
+            if (!settings.skipSync) {
+                syncFields();
+            }
+            if (!settings.skipRender && state.activeBlock === block) {
+                renderProperties();
+            }
+        }
+
+        function shouldNormalizeSavedCompanyAddressBlock(block) {
+            var type;
+            var addressNode;
+            var currentText;
+            var savedPayload;
+
+            if (!block || !block.dataset) {
+                return false;
+            }
+
+            type = String(block.dataset.builderBlock || '');
+            if (type !== 'company_address' && type !== 'footer' && type !== 'email_footer') {
+                return false;
+            }
+
+            addressNode = block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text');
+            if (!addressNode) {
+                return false;
+            }
+
+            savedPayload = getSavedCompanyAddressPayload();
+            currentText = String(addressNode.textContent || '').replace(/\s+/g, ' ').trim();
+
+            if (type === 'footer' || type === 'email_footer') {
+                return isLegacyCompanyAddressPlaceholderValue(addressNode.innerHTML)
+                    || isLegacyCompanyAddressPlaceholderValue(currentText)
+                    || String(addressNode.getAttribute('data-saved-company-address-source') || '').trim() === ''
+                    || String(addressNode.getAttribute('data-saved-company-address-text') || '').trim() !== String(savedPayload.text || '').trim();
+            }
+
+            return isLegacyCompanyAddressPlaceholderValue(addressNode.innerHTML)
+                || isLegacyCompanyAddressPlaceholderValue(currentText);
+        }
+
+        function ensureMinimumContentPadding(node) {
+            var currentLeft;
+            var currentRight;
+
+            if (!node || !node.style) {
+                return;
+            }
+
+            currentLeft = parseInt(node.style.paddingLeft, 10) || 0;
+            currentRight = parseInt(node.style.paddingRight, 10) || 0;
+
+            if (currentLeft < 10) {
+                node.style.paddingLeft = '10px';
+            }
+
+            if (currentRight < 10) {
+                node.style.paddingRight = '10px';
+            }
+
+            if (!node.style.boxSizing) {
+                node.style.boxSizing = 'border-box';
+            }
+        }
+
+        function normalizeBlockContentPadding(block) {
+            if (!block) {
+                return;
+            }
+
+            Array.prototype.forEach.call(
+                block.querySelectorAll('.mb-richtext, .mb-heading-text, .mb-image-caption, .mb-icon-title, .mb-icon-description, .mb-hero-headline, .mb-hero-subheadline, .mb-qr-caption'),
+                ensureMinimumContentPadding
+            );
+        }
+
+        function isSavedCompanyAddressTargetBlock(block) {
+            if (!block || !block.dataset) {
+                return false;
+            }
+
+            return block.dataset.builderBlock === 'company_address'
+                || block.dataset.builderBlock === 'footer'
+                || block.dataset.builderBlock === 'email_footer';
+        }
+
+        function findExistingFooterBlock() {
+            return canvas.querySelector('.mb-block[data-builder-block="footer"], .mb-block[data-builder-block="email_footer"]');
+        }
+
+        function insertOrFocusCompanyAddressBlock() {
+            var block = state.activeBlock;
+            var existingBlock;
+            var targetBlock;
+
+            if (block && block.dataset.builderBlock === 'company_address') {
+                applySavedCompanyAddress(block);
+                setActiveBlock(block);
+                return;
+            }
+
+            existingBlock = canvas.querySelector('.mb-block[data-builder-block="company_address"]');
+            targetBlock = existingBlock || createCompanyAddressBlock();
+
+            if (!existingBlock) {
+                insertBlockAtPlacement(targetBlock, {
+                    container: canvas,
+                    beforeNode: findExistingFooterBlock() || findExistingUnsubscribeBlock() || null
+                });
+            }
+
+            applySavedCompanyAddress(targetBlock);
+            setActiveBlock(targetBlock);
+        }
+
+        function insertOrFocusEmailFooterBlock() {
+            var existingFooter = findExistingFooterBlock();
+            var footerBlock = existingFooter || createFooterBlock();
+
+            if (!existingFooter) {
+                insertBlockAtPlacement(footerBlock, {
+                    container: canvas,
+                    beforeNode: findExistingUnsubscribeBlock() || null
+                });
+            }
+
+            applySavedCompanyAddress(footerBlock);
+            setActiveBlock(footerBlock);
+        }
+
+        function renderMergeTagButtons() {
+            if (!mergeTags.length) {
+                return '';
+            }
+
+            return '<div class="marketing-builder-merge-tag-list" data-marketing-builder-merge-tag-list="1">'
+                + mergeTags.map(function (tag) {
+                    return '<button type="button" class="marketing-builder-merge-tag-chip" data-merge-tag-token="' + escapeHtml(tag.token || '') + '">' + escapeHtml(tag.label || tag.token || '') + '</button>';
+                }).join('')
+                + '</div>';
+        }
+
+        function renderTemplateOptions() {
+            return ''
+                + '<option value="default">' + escapeHtml(strings.defaultTemplateName || 'Start Email Design') + '</option>'
+                + '<option value="newsletter">' + escapeHtml(strings.presetNewsletter || 'Newsletter') + '</option>'
+                + '<option value="promotion">' + escapeHtml(strings.presetPromotion || 'Promotion / Offer') + '</option>'
+                + '<option value="real_estate">' + escapeHtml(strings.presetRealEstate || 'Real Estate Listing') + '</option>'
+                + '<option value="product">' + escapeHtml(strings.presetProduct || 'Product Announcement') + '</option>'
+                + '<option value="simple_text">' + escapeHtml(strings.presetSimpleText || 'Simple Text Email') + '</option>'
+                + '<option value="conference_event">' + escapeHtml(strings.presetConferenceEvent || 'Conference / Event Invitation') + '</option>';
+        }
+
+        function renderStaticPaletteSection(id, title, bodyHtml, extraClass) {
+            var isOpen = !!state.paletteSearch || state.openCategory === id;
+
+            return '<div class="marketing-builder-palette-group marketing-builder-palette-group--static' + (isOpen ? ' is-open' : '') + (extraClass ? ' ' + extraClass : '') + '" data-category="' + escapeHtml(id) + '">'
+                + '<button type="button" class="marketing-builder-palette-group-title marketing-builder-palette-group-title--static" data-category-toggle="' + escapeHtml(id) + '">' + escapeHtml(title) + '</button>'
+                + '<div class="marketing-builder-palette-static-body">' + bodyHtml + '</div>'
+                + '</div>';
+        }
+
+        function renderSidebarActionCard(options) {
+            var classes = 'marketing-builder-sidebar-action-card';
+            var iconHtml = getPaletteIcon(options.icon || 'text');
+
+            if (options.primary) {
+                classes += ' marketing-builder-sidebar-action-card--primary';
+            }
+
+            return '<button type="button" class="' + classes + '" data-sidebar-action="' + escapeHtml(options.action) + '">'
+                + '<span class="marketing-builder-sidebar-action-card-icon">' + iconHtml + '</span>'
+                + '<span class="marketing-builder-sidebar-action-card-copy">'
+                + '<span class="marketing-builder-sidebar-action-card-label">' + escapeHtml(options.label) + '</span>'
+                + (options.note ? '<span class="marketing-builder-sidebar-action-card-note">' + escapeHtml(options.note) + '</span>' : '')
+                + '</span>'
+                + '</button>';
+        }
+
+        function renderSidebarLoadTemplateSection() {
+            return renderStaticPaletteSection(
+                'load-template',
+                strings.applyPreset || 'Load Template',
+                '<div class="form-group no-margin">'
+                    + '<select id="marketing-builder-preset-select" class="form-control marketing-builder-sidebar-select">'
+                    + renderTemplateOptions()
+                    + '</select>'
+                + '</div>'
+                + '<button type="button" class="btn btn-primary btn-block mtop10" id="marketing-builder-apply-preset" data-sidebar-action="load-template">' + escapeHtml(strings.applyPreset || 'Load Template') + '</button>',
+                'marketing-builder-palette-group--actions'
+            );
+        }
+
+        function renderSidebarComplianceSection() {
+            var statusText = hasConfiguredCompanyAddress()
+                ? (strings.companyAddressSavedConfigured || 'Saved company address settings are ready to insert into this block.')
+                : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet. Update them in Marketing Settings first.');
+
+            return renderStaticPaletteSection(
+                'compliance',
+                strings.compliance || 'Compliance',
+                '<span id="marketing-builder-unsubscribe-status" class="marketing-builder-status-chip marketing-builder-status-chip--missing">' + escapeHtml(strings.unsubscribeMissing || 'Missing unsubscribe link') + '</span>'
+                + '<div class="marketing-builder-sidebar-action-list marketing-builder-sidebar-action-list--grid">'
+                + renderSidebarActionCard({ action: 'insert-unsubscribe', label: strings.insertUnsubscribe || 'Insert Unsubscribe Link', note: strings.unsubscribe || 'Required', primary: true, icon: 'unsubscribe' })
+                + renderSidebarActionCard({ action: 'insert-company-address', label: strings.companyAddressBlock || 'Company Address', note: hasConfiguredCompanyAddress() ? (strings.companyAddressUseSaved || 'Use Saved Company Address') : (strings.companyAddressSavedMissing || 'Saved settings not configured yet.'), icon: 'address' })
+                + renderSidebarActionCard({ action: 'use-saved-company-address', label: strings.companyAddressUseSaved || 'Use Saved Company Address', note: hasConfiguredCompanyAddress() ? (strings.companyAddressSavedConfigured || 'Saved company address settings are ready to insert into this block.') : (strings.companyAddressSavedMissing || 'Saved settings not configured yet.'), icon: 'address' })
+                + renderSidebarActionCard({ action: 'insert-email-footer', label: strings.emailFooterBlock || 'Email Footer', note: strings.footer || 'Footer', icon: 'footer' })
+                + '</div>'
+                + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(statusText) + '</p>',
+                'marketing-builder-palette-group--actions'
+            );
+        }
+
+        function renderSidebarMergeTagsSection() {
+            return renderStaticPaletteSection(
+                'merge-tags',
+                strings.insertMergeTag || 'Insert Merge Tags',
+                '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.personalizeHelp || 'Insert personalization placeholders at the current cursor position inside the selected block.') + '</p>'
+                + renderMergeTagButtons(),
+                'marketing-builder-palette-group--actions'
+            );
+        }
+
+        function renderSidebarPreviewSection(mode) {
+            var buttonId = mode === 'mobile' ? 'marketing-builder-preview-mobile' : 'marketing-builder-preview-desktop';
+            var label = mode === 'mobile'
+                ? (strings.previewMobile || 'Preview Mobile')
+                : (strings.previewDesktop || 'Preview Desktop');
+
+            return renderStaticPaletteSection(
+                mode === 'mobile' ? 'preview-mobile' : 'preview-desktop',
+                label,
+                '<button type="button" class="marketing-builder-sidebar-action-card marketing-builder-sidebar-action-card--primary" id="' + escapeHtml(buttonId) + '" data-sidebar-action="' + escapeHtml(mode === 'mobile' ? 'preview-mobile' : 'preview-desktop') + '">'
+                + '<span class="marketing-builder-sidebar-action-card-label">' + escapeHtml(label) + '</span>'
+                + '</button>',
+                'marketing-builder-palette-group--actions'
+            );
+        }
+
+        function renderRichTextToolbar(block) {
+            var toolbar = '<div class="marketing-builder-rich-text-toolbar" data-marketing-builder-rich-text-toolbar="1">'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="bold">' + escapeHtml(strings.richTextBold || 'Bold') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="italic">' + escapeHtml(strings.richTextItalic || 'Italic') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="underline">' + escapeHtml(strings.richTextUnderline || 'Underline') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="formatBlock" data-rich-text-value="P">' + escapeHtml(strings.richTextParagraph || 'Paragraph') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="formatBlock" data-rich-text-value="H2">' + escapeHtml(strings.richTextHeading2 || 'Heading 2') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="formatBlock" data-rich-text-value="H3">' + escapeHtml(strings.richTextHeading3 || 'Heading 3') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="insertUnorderedList">' + escapeHtml(strings.richTextBullets || 'Bullet List') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="insertOrderedList">' + escapeHtml(strings.richTextNumbers || 'Numbered List') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="createLink">' + escapeHtml(strings.richTextLink || 'Add Link') + '</button>'
+                + '<button type="button" class="marketing-builder-rich-text-button" data-rich-text-command="removeFormat">' + escapeHtml(strings.richTextClear || 'Clear Formatting') + '</button>'
+                + '</div>';
+
+            toolbar += '<p class="marketing-builder-settings-note">' + escapeHtml(strings.richTextHelp || 'Select text on the canvas, then use these controls to format and sanitize the selected content.') + '</p>';
+
+            if (mergeTags.length) {
+                toolbar += '<div class="marketing-builder-settings-note-card"><strong>' + escapeHtml(strings.mergeTags || 'Merge Tags') + '</strong>'
+                    + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.personalizeHelp || 'Insert personalization placeholders at the current cursor position inside the selected block.') + '</p>'
+                    + renderMergeTagButtons()
+                    + '</div>';
+            }
+
+            if (block && (block.dataset.builderBlock === 'company_address' || block.dataset.builderBlock === 'footer' || block.dataset.builderBlock === 'email_footer')) {
+                toolbar += '<div class="marketing-builder-settings-note-card">'
+                    + '<strong>' + escapeHtml(strings.companyAddressBlock || 'Company Address') + '</strong>'
+                    + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(companyAddressConfig.configured ? (strings.companyAddressSavedConfigured || 'Saved company address settings are available for this block.') : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet.')) + '</p>'
+                    + '<button type="button" class="btn btn-default btn-sm mtop10" data-action="use-saved-company-address">' + escapeHtml(strings.companyAddressUseSaved || 'Use Saved Company Address') + '</button>'
+                    + '</div>';
+            }
+
+            return toolbar;
+        }
+
+        function createConferenceEventPreset() {
+            var blocks = [];
+            var hero = createHeroBlock();
+            var intro = createTextBlock();
+            var details = createInnerSectionBlock();
+            var agenda = createFeatureListBlock();
+            var cta = createCtaBlock();
+            var footer = createFooterBlock();
+
+            hero.querySelector('.mb-hero-headline').textContent = 'Conference / Event Invitation';
+            hero.querySelector('.mb-hero-subheadline').textContent = 'Invite your audience to a live event with polished details, a clear CTA, and mobile-friendly structure.';
+            hero.querySelector('.mb-cta-label').textContent = 'Reserve your seat';
+            hero.querySelector('.mb-cta-link').setAttribute('href', 'https://example.com/register');
+
+            intro.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<p>Dear {{first_name}},</p><p>We would love to welcome you to our upcoming conference. Use this reusable template to share the headline, event story, and why this invitation matters to each recipient.</p>');
+
+            details.setAttribute('data-custom-label', strings.presetConferenceEvent || 'Conference / Event Invitation');
+            details.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<p><strong>Event details</strong></p><p>Date: Add your event date<br>Time: Add your event time<br>Location: Add your venue or streaming link</p>');
+
+            agenda.querySelector('.mb-heading-text').textContent = 'Agenda / Highlights';
+            agenda.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<ul><li>Opening keynote or welcome message</li><li>Key sessions, speakers, or product highlights</li><li>Networking, breakout topics, or next steps</li></ul>');
+
+            cta.querySelector('.mb-heading-text').textContent = 'Save your place today';
+            cta.querySelector('.mb-richtext').innerHTML = sanitizeEditableHtml('<p>Use this section for your registration push, ticket note, or RSVP reminder. Include any deadline or attendance benefit that matters.</p>');
+            cta.querySelector('.mb-button-label').textContent = 'Register now';
+            cta.querySelector('.mb-button-link').setAttribute('href', 'https://example.com/register');
+
+            applySavedCompanyAddress(footer);
+
+            blocks.push(hero, intro, details, agenda, cta, footer);
+
+            return blocks;
         }
 
         function defaultSurfaceStyle(extraStyle) {
@@ -282,8 +1587,8 @@
                 + '<a href="" class="mb-hero-image-link" data-hero-part="image" style="display:block;text-decoration:none;">'
                 + '<img src="' + heroPlaceholderDataUri() + '" alt="' + escapeHtml(strings.optionalImage || 'Optional image') + '" class="mb-hero-image" style="display:block;margin:0 auto 18px;max-width:100%;width:320px;height:auto;border-radius:18px;">'
                 + '</a>'
-                + '<h1 class="mb-hero-headline" data-hero-part="headline" contenteditable="true" style="margin:0 0 14px;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#ffffff;">Your headline goes here</h1>'
-                + '<p class="mb-hero-subheadline" data-hero-part="subheadline" contenteditable="true" style="margin:0 0 24px;font-family:Arial, sans-serif;font-size:16px;line-height:1.7;font-weight:400;color:#dbeafe;">Introduce the offer, explain the value, and set up the email.</p>'
+                + '<h1 class="mb-hero-headline" data-hero-part="headline" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 14px;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#ffffff;') + '">Your headline goes here</h1>'
+                + '<p class="mb-hero-subheadline" data-hero-part="subheadline" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 24px;font-family:Arial, sans-serif;font-size:16px;line-height:1.7;font-weight:400;color:#dbeafe;') + '">Introduce the offer, explain the value, and set up the email.</p>'
                 + '<a href="https://example.com" class="mb-cta-link" data-hero-part="button" target="_blank" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 26px;border-radius:999px;font-family:Arial, sans-serif;font-size:16px;line-height:1.2;font-weight:700;"><span class="mb-cta-label" contenteditable="true">Call to Action</span></a>'
                 + '</td></tr></table>');
         }
@@ -306,7 +1611,7 @@
         function createHeadingBlock() {
             return blockShell('heading', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('color:#0f172a;') + '">'
-                + '<h2 class="mb-heading-text" contenteditable="true" style="margin:0;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#0f172a;">Add a strong heading</h2>'
+                + '<h2 class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0;font-family:Arial, sans-serif;font-size:32px;line-height:1.2;font-weight:700;color:#0f172a;') + '">Add a strong heading</h2>'
                 + '</td></tr></table>');
         }
 
@@ -314,8 +1619,8 @@
             return blockShell('icon', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;color:#2563eb;') + '">'
                 + '<div class="mb-icon-symbol" contenteditable="true" style="font-size:42px;line-height:1;">&#9733;</div>'
-                + '<div class="mb-icon-title" contenteditable="true" style="margin-top:10px;font-family:Arial, sans-serif;font-size:20px;font-weight:700;line-height:1.3;color:#0f172a;">Icon title</div>'
-                + '<div class="mb-icon-description" contenteditable="true" style="margin-top:8px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;">Highlight one key point.</div>'
+                + '<div class="mb-icon-title" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:10px;font-family:Arial, sans-serif;font-size:20px;font-weight:700;line-height:1.3;color:#0f172a;') + '">Icon title</div>'
+                + '<div class="mb-icon-description" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:8px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;') + '">Highlight one key point.</div>'
                 + '<a href="" class="mb-icon-link" style="display:none;color:#2563eb;text-decoration:none;margin-top:10px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Learn more</a>'
                 + '</td></tr></table>');
         }
@@ -326,7 +1631,7 @@
                 + '<a href="" class="mb-image-link" style="text-decoration:none;">'
                 + '<img src="https://via.placeholder.com/640x320?text=Image" alt="" class="mb-image" style="display:inline-block;width:320px;max-width:100%;height:auto;border-radius:12px;">'
                 + '</a>'
-                + '<div class="mb-image-caption" contenteditable="true" style="margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:400;line-height:1.7;color:#64748b;">Optional caption</div>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:400;line-height:1.7;color:#64748b;') + '">Optional caption</div>'
                 + '</td></tr></table>');
         }
 
@@ -349,8 +1654,8 @@
             return blockShell('image_box', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('') + '">'
                 + '<div style="text-align:center;"><a href="" class="mb-image-link" style="text-decoration:none;"><img src="https://via.placeholder.com/520x220?text=Feature" alt="" class="mb-image" style="display:inline-block;width:280px;max-width:100%;height:auto;border-radius:12px;"></a></div>'
-                + '<h3 class="mb-heading-text" contenteditable="true" style="margin:18px 0 8px;font-family:Arial, sans-serif;font-size:24px;line-height:1.3;font-weight:700;color:#0f172a;">Feature spotlight</h3>'
-                + '<div class="mb-image-caption" contenteditable="true" style="font-family:Arial, sans-serif;font-size:15px;font-weight:400;color:#64748b;line-height:1.7;">Pair a visual with a short supporting explanation.</div>'
+                + '<h3 class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:18px 0 8px;font-family:Arial, sans-serif;font-size:24px;line-height:1.3;font-weight:700;color:#0f172a;') + '">Feature spotlight</h3>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Arial, sans-serif;font-size:15px;font-weight:400;color:#64748b;line-height:1.7;') + '">Pair a visual with a short supporting explanation.</div>'
                 + '</td></tr></table>');
         }
 
@@ -367,8 +1672,8 @@
         function createCtaBlock() {
             return blockShell('cta', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#eff6ff;padding:' + DEFAULT_PADDING + 'px;border-radius:18px;text-align:center;">'
-                + '<div class="mb-heading-text" contenteditable="true" style="margin:0 0 10px;font-family:Arial, sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0f172a;">Ready to take the next step?</div>'
-                + '<div class="mb-richtext" contenteditable="true" style="margin:0 0 18px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;">Use this call-to-action block for urgent or conversion-focused messages.</div>'
+                + '<div class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 10px;font-family:Arial, sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0f172a;') + '">Ready to take the next step?</div>'
+                + '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 18px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;color:#475569;line-height:1.7;') + '">Use this call-to-action block for urgent or conversion-focused messages.</div>'
                 + '<a href="https://example.com" class="mb-button-link" target="_blank" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-family:Arial, sans-serif;font-size:16px;font-weight:700;line-height:1.2;"><span class="mb-button-label" contenteditable="true">Book now</span></a>'
                 + '</td></tr></table>');
         }
@@ -376,31 +1681,33 @@
         function createFeatureListBlock() {
             return blockShell('feature_list', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('color:#0f172a;') + '">'
-                + '<div class="mb-heading-text" contenteditable="true" style="margin:0 0 10px;font-family:Arial, sans-serif;font-size:26px;line-height:1.2;font-weight:700;">Top reasons to choose this offer</div>'
-                + '<div class="mb-richtext" contenteditable="true" style="font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.8;"><ul style="margin:0;padding-left:20px;line-height:1.8;"><li>Benefit one with a short explanation</li><li>Benefit two with a short explanation</li><li>Benefit three with a short explanation</li></ul></div>'
+                + '<div class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin:0 0 10px;font-family:Arial, sans-serif;font-size:26px;line-height:1.2;font-weight:700;') + '">Top reasons to choose this offer</div>'
+                + '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.8;') + '"><ul style="margin:0;padding-left:20px;line-height:1.8;"><li>Benefit one with a short explanation</li><li>Benefit two with a short explanation</li><li>Benefit three with a short explanation</li></ul></div>'
                 + '</td></tr></table>');
         }
 
         function createTestimonialBlock() {
             return blockShell('testimonial', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#ffffff;padding:' + DEFAULT_PADDING + 'px;border-radius:16px;border:1px solid #e2e8f0;color:#0f172a;">'
-                + '<div class="mb-richtext" contenteditable="true" style="font-family:Georgia, serif;font-size:20px;font-weight:400;line-height:1.6;color:#0f172a;">“This email builder helped us launch polished campaigns much faster.”</div>'
-                + '<div class="mb-image-caption" contenteditable="true" style="margin-top:14px;font-family:Arial, sans-serif;font-size:14px;font-weight:500;color:#64748b;line-height:1.6;">Customer Name, Role</div>'
+                + '<div class="mb-richtext" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Georgia, serif;font-size:20px;font-weight:400;line-height:1.6;color:#0f172a;') + '">“This email builder helped us launch polished campaigns much faster.”</div>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:14px;font-family:Arial, sans-serif;font-size:14px;font-weight:500;color:#64748b;line-height:1.6;') + '">Customer Name, Role</div>'
                 + '</td></tr></table>');
         }
 
         function createCouponBlock() {
             return blockShell('coupon', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#fff7ed;padding:' + DEFAULT_PADDING + 'px;border:1px dashed #fb923c;border-radius:18px;text-align:center;color:#9a3412;">'
-                + '<div class="mb-heading-text" contenteditable="true" style="font-family:Arial, sans-serif;font-size:30px;line-height:1.1;font-weight:800;">SAVE20</div>'
-                + '<div class="mb-image-caption" contenteditable="true" style="margin-top:10px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.7;">Use this code to unlock your offer before it expires.</div>'
+                + '<div class="mb-heading-text" contenteditable="true" style="' + getMinimumContentPaddingStyle('font-family:Arial, sans-serif;font-size:30px;line-height:1.1;font-weight:800;') + '">SAVE20</div>'
+                + '<div class="mb-image-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:10px;font-family:Arial, sans-serif;font-size:16px;font-weight:400;line-height:1.7;') + '">Use this code to unlock your offer before it expires.</div>'
                 + '</td></tr></table>');
         }
 
         function createCompanyAddressBlock() {
+            var savedCompanyAddress = getSavedCompanyAddressPayload();
+
             return blockShell('company_address', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;color:#64748b;font-family:Arial, sans-serif;font-size:13px;line-height:1.7;font-weight:400;') + '">'
-                + '<div class="mb-company-address-text" contenteditable="true">Your Company<br>123 Market Street<br>City, State</div>'
+                + '<div class="mb-company-address-text" contenteditable="true" data-saved-company-address-source="' + escapeHtml(savedCompanyAddress.source) + '" data-saved-company-address-text="' + escapeHtml(savedCompanyAddress.text) + '">' + savedCompanyAddress.html + '</div>'
                 + '</td></tr></table>');
         }
 
@@ -437,7 +1744,7 @@
             return blockShell('qr', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#ffffff;padding:' + DEFAULT_PADDING + 'px;border-radius:18px;text-align:center;border:1px solid #e2e8f0;box-shadow:0 10px 24px rgba(15,23,42,.06);">'
                 + '<img src="' + qrSvgDataUri('https://example.com', 180, strings.qrFallbackNote || 'QR preview', '#111827', '#ffffff') + '" alt="QR Code" class="mb-qr-image" style="display:inline-block;width:180px;max-width:100%;height:auto;border-radius:16px;">'
-                + '<div class="mb-qr-caption" contenteditable="true" style="margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:500;line-height:1.6;color:#475569;">Scan to visit the linked page.</div>'
+                + '<div class="mb-qr-caption" contenteditable="true" style="' + getMinimumContentPaddingStyle('margin-top:12px;font-family:Arial, sans-serif;font-size:15px;font-weight:500;line-height:1.6;color:#475569;') + '">Scan to visit the linked page.</div>'
                 + '<div class="mb-qr-meta hide" data-qr-target="https://example.com" data-qr-size="180" data-qr-align="center" data-qr-foreground="#111827" data-qr-background="#ffffff" data-qr-padding="' + DEFAULT_PADDING + '" data-qr-margin-bottom="16" data-qr-radius="16"></div>'
                 + '</td></tr></table>');
         }
@@ -452,19 +1759,22 @@
         function createSocialBlock() {
             return blockShell('social', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="' + defaultSurfaceStyle('text-align:center;') + '">'
-                + '<a href="https://facebook.com" class="mb-social-link mb-social-facebook" style="color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Facebook</a>'
-                + '<a href="https://instagram.com" class="mb-social-link mb-social-instagram" style="color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Instagram</a>'
-                + '<a href="https://linkedin.com" class="mb-social-link mb-social-linkedin" style="color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">LinkedIn</a>'
-                + '<a href="" class="mb-social-link mb-social-twitter" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">X</a>'
-                + '<a href="" class="mb-social-link mb-social-website" style="display:none;color:#2563eb;text-decoration:none;margin:0 8px;font-family:Arial, sans-serif;font-size:15px;font-weight:600;line-height:1.5;">Website</a>'
-                + '<div class="mb-social-meta hide" data-facebook="https://facebook.com" data-instagram="https://instagram.com" data-linkedin="https://linkedin.com" data-twitter="" data-website=""></div>'
+                + '<a href="" class="mb-social-link mb-social-facebook" style="' + getSocialLinkStyle(false) + '" title="Facebook" aria-label="Facebook">' + renderSocialIconHtml({ key: 'facebook', label: 'Facebook' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-instagram" style="' + getSocialLinkStyle(false) + '" title="Instagram" aria-label="Instagram">' + renderSocialIconHtml({ key: 'instagram', label: 'Instagram' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-twitter" style="' + getSocialLinkStyle(false) + '" title="X" aria-label="X">' + renderSocialIconHtml({ key: 'twitter', label: 'X' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-youtube" style="' + getSocialLinkStyle(false) + '" title="YouTube" aria-label="YouTube">' + renderSocialIconHtml({ key: 'youtube', label: 'YouTube' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-linkedin" style="' + getSocialLinkStyle(false) + '" title="LinkedIn" aria-label="LinkedIn">' + renderSocialIconHtml({ key: 'linkedin', label: 'LinkedIn' }) + '</a>'
+                + '<a href="" class="mb-social-link mb-social-website" style="' + getSocialLinkStyle(false) + '" title="Website" aria-label="Website">' + renderSocialIconHtml({ key: 'website', label: 'Website' }) + '</a>'
+                + '<div class="mb-social-meta hide" data-facebook="" data-instagram="" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>'
                 + '</td></tr></table>');
         }
 
         function createFooterBlock() {
+            var savedCompanyAddress = getSavedCompanyAddressPayload();
+
             return blockShell('footer', ''
                 + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td data-block-surface="1" style="background:#0f172a;padding:' + DEFAULT_PADDING + 'px;border-radius:16px;text-align:center;color:#cbd5e1;font-family:Arial, sans-serif;font-size:13px;line-height:1.7;font-weight:400;">'
-                + '<div class="mb-footer-text" contenteditable="true">Your Company<br>123 Market Street<br>City, State</div>'
+                + '<div class="mb-footer-text" contenteditable="true" data-saved-company-address-source="' + escapeHtml(savedCompanyAddress.source) + '" data-saved-company-address-text="' + escapeHtml(savedCompanyAddress.text) + '">' + savedCompanyAddress.html + '</div>'
                 + '<div style="margin-top:12px;"><a href="{{unsubscribe_url}}" style="color:#93c5fd;text-decoration:underline;">Unsubscribe</a></div>'
                 + '</td></tr></table>');
         }
@@ -473,30 +1783,61 @@
             return createFooterBlock();
         }
 
-        function ensureFooterUnsubscribeToken(block) {
+        function buildComplianceUnsubscribeNode(blockType) {
+            var linkColor = (blockType === 'footer' || blockType === 'email_footer') ? '#93c5fd' : '#2563eb';
+            return createElement('<div class="mb-compliance-unsubscribe" style="margin-top:12px;"><a href="{{unsubscribe_url}}" style="color:' + linkColor + ';text-decoration:underline;">Unsubscribe</a></div>');
+        }
+
+        function ensureComplianceUnsubscribeLink(block) {
             if (!block) {
                 return;
             }
 
             var type = block.dataset.builderBlock;
-            if (type !== 'footer' && type !== 'email_footer') {
-                return;
-            }
-
-            if (hasUnsubscribeToken(block.innerHTML)) {
+            if (type !== 'company_address' && type !== 'footer' && type !== 'email_footer') {
                 return;
             }
 
             var surface = getSurface(block);
+            var repaired = false;
             if (!surface) {
                 return;
             }
 
-            surface.appendChild(createElement('<div style="margin-top:12px;"><a href="{{unsubscribe_url}}" style="color:#93c5fd;text-decoration:underline;">Unsubscribe</a></div>'));
+            Array.prototype.forEach.call(surface.querySelectorAll('a'), function (anchor) {
+                var text = String(anchor.textContent || '').trim().toLowerCase();
+                var href = String(anchor.getAttribute('href') || '').trim();
+                if (text.indexOf('unsubscribe') === -1) {
+                    return;
+                }
+                if (!hasActualUnsubscribeLinkMarkup(anchor.outerHTML) || href === '' || href === '#') {
+                    anchor.setAttribute('href', '{{unsubscribe_url}}');
+                    anchor.setAttribute('style', 'color:' + ((type === 'footer' || type === 'email_footer') ? '#93c5fd' : '#2563eb') + ';text-decoration:underline;');
+                    repaired = true;
+                }
+            });
+
+            if (hasActualUnsubscribeLinkMarkup(surface.innerHTML)) {
+                return;
+            }
+
+            Array.prototype.forEach.call(surface.children || [], function (child) {
+                var text = String(child.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if ((text === 'unsubscribe' || text === 'unsubscribe here') && !child.querySelector('a')) {
+                    child.parentNode.removeChild(child);
+                    repaired = true;
+                }
+            });
+
+            surface.appendChild(buildComplianceUnsubscribeNode(type));
+            if (repaired) {
+                block.dataset.complianceUnsubscribeNormalized = '1';
+            }
         }
 
         function createLegacyBlock(rawHtml) {
             var preview = String(rawHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            var normalizedRawHtml = normalizeLegacySocialHtml(rawHtml || '');
             if (preview.length > 120) {
                 preview = preview.slice(0, 117) + '...';
             }
@@ -507,7 +1848,7 @@
                 + '<p class="no-margin mtop10">' + escapeHtml(preview || 'Legacy HTML preserved.') + '</p>'
                 + '</td></tr></table>');
 
-            block.dataset.rawHtml = String(rawHtml || '');
+            block.dataset.rawHtml = normalizedRawHtml;
             return block;
         }
 
@@ -590,6 +1931,28 @@
 
         function getSurface(block) {
             return block ? block.querySelector('[data-block-surface]') : null;
+        }
+
+        function getBodySurface(block) {
+            if (!block) {
+                return null;
+            }
+
+            return block.querySelector('.mb-richtext')
+                || block.querySelector('.mb-company-address-text')
+                || block.querySelector('.mb-footer-text');
+        }
+
+        function getBorderTarget(block) {
+            var surface = getSurface(block);
+            var headingNode = block ? block.querySelector('.mb-heading-text') : null;
+            var bodyNode = getBodySurface(block);
+
+            if (headingNode && bodyNode && bodyNode !== headingNode) {
+                return bodyNode;
+            }
+
+            return surface || bodyNode;
         }
 
         function getBlockLabel(block) {
@@ -798,6 +2161,219 @@
             block.classList.toggle('mb-block--compact-toolbar', block.offsetWidth > 0 && block.offsetWidth < 260);
         }
 
+        function getSocialLinkDefinitions() {
+            return [
+                { key: 'facebook', selector: '.mb-social-facebook', label: 'Facebook' },
+                { key: 'instagram', selector: '.mb-social-instagram', label: 'Instagram' },
+                { key: 'twitter', selector: '.mb-social-twitter', label: 'X' },
+                { key: 'youtube', selector: '.mb-social-youtube', label: 'YouTube' },
+                { key: 'linkedin', selector: '.mb-social-linkedin', label: 'LinkedIn' },
+                { key: 'website', selector: '.mb-social-website', label: 'Website' }
+            ];
+        }
+
+        function getSocialDataAttributeName(key) {
+            return 'data-social-' + key;
+        }
+
+        function isKnownSocialMetaAttribute(name) {
+            return /^(data-facebook|data-instagram|data-twitter|data-youtube|data-linkedin|data-website)$/.test(String(name || ''));
+        }
+
+        function isKnownSocialRootAttribute(name) {
+            return /^(data-social-facebook|data-social-instagram|data-social-twitter|data-social-youtube|data-social-linkedin|data-social-website)$/.test(String(name || ''));
+        }
+
+        function isSerializableSocialClass(node, className) {
+            var normalized = String(className || '');
+
+            if (!node || normalized === '') {
+                return false;
+            }
+
+            if (node.classList && node.classList.contains('mb-social-meta')) {
+                return normalized === 'mb-social-meta';
+            }
+
+            if (node.classList && node.classList.contains('mb-social-link')) {
+                return normalized === 'mb-social-link'
+                    || normalized === 'mb-social-facebook'
+                    || normalized === 'mb-social-instagram'
+                    || normalized === 'mb-social-twitter'
+                    || normalized === 'mb-social-youtube'
+                    || normalized === 'mb-social-linkedin'
+                    || normalized === 'mb-social-website';
+            }
+
+            return false;
+        }
+
+        function getPersistedSocialValues(block, meta) {
+            var values = {};
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var metaValue = meta ? normalizeSocialUrlValue(meta.getAttribute('data-' + definition.key) || '') : '';
+                var rootValue = block ? normalizeSocialUrlValue(block.getAttribute(getSocialDataAttributeName(definition.key)) || '') : '';
+                var link = block ? block.querySelector(definition.selector) : null;
+                var linkValue = link ? normalizeSocialUrlValue(link.getAttribute('href') || '') : '';
+                var resolvedValue = metaValue !== '' ? metaValue : (rootValue !== '' ? rootValue : '');
+
+                if (resolvedValue === '' && linkValue !== '') {
+                    resolvedValue = linkValue;
+                }
+
+                values[definition.key] = resolvedValue;
+            });
+
+            return values;
+        }
+
+        function getRenderedSocialValues(block, meta) {
+            var values = {};
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var link = block ? block.querySelector(definition.selector) : null;
+                var linkValue = link ? normalizeSocialUrlValue(link.getAttribute('href') || '') : '';
+                var metaValue = meta ? normalizeSocialUrlValue(meta.getAttribute('data-' + definition.key) || '') : '';
+                var rootValue = block ? normalizeSocialUrlValue(block.getAttribute(getSocialDataAttributeName(definition.key)) || '') : '';
+                var resolvedValue = metaValue !== '' ? metaValue : (rootValue !== '' ? rootValue : '');
+
+                if (resolvedValue === '' && linkValue !== '') {
+                    resolvedValue = linkValue;
+                }
+
+                values[definition.key] = resolvedValue;
+            });
+
+            return values;
+        }
+
+        function persistSocialValues(block, meta, values) {
+            if (!block) {
+                return;
+            }
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var resolvedValue = normalizeSocialUrlValue((values && values[definition.key]) || '');
+
+                block.setAttribute(getSocialDataAttributeName(definition.key), resolvedValue);
+                if (meta) {
+                    meta.setAttribute('data-' + definition.key, resolvedValue);
+                }
+            });
+        }
+
+        function renderSocialIconHtml(definition) {
+            var src = getSocialIconAssetUrl(definition && definition.key ? definition.key : 'website');
+
+            if (src === '') {
+                return '';
+            }
+
+            return '<img src="' + escapeHtml(src) + '" width="' + CANVAS_SOCIAL_ICON_SIZE + '" height="' + CANVAS_SOCIAL_ICON_SIZE + '" alt="' + escapeHtml(definition.label) + '" style="display:block;border:0;outline:none;text-decoration:none;width:' + CANVAS_SOCIAL_ICON_SIZE + 'px;height:' + CANVAS_SOCIAL_ICON_SIZE + 'px;border-radius:50%;">';
+        }
+
+        function getSocialIconAssetUrl(channel) {
+            var iconUrls = config.socialIconUrls || {};
+            var resolved = String(iconUrls[channel] || '').trim();
+
+            if (resolved === '' && channel === 'twitter') {
+                resolved = String(iconUrls.x || '').trim();
+            }
+
+            return resolved;
+        }
+
+        function renderSocialIconEmailHtml(definition) {
+            var src = getSocialIconAssetUrl(definition && definition.key ? definition.key : 'website');
+
+            if (src === '') {
+                return '';
+            }
+
+            return '<img src="' + escapeHtml(src) + '" width="' + EMAIL_SOCIAL_ICON_SIZE + '" height="' + EMAIL_SOCIAL_ICON_SIZE + '" alt="' + escapeHtml(definition.label) + '" style="display:block;border:0;outline:none;text-decoration:none;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;border-radius:50%;">';
+        }
+
+        function getSocialLinkEmailStyle(definition) {
+            return 'display:inline-block;vertical-align:middle;width:' + EMAIL_SOCIAL_ICON_SIZE + 'px;height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;line-height:' + EMAIL_SOCIAL_ICON_SIZE + 'px;margin:0 ' + EMAIL_SOCIAL_ICON_MARGIN + 'px;text-align:center;text-decoration:none;border-radius:50%;';
+        }
+
+        function setSocialLinkIcon(link, definition) {
+            if (!link || !definition) {
+                return;
+            }
+
+            link.innerHTML = renderSocialIconHtml(definition);
+            link.setAttribute('title', definition.label);
+            link.setAttribute('aria-label', definition.label);
+        }
+
+        function setSocialLinkEmailIcon(link, definition) {
+            if (!link || !definition) {
+                return false;
+            }
+
+            link.innerHTML = renderSocialIconEmailHtml(definition);
+            if (link.innerHTML === '') {
+                return false;
+            }
+            link.setAttribute('title', definition.label);
+            link.setAttribute('aria-label', definition.label);
+            return true;
+        }
+
+        function ensureSocialBlockStructure(block) {
+            var surface;
+            var meta;
+            var persistedValues;
+            var metas;
+            var i;
+
+            if (!block || block.dataset.builderBlock !== 'social') {
+                return null;
+            }
+
+            surface = getSurface(block);
+            if (!surface) {
+                return null;
+            }
+
+            metas = block.querySelectorAll('.mb-social-meta');
+            if (metas.length > 1) {
+                for (i = 1; i < metas.length; i++) {
+                    if (metas[i] && metas[i].parentNode) {
+                        metas[i].parentNode.removeChild(metas[i]);
+                    }
+                }
+            }
+
+            meta = metas.length > 0 ? metas[0] : null;
+            if (!meta) {
+                meta = createElement('<div class="mb-social-meta hide" data-facebook="" data-instagram="" data-twitter="" data-youtube="" data-linkedin="" data-website=""></div>');
+                surface.appendChild(meta);
+            }
+
+            persistedValues = getPersistedSocialValues(block, meta);
+            persistSocialValues(block, meta, persistedValues);
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var link = block.querySelector(definition.selector);
+                if (!link) {
+                    link = createElement('<a href="" class="mb-social-link ' + definition.selector.replace('.', '') + '" style="' + getSocialLinkStyle(false) + '"></a>');
+                    surface.insertBefore(link, meta);
+                }
+
+                normalizeSocialLinkPresentation(link, hasConfiguredSocialUrl(link.getAttribute('href') || ''));
+                setSocialLinkIcon(link, definition);
+
+                if (!meta.hasAttribute('data-' + definition.key)) {
+                    meta.setAttribute('data-' + definition.key, '');
+                }
+            });
+
+            return meta;
+        }
+
         function getInspectorLabel(block) {
             if (!block) {
                 return strings.blockSettings || 'Block Settings';
@@ -811,32 +2387,196 @@
         }
 
         function updateSocialLinks(block, values) {
-            var meta = block ? block.querySelector('.mb-social-meta') : null;
+            var meta = ensureSocialBlockStructure(block);
             if (!block || !meta) {
                 return;
             }
 
-            [
-                ['facebook', '.mb-social-facebook'],
-                ['instagram', '.mb-social-instagram'],
-                ['linkedin', '.mb-social-linkedin'],
-                ['twitter', '.mb-social-twitter'],
-                ['website', '.mb-social-website']
-            ].forEach(function (item) {
-                var value = String(values[item[0]] || '').trim();
-                var link = block.querySelector(item[1]);
-                meta.setAttribute('data-' + item[0], value);
+            persistSocialValues(block, meta, values);
+
+            getSocialLinkDefinitions().forEach(function (item) {
+                var value = normalizeSocialUrlValue(block.getAttribute(getSocialDataAttributeName(item.key)) || '');
+                var link = block.querySelector(item.selector);
                 if (!link) {
                     return;
                 }
                 if (value === '') {
-                    link.style.display = 'none';
+                    normalizeSocialLinkPresentation(link, false);
                     link.setAttribute('href', '');
                 } else {
-                    link.style.display = 'inline-block';
+                    setSocialLinkIcon(link, item);
+                    normalizeSocialLinkPresentation(link, true);
                     link.setAttribute('href', value);
                 }
             });
+        }
+
+        function syncSocialBlockPersistence(block) {
+            var meta = ensureSocialBlockStructure(block);
+            var values;
+
+            if (!block || !meta) {
+                return;
+            }
+
+            values = getRenderedSocialValues(block, meta);
+            updateSocialLinks(block, values);
+        }
+
+        function getSocialBlocksForTree(root) {
+            var blocks = [];
+
+            if (!root) {
+                return blocks;
+            }
+
+            if (root.classList && root.classList.contains('mb-block') && root.dataset.builderBlock === 'social') {
+                blocks.push(root);
+            }
+
+            Array.prototype.forEach.call(root.querySelectorAll('.mb-block[data-builder-block="social"]'), function (block) {
+                blocks.push(block);
+            });
+
+            return blocks;
+        }
+
+        function getCanvasRootBlocks() {
+            return Array.prototype.slice.call(canvas.querySelectorAll('.mb-block')).filter(function (block) {
+                var parentBlock;
+
+                if (!block || !canvas.contains(block)) {
+                    return false;
+                }
+
+                parentBlock = block.parentNode ? block.parentNode.closest('.mb-block') : null;
+
+                return !parentBlock || !canvas.contains(parentBlock);
+            });
+        }
+
+        function syncSocialBlockTree(sourceRoot, targetRoot) {
+            var sourceBlocks = getSocialBlocksForTree(sourceRoot);
+            var targetBlocks = getSocialBlocksForTree(targetRoot);
+
+            sourceBlocks.forEach(function (sourceBlock, index) {
+                var targetBlock = targetBlocks[index];
+                var sourceMeta;
+
+                if (!targetBlock) {
+                    return;
+                }
+
+                syncSocialBlockPersistence(sourceBlock);
+                sourceMeta = ensureSocialBlockStructure(sourceBlock);
+                updateSocialLinks(targetBlock, getPersistedSocialValues(sourceBlock, sourceMeta));
+            });
+        }
+
+        function renderSocialBlockForEmail(block, values) {
+            if (!block || block.dataset.builderBlock !== 'social') {
+                return;
+            }
+
+            Array.prototype.forEach.call(block.querySelectorAll('.mb-social-meta'), function (meta) {
+                if (meta && meta.parentNode) {
+                    meta.parentNode.removeChild(meta);
+                }
+            });
+
+            getSocialLinkDefinitions().forEach(function (definition) {
+                var link = block.querySelector(definition.selector);
+                var value = normalizeSocialUrlValue((values && values[definition.key]) || '');
+
+                if (!link) {
+                    return;
+                }
+
+                if (value === '') {
+                    if (link.parentNode) {
+                        link.parentNode.removeChild(link);
+                    }
+
+                    return;
+                }
+
+                if (!setSocialLinkEmailIcon(link, definition)) {
+                    if (link.parentNode) {
+                        link.parentNode.removeChild(link);
+                    }
+
+                    return;
+                }
+                link.setAttribute('href', value);
+                link.setAttribute('target', '_blank');
+                link.setAttribute('rel', 'noopener noreferrer');
+                link.setAttribute('style', getSocialLinkEmailStyle(definition));
+            });
+        }
+
+        function prepareSocialBlockTreeForEmailExport(sourceRoot, targetRoot) {
+            var sourceBlocks = getSocialBlocksForTree(sourceRoot);
+            var targetBlocks = getSocialBlocksForTree(targetRoot);
+
+            sourceBlocks.forEach(function (sourceBlock, index) {
+                var targetBlock = targetBlocks[index];
+                var sourceMeta;
+
+                if (!targetBlock) {
+                    return;
+                }
+
+                sourceMeta = ensureSocialBlockStructure(sourceBlock);
+                renderSocialBlockForEmail(targetBlock, getPersistedSocialValues(sourceBlock, sourceMeta));
+            });
+        }
+
+        function socialBlockHasEmailIcons(block) {
+            return !!(block && block.querySelector && block.querySelector('.mb-social-link img'));
+        }
+
+        function normalizeLegacySocialHtml(rawHtml) {
+            var html = String(rawHtml || '');
+            var holder;
+            var changed = false;
+
+            if (html.trim() === '') {
+                return '';
+            }
+
+            holder = document.createElement('div');
+            holder.innerHTML = html;
+
+            getSocialBlocksForTree(holder).forEach(function (block) {
+                var sourceMeta = ensureSocialBlockStructure(block);
+
+                renderSocialBlockForEmail(block, getPersistedSocialValues(block, sourceMeta));
+                if (!socialBlockHasEmailIcons(block) && block.parentNode) {
+                    block.parentNode.removeChild(block);
+                }
+                changed = true;
+            });
+
+            return changed ? holder.innerHTML : html;
+        }
+
+        function syncCanvasDerivedBlockState() {
+            Array.prototype.forEach.call(canvas.querySelectorAll('.mb-block[data-builder-block="social"]'), function (block) {
+                syncSocialBlockPersistence(block);
+            });
+        }
+
+        function flushActiveBlockDerivedState() {
+            var socialMeta;
+
+            if (!state.activeBlock || !canvas.contains(state.activeBlock)) {
+                return;
+            }
+
+            if (state.activeBlock.dataset.builderBlock === 'social') {
+                socialMeta = ensureSocialBlockStructure(state.activeBlock);
+                updateSocialLinks(state.activeBlock, getPersistedSocialValues(state.activeBlock, socialMeta));
+            }
         }
 
         function clearDropIndicator() {
@@ -868,7 +2608,7 @@
 
         function ensureCanvasPlaceholder() {
             var emptyState = canvas.querySelector('[data-empty-canvas="1"]');
-            var hasBlocks = !!canvas.querySelector(':scope > .mb-block');
+            var hasBlocks = getCanvasRootBlocks().length > 0;
 
             if (!hasBlocks && !emptyState) {
                 canvas.appendChild(createElement('<div class="marketing-builder-canvas-dropzone" data-empty-canvas="1">' + escapeHtml(strings.dropHere || 'Drop a block here') + '</div>'));
@@ -884,10 +2624,20 @@
                 return;
             }
 
+            var socialMeta;
+
             if (block.dataset.builderBlock === 'hero') {
                 normalizeHeroBlock(block);
             }
-            ensureFooterUnsubscribeToken(block);
+            normalizeBlockContentPadding(block);
+            if (shouldNormalizeSavedCompanyAddressBlock(block)) {
+                applySavedCompanyAddress(block, { skipSync: true, skipRender: true });
+            }
+            ensureComplianceUnsubscribeLink(block);
+            if (block.dataset.builderBlock === 'social') {
+                socialMeta = ensureSocialBlockStructure(block);
+                updateSocialLinks(block, getPersistedSocialValues(block, socialMeta));
+            }
 
             block.dataset.boundBlock = '1';
             block.setAttribute('draggable', 'true');
@@ -989,11 +2739,18 @@
             }
 
             refreshCanvasState();
-            setActiveBlock(block);
+            if (state.suppressAutoSelect) {
+                setActiveBlock(null);
+            } else {
+                setActiveBlock(block);
+            }
+            ensureComplianceUnsubscribeLink(block);
             syncFields();
         }
 
         function applyPreset(name, confirmReplace) {
+            var presetBlocks = [];
+
             if (confirmReplace && canvas.querySelector('.mb-block') && !window.confirm(strings.replaceConfirm || 'Replace the current email design with this template? This will remove the current design.')) {
                 return;
             }
@@ -1025,11 +2782,11 @@
             } else if (name === 'simple_text') {
                 insertBlockAtPlacement(createTextBlock(), { container: canvas, beforeNode: null });
                 insertBlockAtPlacement(createUnsubscribeBlock(), { container: canvas, beforeNode: null });
-            } else if (name === 'event') {
-                insertBlockAtPlacement(createHeroBlock(), { container: canvas, beforeNode: null });
-                insertBlockAtPlacement(createTextBlock(), { container: canvas, beforeNode: null });
-                insertBlockAtPlacement(createQrBlock(), { container: canvas, beforeNode: null });
-                insertBlockAtPlacement(createFooterBlock(), { container: canvas, beforeNode: null });
+            } else if (name === 'conference_event' || name === 'event') {
+                presetBlocks = createConferenceEventPreset();
+                presetBlocks.forEach(function (presetBlock) {
+                    insertBlockAtPlacement(presetBlock, { container: canvas, beforeNode: null });
+                });
             } else {
                 insertBlockAtPlacement(createHeroBlock(), { container: canvas, beforeNode: null });
                 insertBlockAtPlacement(createTextBlock(), { container: canvas, beforeNode: null });
@@ -1166,9 +2923,15 @@
         function updateUnsubscribeStatus() {
             var html = renderEmailHtml();
             var builderMarkup = builderStateField ? builderStateField.value : serializeBuilderState();
-            var hasToken = hasUnsubscribeToken(html) || hasUnsubscribeToken(builderMarkup);
+            var hasToken = hasActualUnsubscribeLinkMarkup(html) || hasActualUnsubscribeLinkMarkup(builderMarkup);
+            var unsubscribeStatus = getCurrentUnsubscribeStatusNode();
+
+            if (!unsubscribeStatus) {
+                return;
+            }
+
             unsubscribeStatus.textContent = hasToken ? (strings.unsubscribePresent || 'Unsubscribe link included') : (strings.unsubscribeMissing || 'Missing unsubscribe link');
-            unsubscribeStatus.className = 'marketing-builder-status-chip ' + (hasToken ? 'marketing-builder-status-chip--ok' : 'marketing-builder-status-chip--missing');
+            setElementClassName(unsubscribeStatus, 'marketing-builder-status-chip ' + (hasToken ? 'marketing-builder-status-chip--ok' : 'marketing-builder-status-chip--missing'));
         }
 
         function serializeBlock(block) {
@@ -1177,10 +2940,17 @@
             }
 
             if (block.dataset.builderBlock === 'legacy') {
-                return String(block.dataset.rawHtml || '');
+                return normalizeLegacySocialHtml(block.dataset.rawHtml || '');
             }
 
             var clone = block.cloneNode(true);
+
+            syncSocialBlockTree(block, clone);
+            prepareSocialBlockTreeForEmailExport(block, clone);
+
+            if (block.dataset.builderBlock === 'social' && !socialBlockHasEmailIcons(clone)) {
+                return '';
+            }
 
             Array.prototype.forEach.call(clone.querySelectorAll('.mb-block-toolbar'), function (node) {
                 node.parentNode.removeChild(node);
@@ -1198,36 +2968,60 @@
             });
 
             Array.prototype.forEach.call(clone.querySelectorAll('*'), function (node) {
+                var currentClassName;
+
+                if (!node || node.nodeType !== 1) {
+                    return;
+                }
+
                 node.removeAttribute('contenteditable');
                 node.removeAttribute('draggable');
 
                 Array.prototype.slice.call(node.attributes).forEach(function (attribute) {
-                    if (attribute.name.indexOf('data-') === 0) {
-                        node.removeAttribute(attribute.name);
+                    var name = String(attribute.name || '');
+                    if (name.indexOf('data-') !== 0) {
+                        return;
                     }
+
+                    if (node.classList && node.classList.contains('mb-social-meta')
+                        && isKnownSocialMetaAttribute(name)) {
+                        return;
+                    }
+
+                    if (node === clone && isKnownSocialRootAttribute(name)) {
+                        return;
+                    }
+
+                    node.removeAttribute(name);
                 });
 
-                if (node.className) {
-                    node.className = String(node.className)
+                currentClassName = getElementClassName(node);
+                if (currentClassName !== '') {
+                    setElementClassName(node, currentClassName
                         .split(/\s+/)
                         .filter(function (className) {
-                            return className && className.indexOf('mb-') !== 0 && className.indexOf('marketing-builder-') !== 0 && className !== 'is-active' && className !== 'is-over';
+                            return className
+                                && (isSerializableSocialClass(node, className)
+                                    || (className.indexOf('mb-') !== 0
+                                        && className.indexOf('marketing-builder-') !== 0
+                                        && className !== 'is-active'
+                                        && className !== 'is-over'));
                         })
-                        .join(' ');
+                        .join(' '));
                 }
             });
 
             clone.removeAttribute('draggable');
             clone.removeAttribute('data-builder-block');
             clone.removeAttribute('data-bound-block');
-            clone.className = '';
+            setElementClassName(clone, '');
 
             return clone.innerHTML;
         }
 
         function renderEmailHtml() {
             var blockHtml = '';
-            Array.prototype.forEach.call(canvas.querySelectorAll(':scope > .mb-block'), function (block) {
+            Array.prototype.forEach.call(getCanvasRootBlocks(), function (block) {
                 blockHtml += serializeBlock(block);
             });
 
@@ -1244,8 +3038,10 @@
         function serializeBuilderState() {
             var holder = document.createElement('div');
 
-            Array.prototype.forEach.call(canvas.querySelectorAll(':scope > .mb-block'), function (block) {
+            Array.prototype.forEach.call(getCanvasRootBlocks(), function (block) {
                 var clone = block.cloneNode(true);
+
+                syncSocialBlockTree(block, clone);
 
                 Array.prototype.forEach.call(clone.querySelectorAll('.mb-block-toolbar'), function (node) {
                     node.parentNode.removeChild(node);
@@ -1272,12 +3068,25 @@
 
         function syncFields() {
             var html = renderEmailHtml();
+            var generatedText;
+            flushActiveBlockDerivedState();
+            syncCanvasDerivedBlockState();
+            html = renderEmailHtml();
             htmlField.value = html;
             if (builderStateField) {
                 builderStateField.value = serializeBuilderState();
             }
-            if (textField && !String(textField.value || '').trim()) {
-                textField.value = html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            if (textField) {
+                if (isUnsafeDefaultPlainText(textField.value)) {
+                    textField.value = '';
+                }
+
+                if (!String(textField.value || '').trim()) {
+                    generatedText = html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                    if (!isUnsafeDefaultPlainText(generatedText)) {
+                        textField.value = generatedText;
+                    }
+                }
             }
             updateUnsubscribeStatus();
         }
@@ -1312,8 +3121,10 @@
         }
 
         function renderPalette() {
-            palette.innerHTML = '';
             var hasSearch = !!state.paletteSearch;
+
+            palette.innerHTML = '';
+            palette.appendChild(createElement(renderSidebarLoadTemplateSection()));
 
             paletteGroups.forEach(function (group) {
                 var filteredBlocks = group.blocks.filter(function (blockDef) {
@@ -1362,6 +3173,9 @@
                 groupNode.appendChild(grid);
                 palette.appendChild(groupNode);
             });
+
+            palette.appendChild(createElement(renderSidebarComplianceSection()));
+            palette.appendChild(createElement(renderSidebarMergeTagsSection()));
         }
 
         function duplicateActiveBlock() {
@@ -1399,7 +3213,44 @@
             syncFields();
         }
 
+        function getNextActiveBlockAfterRemoval(block) {
+            var nextBlock;
+            var previousBlock;
+            var parent;
+
+            if (!block) {
+                return null;
+            }
+
+            nextBlock = block.nextElementSibling;
+            while (nextBlock && !nextBlock.classList.contains('mb-block')) {
+                nextBlock = nextBlock.nextElementSibling;
+            }
+            if (nextBlock && nextBlock.classList.contains('mb-block')) {
+                return nextBlock;
+            }
+
+            previousBlock = block.previousElementSibling;
+            while (previousBlock && !previousBlock.classList.contains('mb-block')) {
+                previousBlock = previousBlock.previousElementSibling;
+            }
+            if (previousBlock && previousBlock.classList.contains('mb-block')) {
+                return previousBlock;
+            }
+
+            parent = block.parentNode;
+            if (parent && parent !== canvas) {
+                return parent.closest('.mb-block');
+            }
+
+            return null;
+        }
+
         function removeActiveBlock() {
+            var removedBlock;
+            var parent;
+            var nextActiveBlock;
+
             if (!state.activeBlock) {
                 return;
             }
@@ -1408,10 +3259,29 @@
                 return;
             }
 
-            var parent = state.activeBlock.parentNode;
-            parent.removeChild(state.activeBlock);
+            removedBlock = state.activeBlock;
+            parent = removedBlock.parentNode;
+            nextActiveBlock = getNextActiveBlockAfterRemoval(removedBlock);
+
+            if (state.sidebarEditor && state.sidebarEditor.block === removedBlock) {
+                destroySidebarTextEditor();
+            }
+            if (state.inlineUploadBlock === removedBlock) {
+                state.inlineUploadBlock = null;
+            }
+            if (state.imageModalBlock === removedBlock) {
+                state.imageModalBlock = null;
+            }
+            if (state.qrModalBlock === removedBlock) {
+                state.qrModalBlock = null;
+            }
+
+            state.activeBlock = null;
+            state.activeHeroChild = '';
+
+            parent.removeChild(removedBlock);
             refreshCanvasState();
-            setActiveBlock(canvas.querySelector('.mb-block'));
+            setActiveBlock(nextActiveBlock && canvas.contains(nextActiveBlock) ? nextActiveBlock : canvas.querySelector(':scope > .mb-block'));
             syncFields();
         }
 
@@ -1533,7 +3403,7 @@
                     return;
                 }
                 if (node.querySelectorAll) {
-                    targets = targets.concat(Array.prototype.slice.call(node.querySelectorAll('p, li, span, strong, em, a, div')));
+                    targets = targets.concat(Array.prototype.slice.call(node.querySelectorAll('p, ol, ul, li, span, strong, b, em, i, u, s, a, div, blockquote, h1, h2, h3')));
                 }
                 Array.prototype.forEach.call(targets, function (targetNode) {
                     if (property === 'fontFamily') {
@@ -1661,13 +3531,16 @@
             var html = '';
 
             if (!block) {
+                destroySidebarTextEditor();
                 properties.innerHTML = '<div class="marketing-builder-settings-empty"><p class="marketing-builder-help no-margin">' + escapeHtml(strings.selectBlock || 'Select a block to edit it.') + '</p></div>'
                     + renderGlobalControls();
                 return;
             }
 
             var surface = getSurface(block);
+            var borderTarget = getBorderTarget(block) || surface;
             var surfaceStyle = window.getComputedStyle(surface);
+            var borderStyle = window.getComputedStyle(borderTarget);
             var blockStyle = window.getComputedStyle(block);
             var type = block.dataset.builderBlock;
             var imageNode = getImageNode(block);
@@ -1675,9 +3548,11 @@
             var contentTab = '';
             var styleTab = '';
             var advancedTab = '';
+            var headingStyleNode = block.querySelector('.mb-heading-text');
+            var bodyStyleNode = getBodySurface(block) || block.querySelector('.mb-hero-subheadline') || block.querySelector('.mb-image-caption');
 
             html += '<div class="marketing-builder-settings-header">'
-                + '<button type="button" class="btn btn-default btn-sm" data-action="back-to-elements">' + escapeHtml(strings.backToElements || '← Elements') + '</button>'
+                + '<button type="button" class="btn btn-default marketing-builder-back-button" data-action="back-to-elements">' + escapeHtml(strings.backToElements || '← Elements') + '</button>'
                 + '<h4 class="marketing-builder-settings-title">' + escapeHtml((strings.editBlock || 'Edit %s').replace('%s', getInspectorLabel(block))) + '</h4>'
                 + '<div class="marketing-builder-settings-subtitle">' + escapeHtml(getBlockLabel(block)) + '</div>'
                 + '</div>';
@@ -1686,19 +3561,48 @@
                 var headingNode = block.querySelector('.mb-heading-text') || block.querySelector('.mb-hero-headline');
                 contentTab += '<div class="form-group"><label>' + escapeHtml(strings.headline || 'Headline') + '</label><textarea class="form-control" rows="3" data-control="generic-heading">' + escapeHtml(headingNode ? headingNode.textContent : '') + '</textarea></div>';
             }
-            if (type === 'text' || type === 'feature_list' || type === 'testimonial' || type === 'inner_section' || type === 'company_address' || type === 'footer' || type === 'email_footer') {
-                contentTab += '<div class="form-group"><label>' + escapeHtml(strings.text || 'Text') + '</label><textarea class="form-control" rows="5" data-control="generic-body">' + escapeHtml((block.querySelector('.mb-richtext') || block.querySelector('[contenteditable="true"]') || {}).textContent || '') + '</textarea></div>';
+            if (isSidebarRichTextBlockType(type)) {
+                contentTab += '<div class="marketing-builder-sidebar-editor-shell" data-marketing-builder-rich-text-editor="1">'
+                    + '<label class="marketing-builder-settings-help-title">' + escapeHtml(strings.text || 'Text') + '</label>'
+                    + '<div class="marketing-builder-quill-shell" data-marketing-builder-quill-shell="1">'
+                    + '<div class="marketing-builder-quill-editor" data-marketing-builder-quill-editor="1"></div>'
+                    + '</div>'
+                    + '<div class="marketing-builder-sidebar-editor-fallback-shell hide" data-marketing-builder-textarea-fallback-shell="1">'
+                    + '<label class="marketing-builder-settings-help-title">' + escapeHtml(strings.richTextEditorFallback || 'Fallback Text Editor') + '</label>'
+                    + '<textarea class="form-control marketing-builder-sidebar-editor-fallback" rows="10" data-marketing-builder-textarea-fallback="1"></textarea>'
+                    + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.richTextEditorUnavailable || 'Rich text editor unavailable. Plain text fallback is active.') + '</p>'
+                    + '</div>'
+                    + '<p class="marketing-builder-settings-note">' + escapeHtml(strings.richTextHelp || 'Use the editor below to keep paragraphs, lists, and links clean for email clients.') + '</p>';
+
+                if (mergeTags.length) {
+                    contentTab += '<div class="marketing-builder-settings-note-card"><strong>' + escapeHtml(strings.mergeTags || 'Merge Tags') + '</strong>'
+                        + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(strings.personalizeHelp || 'Insert personalization placeholders at the current cursor position inside the selected block.') + '</p>'
+                        + renderMergeTagButtons()
+                        + '</div>';
+                }
+
+                if (block && (block.dataset.builderBlock === 'company_address' || block.dataset.builderBlock === 'footer' || block.dataset.builderBlock === 'email_footer')) {
+                    contentTab += '<div class="marketing-builder-settings-note-card">'
+                        + '<strong>' + escapeHtml(strings.companyAddressBlock || 'Company Address') + '</strong>'
+                        + '<p class="marketing-builder-settings-note no-margin">' + escapeHtml(companyAddressConfig.configured ? (strings.companyAddressSavedConfigured || 'Saved company address settings are available for this block.') : (strings.companyAddressSavedMissing || 'Saved company address settings are not configured yet.')) + '</p>'
+                        + '<button type="button" class="btn btn-default btn-sm mtop10" data-action="use-saved-company-address">' + escapeHtml(strings.companyAddressUseSaved || 'Use Saved Company Address') + '</button>'
+                        + '</div>';
+                }
+
+                contentTab += '</div>';
             }
             if (type === 'hero') {
                 contentTab += renderHeroContentTab(block);
             }
             if (type === 'social') {
-                var socialMeta = block.querySelector('.mb-social-meta');
-                contentTab += '<div class="form-group"><label>Facebook URL</label><input type="text" class="form-control" data-control="social-facebook" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-facebook') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>Instagram URL</label><input type="text" class="form-control" data-control="social-instagram" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-instagram') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>LinkedIn URL</label><input type="text" class="form-control" data-control="social-linkedin" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-linkedin') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>X / Twitter URL</label><input type="text" class="form-control" data-control="social-twitter" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-twitter') || '') : '') + '"></div>';
-                contentTab += '<div class="form-group"><label>Website URL</label><input type="text" class="form-control" data-control="social-website" value="' + escapeHtml(socialMeta ? (socialMeta.getAttribute('data-website') || '') : '') + '"></div>';
+                var socialMeta = ensureSocialBlockStructure(block);
+                var socialValues = getPersistedSocialValues(block, socialMeta);
+                contentTab += '<div class="form-group"><label>Facebook URL</label><input type="text" class="form-control" data-control="social-facebook" value="' + escapeHtml(socialValues.facebook) + '"></div>';
+                contentTab += '<div class="form-group"><label>Instagram URL</label><input type="text" class="form-control" data-control="social-instagram" value="' + escapeHtml(socialValues.instagram) + '"></div>';
+                contentTab += '<div class="form-group"><label>X / Twitter URL</label><input type="text" class="form-control" data-control="social-twitter" value="' + escapeHtml(socialValues.twitter) + '"></div>';
+                contentTab += '<div class="form-group"><label>YouTube URL</label><input type="text" class="form-control" data-control="social-youtube" value="' + escapeHtml(socialValues.youtube) + '"></div>';
+                contentTab += '<div class="form-group"><label>LinkedIn URL</label><input type="text" class="form-control" data-control="social-linkedin" value="' + escapeHtml(socialValues.linkedin) + '"></div>';
+                contentTab += '<div class="form-group"><label>Website URL</label><input type="text" class="form-control" data-control="social-website" value="' + escapeHtml(socialValues.website) + '"></div>';
             }
             if (type === 'icon') {
                 var iconLink = getIconLinkNode(block);
@@ -1749,10 +3653,13 @@
             ]);
             if (type === 'hero') {
                 styleTab += renderHeroStyleTab(block, surfaceStyle, imageNode, imageStyle);
-            } else if (type === 'heading' || type === 'cta' || type === 'feature_list' || type === 'coupon' || type === 'image_box') {
-                styleTab += getTypographyControls(getNodeStyle(block.querySelector('.mb-heading-text'), surfaceStyle), 'heading', 'Heading');
-            } else if (type === 'text' || type === 'testimonial' || type === 'inner_section' || type === 'company_address' || type === 'footer' || type === 'email_footer') {
-                styleTab += getTypographyControls(getNodeStyle(block.querySelector('.mb-richtext') || block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text'), surfaceStyle), 'body', type === 'text' ? 'Text' : 'Body');
+            } else {
+                if (headingStyleNode && (type === 'heading' || type === 'cta' || type === 'feature_list' || type === 'coupon' || type === 'image_box')) {
+                    styleTab += getTypographyControls(getNodeStyle(headingStyleNode, surfaceStyle), 'heading', 'Heading');
+                }
+                if (bodyStyleNode && (type === 'text' || type === 'testimonial' || type === 'inner_section' || type === 'company_address' || type === 'footer' || type === 'email_footer' || type === 'cta' || type === 'feature_list' || type === 'image_box')) {
+                    styleTab += getTypographyControls(getNodeStyle(bodyStyleNode, surfaceStyle), 'body', type === 'text' ? 'Text' : 'Body');
+                }
             }
             if (type === 'image' || type === 'image_box' || type === 'coupon' || type === 'testimonial' || type === 'qr') {
                 var captionNode = block.querySelector('.mb-image-caption') || block.querySelector('.mb-qr-caption');
@@ -1798,9 +3705,9 @@
             advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.marginTop || 'Margin Top') + '</label><input type="number" class="form-control" data-control="block-margin-top" value="' + escapeHtml(String(parseInt(blockStyle.marginTop, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.marginBottom || 'Margin Bottom') + '</label><input type="number" class="form-control" data-control="block-margin-bottom" value="' + escapeHtml(String(parseInt(blockStyle.marginBottom, 10) || 0)) + '"></div></div></div>';
             advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingTop || 'Padding Top') + '</label><input type="number" class="form-control" data-control="surface-padding-top" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingTop, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingRight || 'Padding Right') + '</label><input type="number" class="form-control" data-control="surface-padding-right" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingRight, 10) || 0)) + '"></div></div></div>';
             advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingBottom || 'Padding Bottom') + '</label><input type="number" class="form-control" data-control="surface-padding-bottom" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingBottom, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.paddingLeft || 'Padding Left') + '</label><input type="number" class="form-control" data-control="surface-padding-left" value="' + escapeHtml(String(parseInt(surfaceStyle.paddingLeft, 10) || 0)) + '"></div></div></div>';
-            advancedTab += '<div class="form-group"><label>Border Type</label><select class="form-control" data-control="surface-border-type"><option value="none"' + ((surfaceStyle.borderTopStyle === 'none' || parseInt(surfaceStyle.borderTopWidth, 10) === 0) ? ' selected' : '') + '>None</option><option value="solid"' + (surfaceStyle.borderTopStyle === 'solid' ? ' selected' : '') + '>Solid line</option><option value="double"' + (surfaceStyle.borderTopStyle === 'double' ? ' selected' : '') + '>Double line</option><option value="dashed"' + (surfaceStyle.borderTopStyle === 'dashed' ? ' selected' : '') + '>Dashed</option><option value="dotted"' + (surfaceStyle.borderTopStyle === 'dotted' ? ' selected' : '') + '>Dotted</option><option value="zigzag"' + (surfaceStyle.borderTopStyle === 'zigzag' ? ' selected' : '') + '>Zig Zag</option></select></div>';
-            advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderWidth || 'Border Width') + '</label><input type="number" class="form-control" data-control="surface-border-width" value="' + escapeHtml(String(parseInt(surfaceStyle.borderTopWidth, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderRadius || 'Border Radius') + '</label><input type="number" class="form-control" data-control="surface-border-radius" value="' + escapeHtml(String(parseInt(surfaceStyle.borderTopLeftRadius, 10) || 0)) + '"></div></div></div>';
-            advancedTab += renderColorRow([{ label: strings.borderColor || 'Border Color', control: 'surface-border-color', value: toHex(surfaceStyle.borderTopColor, '#dbe4ee') }]);
+            advancedTab += '<div class="form-group"><label>Border Type</label><select class="form-control" data-control="surface-border-type"><option value="none"' + ((borderStyle.borderTopStyle === 'none' || parseInt(borderStyle.borderTopWidth, 10) === 0) ? ' selected' : '') + '>None</option><option value="solid"' + (borderStyle.borderTopStyle === 'solid' ? ' selected' : '') + '>Solid line</option><option value="double"' + (borderStyle.borderTopStyle === 'double' ? ' selected' : '') + '>Double line</option><option value="dashed"' + (borderStyle.borderTopStyle === 'dashed' ? ' selected' : '') + '>Dashed</option><option value="dotted"' + (borderStyle.borderTopStyle === 'dotted' ? ' selected' : '') + '>Dotted</option><option value="zigzag"' + (borderStyle.borderTopStyle === 'zigzag' ? ' selected' : '') + '>Zig Zag</option></select></div>';
+            advancedTab += '<div class="row"><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderWidth || 'Border Width') + '</label><input type="number" class="form-control" data-control="surface-border-width" value="' + escapeHtml(String(parseInt(borderStyle.borderTopWidth, 10) || 0)) + '"></div></div><div class="col-sm-6"><div class="form-group"><label>' + escapeHtml(strings.borderRadius || 'Border Radius') + '</label><input type="number" class="form-control" data-control="surface-border-radius" value="' + escapeHtml(String(parseInt(borderStyle.borderTopLeftRadius, 10) || 0)) + '"></div></div></div>';
+            advancedTab += renderColorRow([{ label: strings.borderColor || 'Border Color', control: 'surface-border-color', value: toHex(borderStyle.borderTopColor, '#dbe4ee') }]);
             advancedTab += '<div class="form-group"><label>' + escapeHtml(strings.customLabel || 'Custom Label') + '</label><input type="text" class="form-control" data-control="custom-label" value="' + escapeHtml(block.getAttribute('data-custom-label') || '') + '"></div>';
             advancedTab += renderGlobalControls();
 
@@ -1814,6 +3721,7 @@
             html += '</div>';
 
             properties.innerHTML = html;
+            initializeSidebarTextEditor(block);
         }
 
         function applySurfaceLinkColor(block, color) {
@@ -1876,11 +3784,12 @@
             }
 
             var surface = getSurface(block);
+            var borderTarget = getBorderTarget(block) || surface;
             var control = target.getAttribute('data-control');
             var buttonNode = block.querySelector('.mb-button-link') || block.querySelector('.mb-cta-link');
             var buttonLabelNode = block.querySelector('.mb-button-label') || block.querySelector('.mb-cta-label');
             var headingNode = block.querySelector('.mb-heading-text') || block.querySelector('.mb-hero-headline');
-            var bodyNode = block.querySelector('.mb-richtext') || block.querySelector('.mb-company-address-text') || block.querySelector('.mb-footer-text') || block.querySelector('.mb-hero-subheadline') || block.querySelector('.mb-image-caption');
+            var bodyNode = getBodySurface(block) || block.querySelector('.mb-hero-subheadline') || block.querySelector('.mb-image-caption');
             var currentImageNode = getImageNode(block);
             var currentImageLinkNode = getImageLinkNode(block);
             var iconLinkNode = getIconLinkNode(block);
@@ -2029,15 +3938,15 @@
                 block.style.marginBottom = clampNumber(target.value, 0, 160, 16) + 'px';
             } else if (control === 'surface-border-width') {
                 var width = clampNumber(target.value, 0, 20, 0) + 'px';
-                surface.style.borderStyle = parseInt(width, 10) > 0 ? (surface.style.borderStyle || 'solid') : 'none';
-                surface.style.borderWidth = width;
+                borderTarget.style.borderStyle = parseInt(width, 10) > 0 ? (borderTarget.style.borderStyle || 'solid') : 'none';
+                borderTarget.style.borderWidth = width;
             } else if (control === 'surface-border-type') {
                 var borderType = target.value === 'zigzag' ? 'dashed' : target.value;
-                surface.style.borderStyle = borderType;
+                borderTarget.style.borderStyle = borderType;
             } else if (control === 'surface-border-radius') {
-                surface.style.borderRadius = clampNumber(target.value, 0, 60, 0) + 'px';
+                borderTarget.style.borderRadius = clampNumber(target.value, 0, 60, 0) + 'px';
             } else if (control === 'surface-border-color') {
-                surface.style.borderColor = target.value;
+                borderTarget.style.borderColor = target.value;
             } else if (control === 'icon-symbol') {
                 block.querySelector('.mb-icon-symbol').textContent = target.value;
             } else if (control === 'icon-title') {
@@ -2057,19 +3966,34 @@
                 block.querySelector('.mb-icon-symbol').style.fontSize = clampNumber(target.value, 12, 96, 42) + 'px';
             } else if (control === 'icon-color') {
                 block.querySelector('.mb-icon-symbol').style.color = target.value;
-            } else if (control === 'social-facebook' || control === 'social-instagram' || control === 'social-linkedin' || control === 'social-twitter' || control === 'social-website') {
-                if (target.value && !isValidLink(target.value)) {
+            } else if (control === 'social-facebook' || control === 'social-instagram' || control === 'social-twitter' || control === 'social-youtube' || control === 'social-linkedin' || control === 'social-website') {
+                var normalizedSocialUrl = normalizeSocialUrlValue(target.value);
+                if (normalizedSocialUrl && !isValidLink(normalizedSocialUrl)) {
                     window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
                     return;
                 }
-                var socialMeta = block.querySelector('.mb-social-meta');
-                updateSocialLinks(block, {
-                    facebook: control === 'social-facebook' ? target.value : (socialMeta ? socialMeta.getAttribute('data-facebook') : ''),
-                    instagram: control === 'social-instagram' ? target.value : (socialMeta ? socialMeta.getAttribute('data-instagram') : ''),
-                    linkedin: control === 'social-linkedin' ? target.value : (socialMeta ? socialMeta.getAttribute('data-linkedin') : ''),
-                    twitter: control === 'social-twitter' ? target.value : (socialMeta ? socialMeta.getAttribute('data-twitter') : ''),
-                    website: control === 'social-website' ? target.value : (socialMeta ? socialMeta.getAttribute('data-website') : '')
-                });
+                var socialMeta = ensureSocialBlockStructure(block);
+                var socialValues = getPersistedSocialValues(block, socialMeta);
+                if (control === 'social-facebook') {
+                    socialValues.facebook = normalizedSocialUrl;
+                }
+                if (control === 'social-instagram') {
+                    socialValues.instagram = normalizedSocialUrl;
+                }
+                if (control === 'social-twitter') {
+                    socialValues.twitter = normalizedSocialUrl;
+                }
+                if (control === 'social-youtube') {
+                    socialValues.youtube = normalizedSocialUrl;
+                }
+                if (control === 'social-linkedin') {
+                    socialValues.linkedin = normalizedSocialUrl;
+                }
+                if (control === 'social-website') {
+                    socialValues.website = normalizedSocialUrl;
+                }
+                target.value = normalizedSocialUrl;
+                updateSocialLinks(block, socialValues);
             } else if (control === 'inline-image-url') {
                 if (currentImageNode) {
                     currentImageNode.setAttribute('src', target.value || '');
@@ -2253,7 +4177,7 @@
                 return;
             }
 
-            imageModalFields.status.className = 'alert marketing-builder-modal-status alert-' + type;
+            setElementClassName(imageModalFields.status, 'alert marketing-builder-modal-status alert-' + type);
             imageModalFields.status.textContent = message;
             imageModalFields.status.classList.remove('hide');
         }
@@ -2263,7 +4187,7 @@
                 return;
             }
 
-            imageModalFields.status.className = 'alert marketing-builder-modal-status hide';
+            setElementClassName(imageModalFields.status, 'alert marketing-builder-modal-status hide');
             imageModalFields.status.textContent = '';
         }
 
@@ -2431,11 +4355,58 @@
             insertBlockAtPlacement(createUnsubscribeBlock(), getPreferredUnsubscribePlacement());
         }
 
+        function openPreview(mode) {
+            syncFields();
+            state.previewMode = mode === 'mobile' ? 'mobile' : 'desktop';
+            setElementClassName(previewShell, 'marketing-builder-preview-shell marketing-builder-preview-shell--' + state.previewMode);
+            previewFrame.srcdoc = htmlField && String(htmlField.value || '').trim() !== '' ? htmlField.value : renderEmailHtml();
+
+            if (canvasFrame) {
+                setElementClassName(canvasFrame, 'marketing-builder-canvas-frame marketing-builder-canvas-frame--' + state.previewMode);
+                canvasModeLabel.textContent = state.previewMode === 'mobile'
+                    ? (strings.mobileCanvas || 'Mobile preview')
+                    : (strings.desktopCanvas || 'Desktop preview');
+            }
+
+            if (previewModal) {
+                previewModal.modal('show');
+            }
+        }
+
         properties.addEventListener('click', function (event) {
             var tabNode = event.target.closest('[data-inspector-tab]');
             if (tabNode) {
                 state.inspectorTab = tabNode.getAttribute('data-inspector-tab');
                 renderProperties();
+                return;
+            }
+
+            var commandNode = event.target.closest('[data-rich-text-command]');
+            if (commandNode) {
+                var command = commandNode.getAttribute('data-rich-text-command') || '';
+                var commandValue = commandNode.getAttribute('data-rich-text-value') || '';
+
+                if (command === 'createLink') {
+                    commandValue = window.prompt(strings.linkUrl || 'Link URL', 'https://');
+                    if (commandValue === null) {
+                        return;
+                    }
+                    commandValue = String(commandValue || '').trim();
+                    if (!isValidLink(commandValue)) {
+                        window.alert(strings.invalidLink || 'Enter a valid link that starts with http://, https://, mailto:, tel:, or {{unsubscribe_url}}.');
+                        return;
+                    }
+                }
+
+                executeRichTextCommand(command, commandValue);
+                syncFields();
+                renderProperties();
+                return;
+            }
+
+            var mergeTagNode = event.target.closest('[data-merge-tag-token]');
+            if (mergeTagNode) {
+                insertMergeTag(mergeTagNode.getAttribute('data-merge-tag-token') || '');
                 return;
             }
 
@@ -2478,6 +4449,8 @@
                 moveHeroChild(state.activeBlock, actionNode.getAttribute('data-hero-child') || '', 1);
                 setActiveBlock(state.activeBlock);
                 syncFields();
+            } else if (action === 'use-saved-company-address' && state.activeBlock) {
+                applySavedCompanyAddress(state.activeBlock);
             } else if (action === 'upload-image-inline' && state.activeBlock) {
                 state.inlineUploadBlock = state.activeBlock;
                 if (fileInput) {
@@ -2487,7 +4460,43 @@
         });
 
         palette.addEventListener('click', function (event) {
+            var sidebarAction = event.target.closest('[data-sidebar-action]');
+            var mergeTagNode = event.target.closest('[data-merge-tag-token]');
             var toggle = event.target.closest('[data-category-toggle]');
+
+            if (mergeTagNode) {
+                insertMergeTag(mergeTagNode.getAttribute('data-merge-tag-token') || '');
+                return;
+            }
+
+            if (sidebarAction) {
+                var action = sidebarAction.getAttribute('data-sidebar-action') || '';
+
+                if (action === 'load-template') {
+                    var presetSelect = document.getElementById('marketing-builder-preset-select');
+                    loadTemplate(presetSelect ? presetSelect.value : 'default');
+                } else if (action === 'insert-unsubscribe') {
+                    insertUnsubscribeBlock();
+                } else if (action === 'insert-company-address') {
+                    insertOrFocusCompanyAddressBlock();
+                } else if (action === 'use-saved-company-address') {
+                    if (isSavedCompanyAddressTargetBlock(state.activeBlock)) {
+                        applySavedCompanyAddress(state.activeBlock);
+                        setActiveBlock(state.activeBlock);
+                        syncFields();
+                    } else {
+                        insertOrFocusCompanyAddressBlock();
+                    }
+                } else if (action === 'insert-email-footer') {
+                    insertOrFocusEmailFooterBlock();
+                } else if (action === 'preview-desktop') {
+                    openPreview('desktop');
+                } else if (action === 'preview-mobile') {
+                    openPreview('mobile');
+                }
+                return;
+            }
+
             if (!toggle || state.paletteSearch) {
                 return;
             }
@@ -2538,7 +4547,40 @@
             setActiveBlock(block);
         });
 
-        canvas.addEventListener('input', function () {
+        canvas.addEventListener('input', function (event) {
+            if (state.sidebarEditor && state.activeBlock && event.target && state.activeBlock.contains(event.target)) {
+                syncSidebarEditorFromBlock();
+            }
+            syncFields();
+        });
+
+        canvas.addEventListener('paste', function (event) {
+            var editable = event.target.closest ? event.target.closest('[contenteditable="true"]') : null;
+            var clipboard;
+            var html;
+            var text;
+            var sanitized;
+
+            if (!editable || !canvas.contains(editable)) {
+                return;
+            }
+
+            event.preventDefault();
+            clipboard = event.clipboardData || window.clipboardData;
+            html = clipboard && clipboard.getData ? clipboard.getData('text/html') : '';
+            text = clipboard && clipboard.getData ? clipboard.getData('text/plain') : '';
+            sanitized = html ? sanitizeEditableHtml(html) : plainTextToSanitizedHtml(text);
+
+            if (!sanitized) {
+                sanitized = plainTextToSanitizedHtml(text);
+            }
+
+            insertContentAtCursor(editable, sanitized, true);
+
+            if (editable.classList.contains('mb-richtext') || editable.classList.contains('mb-company-address-text') || editable.classList.contains('mb-footer-text')) {
+                editable.innerHTML = sanitizeEditableHtml(editable.innerHTML);
+            }
+
             syncFields();
         });
 
@@ -2623,17 +4665,6 @@
             qrModalFields.applyButton.addEventListener('click', applyQrModalChanges);
         }
 
-        document.getElementById('marketing-builder-start-design').addEventListener('click', function () {
-            loadTemplate('default');
-        });
-
-        document.getElementById('marketing-builder-apply-preset').addEventListener('click', function () {
-            var select = document.getElementById('marketing-builder-preset-select');
-            loadTemplate(select ? select.value : 'default');
-        });
-
-        document.getElementById('marketing-builder-insert-unsubscribe').addEventListener('click', insertUnsubscribeBlock);
-
         if (insertNowButton) {
             insertNowButton.addEventListener('click', insertUnsubscribeBlock);
         }
@@ -2645,50 +4676,51 @@
             });
         }
 
-        document.getElementById('marketing-builder-preview-desktop').addEventListener('click', function () {
-            state.previewMode = 'desktop';
-            previewShell.className = 'marketing-builder-preview-shell marketing-builder-preview-shell--desktop';
-            previewFrame.srcdoc = renderEmailHtml();
-            if (previewModal) {
-                previewModal.modal('show');
+        form.addEventListener('submit', function () {
+            if (state.sidebarEditor && state.sidebarEditor.block && !canvas.contains(state.sidebarEditor.block)) {
+                destroySidebarTextEditor();
+                setActiveBlock(null);
             }
+            syncFields();
         });
 
-        document.getElementById('marketing-builder-preview-mobile').addEventListener('click', function () {
-            state.previewMode = 'mobile';
-            previewShell.className = 'marketing-builder-preview-shell marketing-builder-preview-shell--mobile';
-            previewFrame.srcdoc = renderEmailHtml();
-            if (previewModal) {
-                previewModal.modal('show');
-            }
-        });
+        var previewDesktopButton = document.getElementById('marketing-builder-preview-desktop');
+        var previewMobileButton = document.getElementById('marketing-builder-preview-mobile');
 
-        if (canvasFrame) {
-            document.getElementById('marketing-builder-preview-desktop').addEventListener('click', function () {
-                canvasFrame.className = 'marketing-builder-canvas-frame marketing-builder-canvas-frame--desktop';
-                canvasModeLabel.textContent = strings.desktopCanvas || 'Desktop preview';
-            });
-            document.getElementById('marketing-builder-preview-mobile').addEventListener('click', function () {
-                canvasFrame.className = 'marketing-builder-canvas-frame marketing-builder-canvas-frame--mobile';
-                canvasModeLabel.textContent = strings.mobileCanvas || 'Mobile preview';
+        if (previewDesktopButton) {
+            previewDesktopButton.addEventListener('click', function () {
+                openPreview('desktop');
             });
         }
 
-        form.addEventListener('submit', function () {
-            syncFields();
-        });
+        if (previewMobileButton) {
+            previewMobileButton.addEventListener('click', function () {
+                openPreview('mobile');
+            });
+        }
 
         renderPalette();
 
         if (config.initialBuilderState && String(config.initialBuilderState).trim() !== '') {
+            state.suppressAutoSelect = true;
             canvas.innerHTML = String(config.initialBuilderState);
             refreshCanvasState();
-            setActiveBlock(canvas.querySelector('.mb-block'));
+            setActiveBlock(null);
             syncFields();
+            state.suppressAutoSelect = false;
         } else if (config.initialHtml && String(config.initialHtml).trim() !== '') {
+            state.suppressAutoSelect = true;
             insertBlockAtPlacement(createLegacyBlock(config.initialHtml), { container: canvas, beforeNode: null });
+            setActiveBlock(null);
+            renderProperties();
+            syncFields();
+            state.suppressAutoSelect = false;
         } else if (config.isNewCampaign) {
+            state.suppressAutoSelect = true;
             applyPreset('default', false);
+            setActiveBlock(null);
+            renderProperties();
+            state.suppressAutoSelect = false;
         } else {
             ensureCanvasPlaceholder();
             renderProperties();

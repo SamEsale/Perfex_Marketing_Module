@@ -3,20 +3,190 @@
 <?php
 $builderCssPath = module_dir_path('marketing', 'assets/css/marketing-builder.css');
 $builderJsPath  = module_dir_path('marketing', 'assets/js/marketing-builder.js');
+$quillCssPath   = module_dir_path('marketing', 'assets/vendor/quill/quill.snow.css');
+$quillJsPath    = module_dir_path('marketing', 'assets/vendor/quill/quill.js');
 $builderCssUrl  = module_dir_url('marketing', 'assets/css/marketing-builder.css');
 $builderJsUrl   = module_dir_url('marketing', 'assets/js/marketing-builder.js');
-$builderCssVer  = is_file($builderCssPath) ? (string) filemtime($builderCssPath) : '1';
-$builderJsVer   = is_file($builderJsPath) ? (string) filemtime($builderJsPath) : '1';
+$quillCssUrl    = module_dir_url('marketing', 'assets/vendor/quill/quill.snow.css');
+$quillJsUrl     = module_dir_url('marketing', 'assets/vendor/quill/quill.js');
+$assetVersion = static function ($path) {
+    if (!is_file($path)) {
+        return '1';
+    }
+
+    return (string) filemtime($path) . '-' . (string) filesize($path);
+};
+$builderCssVer  = $assetVersion($builderCssPath);
+$builderJsVer   = $assetVersion($builderJsPath);
+$quillCssVer    = $assetVersion($quillCssPath);
+$quillJsVer     = $assetVersion($quillJsPath);
+$socialIconUrls = [
+    'facebook' => module_dir_url('marketing', 'assets/img/social/facebook.png'),
+    'instagram' => module_dir_url('marketing', 'assets/img/social/instagram.png'),
+    'twitter' => module_dir_url('marketing', 'assets/img/social/x.png'),
+    'youtube' => module_dir_url('marketing', 'assets/img/social/youtube.png'),
+    'linkedin' => module_dir_url('marketing', 'assets/img/social/linkedin.png'),
+    'website' => module_dir_url('marketing', 'assets/img/social/website.png'),
+];
 ?>
+<link rel="stylesheet" href="<?= html_escape($quillCssUrl . '?v=' . $quillCssVer); ?>">
 <link rel="stylesheet" href="<?= html_escape($builderCssUrl . '?v=' . $builderCssVer); ?>">
 <?php
 $errorMessages = !empty($form_error_message) ? (is_array($form_error_message) ? $form_error_message : [$form_error_message]) : [];
 $hasUnsubscribeSaveError = false;
+$audiences = isset($audiences) && is_array($audiences) ? $audiences : [];
 $targetingRules = isset($campaign['targeting_rules']) && is_array($campaign['targeting_rules']) ? $campaign['targeting_rules'] : [];
+$deliveryChannel = isset($campaign['delivery_channel']) && $campaign['delivery_channel'] === 'whatsapp' ? 'whatsapp' : 'email';
+$isWhatsappCampaign = $deliveryChannel === 'whatsapp';
+$campaignNameValue = trim((string) ($campaign['name'] ?? ''));
+$subjectValue = trim((string) ($campaign['subject'] ?? ''));
+$audienceId = (int) ($campaign['list_id'] ?? 0);
+$audienceName = '';
+$targetingMode = ($targetingRules['send_mode'] ?? 'full') === 'filtered' ? 'filtered' : 'full';
+$fromNameValue = trim((string) ($campaign['from_name'] ?? ''));
+$fromEmailValue = trim((string) ($campaign['from_email'] ?? ''));
+$whatsAppTemplateNameValue = trim((string) ($campaign['whatsapp_template_name'] ?? ''));
+$whatsAppTemplateLanguageValue = trim((string) ($campaign['whatsapp_template_language'] ?? ''));
+$builderStateValue = trim((string) ($campaign['builder_state'] ?? ''));
+$htmlContentValue = trim((string) ($campaign['html_content'] ?? ''));
+$textContentValue = trim((string) ($campaign['text_content'] ?? ''));
+$builderCompanyAddress = isset($builder_company_address) && is_array($builder_company_address)
+    ? array_merge(['html' => 'Your Company<br>123 Market Street<br>City, State', 'text' => "Your Company\n123 Market Street\nCity, State", 'configured' => false], $builder_company_address)
+    : ['html' => 'Your Company<br>123 Market Street<br>City, State', 'text' => "Your Company\n123 Market Street\nCity, State", 'configured' => false];
+$builderMergeTags = isset($builder_merge_tags) && is_array($builder_merge_tags) ? $builder_merge_tags : [];
+$scheduleMode = ($campaign['schedule_mode'] ?? 'now') === 'later' ? 'later' : 'now';
+$scheduledAtValue = trim((string) ($campaign['scheduled_at'] ?? ''));
+$scheduledAtDisplayValue = '';
+$trackOpensEnabled = !empty($campaign['track_opens']);
+$trackClicksEnabled = !empty($campaign['track_clicks']);
+$audienceModeLabel = $targetingMode === 'filtered'
+    ? _l('marketing_campaign_targeting_filtered_segment')
+    : _l('marketing_campaign_targeting_full_audience');
+
+foreach ($audiences as $audience) {
+    if ((int) ($audience['id'] ?? 0) === $audienceId) {
+        $audienceName = trim((string) ($audience['name'] ?? ''));
+        break;
+    }
+}
+
+if ($scheduledAtValue !== '') {
+    $scheduledTimestamp = strtotime($scheduledAtValue);
+    $scheduledAtDisplayValue = $scheduledTimestamp ? date('Y-m-d H:i', $scheduledTimestamp) : $scheduledAtValue;
+}
+
+$basicsReady = $campaignNameValue !== '' && ($isWhatsappCampaign || $subjectValue !== '');
+$audienceReady = $audienceId > 0;
+$audienceSummaryLabel = $audienceReady ? $audienceName : _l('marketing_campaign_audience_summary_none');
+$senderReady = $isWhatsappCampaign || ($fromNameValue !== '' && $fromEmailValue !== '');
+$hasBuilderContent = $builderStateValue !== '' || $htmlContentValue !== '';
+$contentReady = $isWhatsappCampaign
+    ? ($whatsAppTemplateNameValue !== '' && $whatsAppTemplateLanguageValue !== '')
+    : $hasBuilderContent;
+$scheduleReady = $scheduleMode !== 'later' || $scheduledAtValue !== '';
+
+$trackingSummary = $isWhatsappCampaign
+    ? _l('marketing_campaign_setup_tracking_not_applicable')
+    : sprintf(
+        _l('marketing_campaign_setup_tracking_summary'),
+        $trackOpensEnabled ? _l('marketing_campaign_setup_tracking_on') : _l('marketing_campaign_setup_tracking_off'),
+        $trackClicksEnabled ? _l('marketing_campaign_setup_tracking_on') : _l('marketing_campaign_setup_tracking_off')
+    );
+
+$setupChecklist = [
+    [
+        'label' => _l('marketing_campaign_setup_basics'),
+        'complete' => $basicsReady,
+        'detail' => $basicsReady
+            ? ($isWhatsappCampaign ? _l('marketing_campaign_setup_basics_ready_whatsapp') : _l('marketing_campaign_setup_basics_ready_email'))
+            : ($isWhatsappCampaign ? _l('marketing_campaign_setup_basics_pending_whatsapp') : _l('marketing_campaign_setup_basics_pending_email')),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_audience'),
+        'complete' => $audienceReady,
+        'detail' => $audienceReady
+            ? trim($audienceName . ' - ' . ($targetingMode === 'filtered' ? _l('marketing_campaign_setup_audience_filtered') : _l('marketing_campaign_setup_audience_full')))
+            : _l('marketing_campaign_setup_audience_pending'),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_channel'),
+        'complete' => true,
+        'detail' => $isWhatsappCampaign ? _l('marketing_campaign_delivery_channel_whatsapp') : _l('marketing_campaign_delivery_channel_email'),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_sender'),
+        'complete' => $senderReady,
+        'detail' => $isWhatsappCampaign
+            ? _l('marketing_campaign_setup_sender_optional')
+            : ($senderReady ? _l('marketing_campaign_setup_sender_ready') : _l('marketing_campaign_setup_sender_pending')),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_content'),
+        'complete' => $contentReady,
+        'detail' => $isWhatsappCampaign
+            ? ($contentReady ? _l('marketing_campaign_setup_content_ready_whatsapp') : _l('marketing_campaign_setup_content_pending_whatsapp'))
+            : ($contentReady ? _l('marketing_campaign_setup_content_ready_email') : _l('marketing_campaign_setup_content_pending_email')),
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_tracking'),
+        'complete' => true,
+        'detail' => $trackingSummary,
+    ],
+    [
+        'label' => _l('marketing_campaign_setup_schedule'),
+        'complete' => $scheduleReady,
+        'detail' => $scheduleMode === 'later'
+            ? ($scheduleReady ? sprintf(_l('marketing_campaign_setup_schedule_later'), $scheduledAtDisplayValue) : _l('marketing_campaign_setup_schedule_missing'))
+            : _l('marketing_campaign_setup_schedule_now'),
+    ],
+];
+
+$setupChecklistCompleteCount = 0;
+foreach ($setupChecklist as $setupChecklistItem) {
+    if (!empty($setupChecklistItem['complete'])) {
+        $setupChecklistCompleteCount++;
+    }
+}
+
 foreach ($errorMessages as $errorMessage) {
-    if (trim((string) $errorMessage) === _l('marketing_campaign_unsubscribe_save_required')) {
+    $msg = strip_tags(trim((string) $errorMessage));
+    if (strpos($msg, _l('marketing_campaign_unsubscribe_save_required')) !== false) {
         $hasUnsubscribeSaveError = true;
         break;
+    }
+}
+
+// If the builder/html content already contains an unsubscribe token in any common encoding,
+// don't show the unsubscribe save warning even if the server returned that error.
+if ($hasUnsubscribeSaveError) {
+    $combined = trim((string) ($htmlContentValue . ' ' . $builderStateValue));
+    $candidates = [strtolower($combined)];
+    $decoded = rawurldecode($combined);
+    $entityDecoded = html_entity_decode($combined, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    if ($decoded !== $combined) {
+        $candidates[] = strtolower($decoded);
+    }
+
+    if ($entityDecoded !== $combined) {
+        $candidates[] = strtolower($entityDecoded);
+    }
+
+    foreach ($candidates as $candidate) {
+        if (strpos($candidate, '{{unsubscribe_url}}') !== false
+            || strpos($candidate, '%7b%7bunsubscribe_url%7d%7d') !== false
+            || strpos($candidate, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
+            || strpos($candidate, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false
+            || strpos($candidate, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false
+            || strpos($candidate, 'href="{{unsubscribe_url}}"') !== false
+            || strpos($candidate, "href='{{unsubscribe_url}}'") !== false
+            || strpos($candidate, 'href=&quot;{{unsubscribe_url}}&quot;') !== false
+            || strpos($candidate, 'href=&#39;{{unsubscribe_url}}&#39;') !== false
+            || strpos($candidate, '/marketing/unsubscribe/') !== false
+        ) {
+            $hasUnsubscribeSaveError = false;
+            break;
+        }
     }
 }
 ?>
@@ -104,82 +274,196 @@ foreach ($errorMessages as $errorMessage) {
                                     <input type="text" id="preview_text" name="preview_text" class="form-control" value="<?= html_escape($campaign['preview_text']); ?>">
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="list_id"><?= _l('marketing_campaign_list'); ?></label>
-                                    <select id="list_id" name="list_id" class="form-control" required>
-                                        <option value=""><?= _l('marketing_choose_list'); ?></option>
-                                        <?php foreach ($audiences as $audience) { ?>
-                                            <option value="<?= (int) $audience['id']; ?>" <?= (string) $campaign['list_id'] === (string) $audience['id'] ? 'selected' : ''; ?>>
-                                                <?= html_escape($audience['name']); ?>
-                                            </option>
-                                        <?php } ?>
-                                    </select>
-                                    <?php if (empty($audiences)) { ?>
-                                        <p class="text-muted mtop10"><?= _l('marketing_import_no_lists'); ?></p>
-                                    <?php } ?>
-                                </div>
-                            </div>
                         </div>
 
-                        <div class="marketing-channel-panel">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="delivery_channel"><?= _l('marketing_campaign_delivery_channel'); ?></label>
-                                        <select id="delivery_channel" name="delivery_channel" class="form-control">
-                                            <option value="email" <?= ($campaign['delivery_channel'] ?? 'email') === 'email' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_email'); ?></option>
-                                            <option value="whatsapp" <?= ($campaign['delivery_channel'] ?? '') === 'whatsapp' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_whatsapp'); ?></option>
+                        <div class="marketing-campaign-audience-shell" data-marketing-campaign-audience-shell="1">
+                            <div class="marketing-campaign-audience-header">
+                                <div>
+                                    <h4 class="marketing-campaign-audience-title"><?= _l('marketing_campaign_audience_heading'); ?></h4>
+                                    <p class="marketing-campaign-audience-helper no-margin"><?= _l('marketing_campaign_audience_helper'); ?></p>
+                                </div>
+                            </div>
+                            <div class="marketing-campaign-audience-grid">
+                                <div class="marketing-campaign-audience-card">
+                                    <div class="form-group no-margin">
+                                        <label for="list_id"><?= _l('marketing_campaign_list'); ?></label>
+                                        <select id="list_id" name="list_id" class="form-control" required>
+                                            <option value=""><?= _l('marketing_choose_list'); ?></option>
+                                            <?php foreach ($audiences as $audience) { ?>
+                                                <option value="<?= (int) $audience['id']; ?>" <?= (string) $campaign['list_id'] === (string) $audience['id'] ? 'selected' : ''; ?>>
+                                                    <?= html_escape($audience['name']); ?>
+                                                </option>
+                                            <?php } ?>
                                         </select>
-                                        <p class="marketing-channel-note mtop10 no-margin"><?= _l('marketing_campaign_delivery_channel_help'); ?></p>
+                                        <?php if (empty($audiences)) { ?>
+                                            <p class="text-muted mtop10"><?= _l('marketing_import_no_lists'); ?></p>
+                                        <?php } ?>
                                     </div>
+                                    <div class="marketing-campaign-audience-meta">
+                                        <div class="marketing-campaign-audience-meta-row">
+                                            <span class="marketing-campaign-audience-meta-label"><?= _l('marketing_campaign_audience_selected_label'); ?></span>
+                                            <span class="marketing-campaign-audience-chip" id="marketing-campaign-audience-selected-label" data-empty-label="<?= html_escape(_l('marketing_campaign_audience_summary_none')); ?>"><?= html_escape($audienceSummaryLabel); ?></span>
+                                        </div>
+                                        <div class="marketing-campaign-audience-meta-row">
+                                            <span class="marketing-campaign-audience-meta-label"><?= _l('marketing_campaign_audience_segment_label'); ?></span>
+                                            <span class="marketing-campaign-audience-chip"><?= html_escape($audienceModeLabel); ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="marketing-campaign-estimate-card">
+                                    <h5 class="marketing-campaign-estimate-title"><?= _l('marketing_campaign_estimate_recipients'); ?></h5>
+                                    <p class="marketing-campaign-audience-helper no-margin"><?= _l('marketing_campaign_audience_estimate_helper'); ?></p>
+                                    <div class="mtop15">
+                                        <button type="button" class="btn btn-default" id="marketing-estimate-recipients"><?= _l('marketing_campaign_estimate_recipients'); ?></button>
+                                    </div>
+                                    <div class="marketing-campaign-estimate-result-shell">
+                                        <span id="marketing-estimate-recipients-result" class="text-muted"></span>
+                                    </div>
+                                    <p class="marketing-campaign-audience-next-step no-margin"><?= _l('marketing_campaign_audience_next_step_helper'); ?></p>
                                 </div>
                             </div>
-                            <div id="marketing-whatsapp-fields" class="<?= ($campaign['delivery_channel'] ?? 'email') === 'whatsapp' ? '' : 'hide'; ?>">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_name"><?= _l('marketing_campaign_whatsapp_template_name'); ?></label>
-                                            <input type="text" id="whatsapp_template_name" name="whatsapp_template_name" class="form-control" value="<?= html_escape($campaign['whatsapp_template_name'] ?? ''); ?>">
+
+                        <div class="marketing-campaign-delivery-shell" data-marketing-campaign-delivery-shell="1">
+                            <div class="marketing-campaign-delivery-header">
+                                <div>
+                                    <h4 class="marketing-campaign-delivery-title"><?= _l('marketing_campaign_delivery_settings_heading'); ?></h4>
+                                    <p class="marketing-campaign-delivery-helper no-margin"><?= _l('marketing_campaign_delivery_settings_helper'); ?></p>
+                                </div>
+                            </div>
+                            <div class="marketing-campaign-delivery-grid">
+                                <div class="marketing-campaign-delivery-card">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_channel_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_channel_copy'); ?></p>
+                                    <div class="marketing-channel-panel no-margin">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label for="delivery_channel"><?= _l('marketing_campaign_delivery_channel'); ?></label>
+                                                    <select id="delivery_channel" name="delivery_channel" class="form-control">
+                                                        <option value="email" <?= ($campaign['delivery_channel'] ?? 'email') === 'email' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_email'); ?></option>
+                                                        <option value="whatsapp" <?= ($campaign['delivery_channel'] ?? '') === 'whatsapp' ? 'selected' : ''; ?>><?= _l('marketing_campaign_delivery_channel_whatsapp'); ?></option>
+                                                    </select>
+                                                    <p class="marketing-channel-note mtop10 no-margin"><?= _l('marketing_campaign_delivery_channel_help'); ?></p>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_language"><?= _l('marketing_campaign_whatsapp_template_language'); ?></label>
-                                            <input type="text" id="whatsapp_template_language" name="whatsapp_template_language" class="form-control" value="<?= html_escape($campaign['whatsapp_template_language'] ?? 'en_US'); ?>">
+                                        <div id="marketing-whatsapp-fields" class="<?= ($campaign['delivery_channel'] ?? 'email') === 'whatsapp' ? '' : 'hide'; ?>">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_name"><?= _l('marketing_campaign_whatsapp_template_name'); ?></label>
+                                                        <input type="text" id="whatsapp_template_name" name="whatsapp_template_name" class="form-control" value="<?= html_escape($campaign['whatsapp_template_name'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_language"><?= _l('marketing_campaign_whatsapp_template_language'); ?></label>
+                                                        <input type="text" id="whatsapp_template_language" name="whatsapp_template_language" class="form-control" value="<?= html_escape($campaign['whatsapp_template_language'] ?? 'en_US'); ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_var1"><?= _l('marketing_campaign_whatsapp_template_var1'); ?></label>
+                                                        <input type="text" id="whatsapp_template_var1" name="whatsapp_template_var1" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var1'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_var2"><?= _l('marketing_campaign_whatsapp_template_var2'); ?></label>
+                                                        <input type="text" id="whatsapp_template_var2" name="whatsapp_template_var2" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var2'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-group">
+                                                        <label for="whatsapp_template_var3"><?= _l('marketing_campaign_whatsapp_template_var3'); ?></label>
+                                                        <input type="text" id="whatsapp_template_var3" name="whatsapp_template_var3" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var3'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="alert alert-info no-margin">
+                                                <?= _l('marketing_campaign_whatsapp_template_help'); ?>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-md-4">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_var1"><?= _l('marketing_campaign_whatsapp_template_var1'); ?></label>
-                                            <input type="text" id="whatsapp_template_var1" name="whatsapp_template_var1" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var1'] ?? ''); ?>">
+
+                                <div class="marketing-campaign-delivery-card">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_sender_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_sender_copy'); ?></p>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="form-group">
+                                                <label for="from_name"><?= _l('marketing_campaign_from_name'); ?></label>
+                                                <input type="text" id="from_name" name="from_name" class="form-control" value="<?= html_escape($campaign['from_name']); ?>">
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_var2"><?= _l('marketing_campaign_whatsapp_template_var2'); ?></label>
-                                            <input type="text" id="whatsapp_template_var2" name="whatsapp_template_var2" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var2'] ?? ''); ?>">
+                                        <div class="col-md-4">
+                                            <div class="form-group">
+                                                <label for="from_email"><?= _l('marketing_campaign_from_email'); ?></label>
+                                                <input type="email" id="from_email" name="from_email" class="form-control" value="<?= html_escape($campaign['from_email']); ?>">
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-group">
-                                            <label for="whatsapp_template_var3"><?= _l('marketing_campaign_whatsapp_template_var3'); ?></label>
-                                            <input type="text" id="whatsapp_template_var3" name="whatsapp_template_var3" class="form-control" value="<?= html_escape($campaign['whatsapp_template_var3'] ?? ''); ?>">
+                                        <div class="col-md-4">
+                                            <div class="form-group no-margin">
+                                                <label for="reply_to_email"><?= _l('marketing_campaign_reply_to_email'); ?></label>
+                                                <input type="email" id="reply_to_email" name="reply_to_email" class="form-control" value="<?= html_escape($campaign['reply_to_email']); ?>">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="alert alert-info no-margin">
-                                    <?= _l('marketing_campaign_whatsapp_template_help'); ?>
+
+                                <div class="marketing-campaign-delivery-card marketing-email-fields">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_tracking_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_tracking_copy'); ?></p>
+                                    <div class="marketing-campaign-delivery-tracking-row">
+                                        <div class="checkbox checkbox-inline">
+                                            <input type="hidden" name="track_opens" value="0">
+                                            <input type="checkbox" id="track_opens" name="track_opens" value="1" <?= $campaign['track_opens'] ? 'checked' : ''; ?>>
+                                            <label for="track_opens"><?= _l('marketing_campaign_track_opens'); ?></label>
+                                        </div>
+                                        <div class="checkbox checkbox-inline">
+                                            <input type="hidden" name="track_clicks" value="0">
+                                            <input type="checkbox" id="track_clicks" name="track_clicks" value="1" <?= $campaign['track_clicks'] ? 'checked' : ''; ?>>
+                                            <label for="track_clicks"><?= _l('marketing_campaign_track_clicks'); ?></label>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted mtop10 no-margin"><?= _l('marketing_campaign_tracking_runtime_help'); ?></p>
+                                </div>
+
+                                <div class="marketing-campaign-delivery-card">
+                                    <h5 class="marketing-campaign-delivery-card-title"><?= _l('marketing_campaign_delivery_settings_schedule_title'); ?></h5>
+                                    <p class="marketing-campaign-delivery-card-copy"><?= _l('marketing_campaign_delivery_settings_schedule_copy'); ?></p>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label class="control-label"><?= _l('marketing_campaign_delivery_timing'); ?></label>
+                                                <div class="radio radio-primary">
+                                                    <input type="radio" id="schedule_mode_now" name="schedule_mode" value="now" <?= ($campaign['schedule_mode'] ?? 'now') !== 'later' ? 'checked' : ''; ?>>
+                                                    <label for="schedule_mode_now"><?= _l('marketing_campaign_send_now'); ?></label>
+                                                </div>
+                                                <div class="radio radio-primary">
+                                                    <input type="radio" id="schedule_mode_later" name="schedule_mode" value="later" <?= ($campaign['schedule_mode'] ?? '') === 'later' ? 'checked' : ''; ?>>
+                                                    <label for="schedule_mode_later"><?= _l('marketing_campaign_schedule_for_later'); ?></label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-group no-margin">
+                                                <label for="scheduled_at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
+                                                <input type="datetime-local" id="scheduled_at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
+                                                <p class="text-muted mtop5 no-margin"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="panel_s">
-                            <div class="panel-body">
+                            <div class="marketing-campaign-targeting-card mtop20">
                                 <h4 class="bold no-margin"><?= _l('marketing_campaign_targeting_rules_heading'); ?></h4>
-                                <p class="text-muted mtop10"><?= _l('marketing_campaign_targeting_rules_help'); ?></p>
+                                <p class="marketing-campaign-audience-helper mtop10"><?= _l('marketing_campaign_targeting_rules_help'); ?></p>
                                 <div class="marketing-targeting-panel mtop15">
                                     <div class="marketing-targeting-mode">
                                         <div class="radio radio-primary">
@@ -286,100 +570,63 @@ foreach ($errorMessages as $errorMessage) {
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="marketing-campaign-id" value="<?= (int) ($campaign['id'] ?? 0); ?>">
+                        </div>
 
-                                    <div class="mtop20">
-                                        <input type="hidden" id="marketing-campaign-id" value="<?= (int) ($campaign['id'] ?? 0); ?>">
-                                        <button type="button" class="btn btn-default" id="marketing-estimate-recipients"><?= _l('marketing_campaign_estimate_recipients'); ?></button>
-                                        <span id="marketing-estimate-recipients-result" class="text-muted mleft10"></span>
+	                        <div class="alert alert-info marketing-email-fields">
+	                            <p class="no-margin"><strong><?= _l('marketing_builder_unsubscribe_help'); ?></strong></p>
+	                            <p class="mtop10 no-margin"><?= _l('marketing_builder_ses_tracking_help'); ?></p>
+	                        </div>
+
+	                        <div class="marketing-campaign-setup-panel" data-marketing-campaign-setup="1">
+	                            <div class="marketing-campaign-setup-header">
+	                                <div>
+	                                    <h4 class="marketing-campaign-setup-heading"><?= _l('marketing_campaign_setup_heading'); ?></h4>
+	                                    <p class="marketing-campaign-setup-helper no-margin"><?= _l('marketing_campaign_setup_helper'); ?></p>
+	                                </div>
+	                                <span class="marketing-campaign-setup-score"><?= (int) $setupChecklistCompleteCount; ?>/<?= count($setupChecklist); ?></span>
+	                            </div>
+	                            <div class="marketing-campaign-setup-checklist">
+	                                <?php foreach ($setupChecklist as $setupChecklistItem) { ?>
+	                                    <div class="marketing-campaign-setup-item <?= !empty($setupChecklistItem['complete']) ? 'is-complete' : 'is-attention'; ?>">
+	                                        <div class="marketing-campaign-setup-item-top">
+	                                            <span class="marketing-campaign-setup-item-label"><?= html_escape($setupChecklistItem['label']); ?></span>
+	                                            <span class="marketing-campaign-setup-item-status"><?= !empty($setupChecklistItem['complete']) ? _l('marketing_campaign_setup_complete') : _l('marketing_campaign_setup_needs_attention'); ?></span>
+	                                        </div>
+	                                        <p class="marketing-campaign-setup-item-copy no-margin"><?= html_escape($setupChecklistItem['detail']); ?></p>
+	                                    </div>
+	                                <?php } ?>
+	                            </div>
+	                            <div class="marketing-campaign-setup-next-step">
+	                                <span class="marketing-campaign-setup-next-step-label"><?= _l('marketing_campaign_setup_next_step'); ?></span>
+	                                <span class="marketing-campaign-setup-next-step-copy"><?= _l('marketing_campaign_setup_next_step_helper'); ?></span>
+	                            </div>
+	                        </div>
+
+	                        <div class="marketing-campaign-builder-shell marketing-email-fields" data-marketing-campaign-builder-shell="1">
+	                            <div class="marketing-campaign-builder-header">
+	                                <div>
+	                                    <h4 class="marketing-campaign-builder-title"><?= _l('marketing_builder_heading'); ?></h4>
+	                                    <p class="marketing-campaign-builder-helper no-margin"><?= _l('marketing_campaign_builder_helper'); ?></p>
+	                                </div>
+	                                <div class="marketing-campaign-builder-steps">
+	                                    <span class="marketing-campaign-builder-step-chip"><?= _l('marketing_campaign_builder_step_blocks'); ?></span>
+	                                    <span class="marketing-campaign-builder-step-chip"><?= _l('marketing_campaign_builder_step_preview'); ?></span>
+	                                    <span class="marketing-campaign-builder-step-chip"><?= _l('marketing_campaign_builder_step_review'); ?></span>
+	                                </div>
+	                            </div>
+	                            <div class="marketing-campaign-builder-next-step">
+	                                <span class="marketing-campaign-builder-next-step-label"><?= _l('marketing_campaign_setup_next_step'); ?></span>
+	                                <span class="marketing-campaign-builder-next-step-copy"><?= _l('marketing_campaign_builder_next_step_helper'); ?></span>
+                                    <div class="marketing-campaign-builder-next-step-actions">
+                                        <button type="button" class="btn btn-default" id="marketing-builder-preview-desktop"><?= _l('marketing_builder_preview_desktop'); ?></button>
+                                        <button type="button" class="btn btn-default" id="marketing-builder-preview-mobile"><?= _l('marketing_builder_preview_mobile'); ?></button>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="from_name"><?= _l('marketing_campaign_from_name'); ?></label>
-                                    <input type="text" id="from_name" name="from_name" class="form-control" value="<?= html_escape($campaign['from_name']); ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="from_email"><?= _l('marketing_campaign_from_email'); ?></label>
-                                    <input type="email" id="from_email" name="from_email" class="form-control" value="<?= html_escape($campaign['from_email']); ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="reply_to_email"><?= _l('marketing_campaign_reply_to_email'); ?></label>
-                                    <input type="email" id="reply_to_email" name="reply_to_email" class="form-control" value="<?= html_escape($campaign['reply_to_email']); ?>">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label class="control-label"><?= _l('marketing_campaign_delivery_timing'); ?></label>
-                                    <div class="radio radio-primary">
-                                        <input type="radio" id="schedule_mode_now" name="schedule_mode" value="now" <?= ($campaign['schedule_mode'] ?? 'now') !== 'later' ? 'checked' : ''; ?>>
-                                        <label for="schedule_mode_now"><?= _l('marketing_campaign_send_now'); ?></label>
-                                    </div>
-                                    <div class="radio radio-primary">
-                                        <input type="radio" id="schedule_mode_later" name="schedule_mode" value="later" <?= ($campaign['schedule_mode'] ?? '') === 'later' ? 'checked' : ''; ?>>
-                                        <label for="schedule_mode_later"><?= _l('marketing_campaign_schedule_for_later'); ?></label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="scheduled_at"><?= _l('marketing_campaign_scheduled_at'); ?></label>
-                                    <input type="datetime-local" id="scheduled_at" name="scheduled_at" class="form-control" value="<?= !empty($campaign['scheduled_at']) ? html_escape(date('Y-m-d\TH:i', strtotime($campaign['scheduled_at']))) : ''; ?>">
-                                    <p class="text-muted mtop5"><?= _l('marketing_campaign_schedule_future_note'); ?></p>
-                                </div>
-                            </div>
-                            <div class="col-md-4 marketing-email-fields">
-                                <div class="checkbox checkbox-inline mtop30">
-                                    <input type="hidden" name="track_opens" value="0">
-                                    <input type="checkbox" id="track_opens" name="track_opens" value="1" <?= $campaign['track_opens'] ? 'checked' : ''; ?>>
-                                    <label for="track_opens"><?= _l('marketing_campaign_track_opens'); ?></label>
-                                </div>
-                                <div class="checkbox checkbox-inline mtop30">
-                                    <input type="hidden" name="track_clicks" value="0">
-                                    <input type="checkbox" id="track_clicks" name="track_clicks" value="1" <?= $campaign['track_clicks'] ? 'checked' : ''; ?>>
-                                    <label for="track_clicks"><?= _l('marketing_campaign_track_clicks'); ?></label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-info marketing-email-fields">
-                            <p class="no-margin"><strong><?= _l('marketing_builder_unsubscribe_help'); ?></strong></p>
-                            <p class="mtop10 no-margin"><?= _l('marketing_builder_ses_tracking_help'); ?></p>
-                        </div>
-
-                        <h4 class="bold mtop30 marketing-email-fields"><?= _l('marketing_builder_heading'); ?></h4>
-                        <div class="marketing-builder-shell marketing-email-fields">
-                            <div class="marketing-builder-topbar">
-                                <div class="marketing-builder-topbar-group">
-                                    <button type="button" class="btn btn-default" id="marketing-builder-start-design"><?= _l('marketing_builder_start_design'); ?></button>
-                                    <button type="button" class="btn btn-default" id="marketing-builder-preview-desktop"><?= _l('marketing_builder_preview_desktop'); ?></button>
-                                    <button type="button" class="btn btn-default" id="marketing-builder-preview-mobile"><?= _l('marketing_builder_preview_mobile'); ?></button>
-                                    <button type="button" class="btn btn-info" id="marketing-builder-insert-unsubscribe"><?= _l('marketing_builder_insert_unsubscribe'); ?></button>
-                                </div>
-                                <div class="marketing-builder-topbar-group">
-                                    <span id="marketing-builder-unsubscribe-status" class="marketing-builder-status-chip marketing-builder-status-chip--missing"><?= _l('marketing_builder_unsubscribe_missing'); ?></span>
-                                    <select id="marketing-builder-preset-select" class="form-control marketing-builder-inline-select">
-                                        <option value="default"><?= _l('marketing_builder_default_template_name'); ?></option>
-                                        <option value="newsletter"><?= _l('marketing_builder_preset_newsletter'); ?></option>
-                                        <option value="promotion"><?= _l('marketing_builder_preset_promotion'); ?></option>
-                                        <option value="real_estate"><?= _l('marketing_builder_preset_real_estate'); ?></option>
-                                        <option value="product"><?= _l('marketing_builder_preset_product'); ?></option>
-                                        <option value="simple_text"><?= _l('marketing_builder_preset_simple_text'); ?></option>
-                                        <option value="event"><?= _l('marketing_builder_preset_event'); ?></option>
-                                    </select>
-                                    <button type="button" class="btn btn-primary" id="marketing-builder-apply-preset"><?= _l('marketing_builder_apply_preset'); ?></button>
-                                </div>
-                            </div>
+	                            </div>
+	                            <div class="marketing-campaign-builder-workspace">
+	                                <div class="marketing-builder-shell">
                             <div class="marketing-builder-layout">
                                 <aside class="marketing-builder-palette">
                                     <div class="marketing-builder-panel-heading" id="marketing-builder-library-header">
@@ -407,26 +654,33 @@ foreach ($errorMessages as $errorMessage) {
                         <input type="hidden" id="builder_state" name="builder_state" value="<?= html_escape(isset($campaign['builder_state']) ? $campaign['builder_state'] : ''); ?>">
                         <input type="file" id="marketing-builder-image-input" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" class="hide">
 
-                        <div class="panel_s marketing-builder-advanced mtop20 marketing-email-fields">
+                        <div class="panel_s marketing-builder-advanced mtop20">
                             <div class="panel-body">
-                                <h4 class="bold">
-                                    <a data-toggle="collapse" href="#marketing-builder-advanced-panel" aria-expanded="false" aria-controls="marketing-builder-advanced-panel">
-                                        <?= _l('marketing_campaign_text_content'); ?>
-                                    </a>
-                                </h4>
-                                <div id="marketing-builder-advanced-panel" class="collapse">
+                                <h4 class="bold no-margin"><?= _l('marketing_campaign_text_content'); ?></h4>
+                                <div id="marketing-builder-advanced-panel" class="mtop15">
                                     <div class="form-group">
                                         <label for="text_content"><?= _l('marketing_campaign_text_content'); ?></label>
-                                        <textarea id="text_content" name="text_content" class="form-control" rows="8"><?= html_escape($campaign['text_content']); ?></textarea>
+                                        <textarea id="text_content" name="text_content" class="form-control" rows="8" placeholder="<?= html_escape(_l('marketing_campaign_text_content_placeholder')); ?>"><?= html_escape($textContentValue); ?></textarea>
                                         <p class="marketing-builder-help mtop10"><?= _l('marketing_builder_plain_text_help'); ?></p>
                                     </div>
                                 </div>
                             </div>
                         </div>
+	                            </div>
+	                        </div>
 
-                        <div class="mtop20">
-                            <button type="submit" class="btn btn-primary"><?= _l('submit'); ?></button>
-                            <a href="<?= admin_url('marketing/campaigns'); ?>" class="btn btn-default"><?= _l('back'); ?></a>
+                        <div class="marketing-campaign-form-footer" data-marketing-campaign-form-footer="1">
+                            <div class="marketing-campaign-form-footer-main">
+                                <div>
+                                    <h4 class="marketing-campaign-form-footer-title"><?= _l('marketing_campaign_form_footer_heading'); ?></h4>
+                                    <p class="marketing-campaign-form-footer-copy no-margin"><?= _l('marketing_campaign_form_footer_helper'); ?></p>
+                                </div>
+                                <div class="marketing-campaign-form-footer-actions">
+                                    <button type="submit" class="btn btn-primary"><?= _l('submit'); ?></button>
+                                    <a href="<?= admin_url('marketing/campaigns'); ?>" class="btn btn-default"><?= _l('back'); ?></a>
+                                </div>
+                            </div>
+                            <p class="marketing-campaign-form-footer-note no-margin"><?= _l('marketing_campaign_form_footer_note'); ?></p>
                         </div>
                         <?= form_close(); ?>
                     </div>
@@ -637,6 +891,14 @@ foreach ($errorMessages as $errorMessage) {
             name: <?= json_encode($this->security->get_csrf_token_name()); ?>,
             hash: <?= json_encode($this->security->get_csrf_hash()); ?>
         },
+        companyAddress: {
+            html: <?= json_encode((string) $builderCompanyAddress['html']); ?>,
+            text: <?= json_encode((string) $builderCompanyAddress['text']); ?>,
+            configured: <?= !empty($builderCompanyAddress['configured']) ? 'true' : 'false'; ?>,
+            source: <?= json_encode(!empty($builderCompanyAddress['source']) ? $builderCompanyAddress['source'] : 'marketing_module_fallback'); ?>
+        },
+        mergeTags: <?= json_encode(array_values($builderMergeTags)); ?>,
+        socialIconUrls: <?= json_encode($socialIconUrls); ?>,
         strings: {
             selectBlock: <?= json_encode(_l('marketing_builder_select_block')); ?>,
             uploadImage: <?= json_encode(_l('marketing_builder_upload_image')); ?>,
@@ -646,6 +908,28 @@ foreach ($errorMessages as $errorMessage) {
             uploadFailed: <?= json_encode(_l('marketing_builder_upload_failed')); ?>,
             invalidLink: <?= json_encode(_l('marketing_builder_invalid_link')); ?>,
             replaceConfirm: <?= json_encode(_l('marketing_builder_replace_confirm')); ?>,
+            mergeTags: <?= json_encode(_l('marketing_builder_merge_tags')); ?>,
+            insertMergeTag: <?= json_encode(_l('marketing_builder_insert_merge_tag')); ?>,
+            applyPreset: <?= json_encode(_l('marketing_builder_apply_preset')); ?>,
+            previewDesktop: <?= json_encode(_l('marketing_builder_preview_desktop')); ?>,
+            previewMobile: <?= json_encode(_l('marketing_builder_preview_mobile')); ?>,
+            insertUnsubscribe: <?= json_encode(_l('marketing_builder_insert_unsubscribe')); ?>,
+            mergeTagApplied: <?= json_encode(_l('marketing_builder_merge_tag_applied')); ?>,
+            mergeTagSelectPrompt: <?= json_encode(_l('marketing_builder_merge_tag_select_prompt')); ?>,
+            personalizeHelp: <?= json_encode(_l('marketing_builder_personalization_help')); ?>,
+            richTextHelp: <?= json_encode(_l('marketing_builder_rich_text_help')); ?>,
+            richTextBold: <?= json_encode(_l('marketing_builder_rich_text_bold')); ?>,
+            richTextItalic: <?= json_encode(_l('marketing_builder_rich_text_italic')); ?>,
+            richTextUnderline: <?= json_encode(_l('marketing_builder_rich_text_underline')); ?>,
+            richTextParagraph: <?= json_encode(_l('marketing_builder_rich_text_paragraph')); ?>,
+            richTextHeading2: <?= json_encode(_l('marketing_builder_rich_text_heading_2')); ?>,
+            richTextHeading3: <?= json_encode(_l('marketing_builder_rich_text_heading_3')); ?>,
+            richTextBullets: <?= json_encode(_l('marketing_builder_rich_text_bullets')); ?>,
+            richTextNumbers: <?= json_encode(_l('marketing_builder_rich_text_numbers')); ?>,
+            richTextLink: <?= json_encode(_l('marketing_builder_rich_text_link')); ?>,
+            richTextClear: <?= json_encode(_l('marketing_builder_rich_text_clear')); ?>,
+            richTextEditorUnavailable: <?= json_encode(_l('marketing_builder_rich_text_editor_unavailable')); ?>,
+            richTextEditorFallback: <?= json_encode(_l('marketing_builder_rich_text_editor_fallback')); ?>,
             unsubscribePresent: <?= json_encode(_l('marketing_builder_unsubscribe_present')); ?>,
             unsubscribeMissing: <?= json_encode(_l('marketing_builder_unsubscribe_missing')); ?>,
             removeUnsubscribeConfirm: <?= json_encode(_l('marketing_builder_remove_unsubscribe_confirm')); ?>,
@@ -708,7 +992,7 @@ foreach ($errorMessages as $errorMessage) {
             presetRealEstate: <?= json_encode(_l('marketing_builder_preset_real_estate')); ?>,
             presetProduct: <?= json_encode(_l('marketing_builder_preset_product')); ?>,
             presetSimpleText: <?= json_encode(_l('marketing_builder_preset_simple_text')); ?>,
-            presetEvent: <?= json_encode(_l('marketing_builder_preset_event')); ?>,
+            presetConferenceEvent: <?= json_encode(_l('marketing_builder_preset_conference_event')); ?>,
             globalSettings: <?= json_encode(_l('marketing_builder_global_settings')); ?>,
             blockSettings: <?= json_encode(_l('marketing_builder_block_settings')); ?>,
             background: <?= json_encode(_l('marketing_builder_background')); ?>,
@@ -761,12 +1045,16 @@ foreach ($errorMessages as $errorMessage) {
             height: <?= json_encode(_l('marketing_builder_height')); ?>,
             apply: <?= json_encode(_l('marketing_builder_apply')); ?>,
             cancel: <?= json_encode(_l('marketing_builder_cancel')); ?>,
+            companyAddressUseSaved: <?= json_encode(_l('marketing_builder_company_address_use_saved')); ?>,
+            companyAddressSavedConfigured: <?= json_encode(_l('marketing_builder_company_address_saved_configured')); ?>,
+            companyAddressSavedMissing: <?= json_encode(_l('marketing_builder_company_address_saved_missing')); ?>,
             foregroundColor: <?= json_encode(_l('marketing_builder_foreground_color')); ?>,
             backgroundColor: <?= json_encode(_l('marketing_builder_background_color')); ?>,
             regenerate: <?= json_encode(_l('marketing_builder_regenerate')); ?>
         }
     };
 </script>
+<script src="<?= html_escape($quillJsUrl . '?v=' . $quillJsVer); ?>"></script>
 <script src="<?= html_escape($builderJsUrl . '?v=' . $builderJsVer); ?>"></script>
 <script>
     (function (window, document) {
@@ -789,10 +1077,25 @@ foreach ($errorMessages as $errorMessage) {
             var whatsappFields = document.getElementById('marketing-whatsapp-fields');
             var emailFields = document.querySelectorAll('.marketing-email-fields');
             var listField = document.getElementById('list_id');
+            var selectedAudienceLabel = document.getElementById('marketing-campaign-audience-selected-label');
             var campaignIdField = document.getElementById('marketing-campaign-id');
             var modeFields = document.querySelectorAll('input[name="targeting_send_mode"]');
             var targetingFields = document.getElementById('marketing-targeting-fields');
             var config = window.MarketingCampaignBuilderConfig || {};
+
+            function updateSelectedAudienceLabel() {
+                var selectedOption;
+                var label;
+
+                if (!selectedAudienceLabel || !listField) {
+                    return;
+                }
+
+                selectedOption = listField.options && listField.selectedIndex >= 0 ? listField.options[listField.selectedIndex] : null;
+                label = selectedOption && selectedOption.value ? String(selectedOption.text || '').trim() : '';
+
+                selectedAudienceLabel.textContent = label || selectedAudienceLabel.getAttribute('data-empty-label') || <?= json_encode(_l('marketing_campaign_audience_summary_none')); ?>;
+            }
 
             function updateTargetingState() {
                 var filtered = document.getElementById('targeting_send_mode_filtered');
@@ -846,6 +1149,11 @@ foreach ($errorMessages as $errorMessage) {
                 channelField.addEventListener('change', updateChannelState);
             }
             updateChannelState();
+
+            if (listField) {
+                listField.addEventListener('change', updateSelectedAudienceLabel);
+            }
+            updateSelectedAudienceLabel();
 
             if (!estimateButton || !estimateResult || !form || !listField || !window.jQuery) {
                 return;

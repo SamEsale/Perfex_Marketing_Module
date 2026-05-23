@@ -48,14 +48,211 @@
     .marketing-metric-red { background: #fef2f2; color: #b91c1c; }
     .marketing-metric-slate { background: #f8fafc; color: #475569; }
     .marketing-metric-purple { background: #f5f3ff; color: #6d28d9; }
+    .marketing-analytics-note {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(59, 130, 246, .16);
+        background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+        color: #1e3a8a;
+        font-size: 13px;
+    }
+    .marketing-analytics-note strong {
+        color: #0f172a;
+    }
+    .marketing-analytics-badge-row {
+        margin-top: 12px;
+    }
+    .marketing-analytics-badge {
+        display: inline-block;
+        margin: 0 8px 8px 0;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: #ffffff;
+        border: 1px solid rgba(148, 163, 184, .28);
+        color: #334155;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .marketing-analytics-warning {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid #fcd34d;
+        background: #fffbeb;
+        color: #92400e;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .marketing-analytics-report-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr);
+        gap: 18px;
+        margin: 24px 0;
+    }
+    .marketing-analytics-card {
+        border: 1px solid rgba(148, 163, 184, .22);
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
+        overflow: hidden;
+    }
+    .marketing-analytics-card-body {
+        padding: 18px 20px;
+    }
+    .marketing-analytics-card-copy {
+        margin: 8px 0 0;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .marketing-analytics-performance-table td,
+    .marketing-analytics-performance-table th {
+        vertical-align: middle !important;
+        white-space: nowrap;
+    }
+    .marketing-analytics-performance-table td.is-name,
+    .marketing-analytics-performance-table th.is-name,
+    .marketing-analytics-performance-table td.is-activity,
+    .marketing-analytics-performance-table th.is-activity {
+        white-space: normal;
+    }
+    .marketing-analytics-provider-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+    }
+    .marketing-analytics-provider-group-title {
+        margin: 16px 0 6px;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+    }
+    .marketing-analytics-provider-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: #f8fafc;
+    }
+    .marketing-analytics-provider-label {
+        color: #0f172a;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.5;
+    }
+    .marketing-analytics-provider-count {
+        color: #1e3a8a;
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .marketing-analytics-provider-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+    }
+    .marketing-analytics-provider-empty {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #f8fafc;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .marketing-analytics-events-table-wrap {
+        overflow-x: auto;
+        border: 1px solid rgba(148, 163, 184, .18);
+        border-radius: 14px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .marketing-analytics-events-table {
+        margin-bottom: 0;
+        table-layout: fixed;
+    }
+    .marketing-analytics-events-table thead th {
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(148, 163, 184, .22);
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .marketing-analytics-events-table tbody td {
+        padding: 10px 14px;
+        border-top: 1px solid rgba(226, 232, 240, .85);
+        vertical-align: middle;
+        font-size: 13px;
+        color: #0f172a;
+        white-space: nowrap;
+    }
+    .marketing-analytics-events-table tbody tr:nth-child(even) {
+        background: rgba(248, 250, 252, .72);
+    }
+    .marketing-analytics-events-table tbody tr:hover {
+        background: rgba(239, 246, 255, .62);
+    }
+    .marketing-analytics-events-table th:nth-child(1),
+    .marketing-analytics-events-table td:nth-child(1) {
+        width: 72px;
+    }
+    .marketing-analytics-events-table th:nth-child(2),
+    .marketing-analytics-events-table td:nth-child(2) {
+        width: 160px;
+    }
+    .marketing-analytics-events-table th:nth-child(4),
+    .marketing-analytics-events-table td:nth-child(4) {
+        width: 140px;
+    }
+    .marketing-analytics-events-table th:nth-child(6),
+    .marketing-analytics-events-table td:nth-child(6) {
+        width: 168px;
+        white-space: nowrap;
+    }
+    .marketing-analytics-click-target {
+        width: 100%;
+        white-space: normal;
+    }
+    .marketing-analytics-click-target-text {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #475569;
+        line-height: 1.4;
+    }
     @media (max-width: 1199px) {
         .marketing-analytics-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .marketing-analytics-report-grid {
+            grid-template-columns: 1fr;
         }
     }
     @media (max-width: 767px) {
         .marketing-analytics-grid {
             grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+        .marketing-analytics-events-table thead th,
+        .marketing-analytics-events-table tbody td {
+            padding: 10px 12px;
+        }
+        .marketing-analytics-click-target-text {
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+            word-break: break-word;
         }
     }
 </style>
@@ -66,6 +263,120 @@
                 <div class="panel_s">
                     <div class="panel-body">
                         <?php
+                        $stats = isset($stats) && is_array($stats) ? $stats : [];
+                        $stats = array_replace_recursive([
+                            'campaigns' => ['total' => 0, 'draft' => 0, 'sending' => 0, 'sent' => 0, 'failed' => 0],
+                            'recipients' => ['total' => 0, 'queued' => 0, 'processing' => 0, 'sent' => 0, 'failed' => 0],
+                            'events' => [
+                                'total_records' => 0,
+                                'accepted_sent' => 0,
+                                'accepted_sent_events' => 0,
+                                'delivered' => 0,
+                                'open' => 0,
+                                'click' => 0,
+                                'human_clicks' => 0,
+                                'unique_human_clicks' => 0,
+                                'tracked_link_human_clicks' => 0,
+                                'tracked_link_unique_human_clicks' => 0,
+                                'raw_click_events' => 0,
+                                'bounce' => 0,
+                                'complaint' => 0,
+                                'failed_rejected' => 0,
+                                'send_readiness_failed' => 0,
+                                'unsubscribe' => 0,
+                                'delivery_delay' => 0,
+                            ],
+                        ], $stats);
+                        $recent = isset($recent) && is_array($recent) ? $recent : [];
+                        $normalizedRecent = [];
+                        foreach ($recent as $event) {
+                            if (!is_array($event)) {
+                                continue;
+                            }
+
+                            $normalizedRecent[] = array_merge([
+                                'id' => 0,
+                                'event_type' => '',
+                                'email' => '',
+                                'provider' => '',
+                                'url' => '',
+                                'event_at' => null,
+                            ], $event);
+                        }
+                        $recent = $normalizedRecent;
+                        $campaignPerformance = isset($campaign_performance) && is_array($campaign_performance)
+                            ? array_merge(['available' => false, 'items' => []], $campaign_performance)
+                            : ['available' => false, 'items' => []];
+                        $campaignPerformanceItems = isset($campaignPerformance['items']) && is_array($campaignPerformance['items'])
+                            ? $campaignPerformance['items']
+                            : [];
+                        $normalizedCampaignPerformanceItems = [];
+                        foreach ($campaignPerformanceItems as $campaignRow) {
+                            if (!is_array($campaignRow)) {
+                                continue;
+                            }
+
+                            $normalizedCampaignPerformanceItems[] = array_merge([
+                                'id' => 0,
+                                'name' => '',
+                                'status' => 'draft',
+                                'sent_count' => 0,
+                                'delivered_count' => 0,
+                                'open_count' => 0,
+                                'click_count' => 0,
+                                'bounce_count' => 0,
+                                'complaint_count' => 0,
+                                'unsubscribe_count' => 0,
+                                'last_activity_at' => '',
+                            ], $campaignRow);
+                        }
+                        $campaignPerformanceItems = $normalizedCampaignPerformanceItems;
+                        $providerHealth = isset($provider_health) && is_array($provider_health)
+                            ? array_merge([
+                                'available' => false,
+                                'queue_paused' => false,
+                                'schema_ready' => false,
+                                'recent_recovered_total' => 0,
+                                'warning_items' => [],
+                                'failure_items' => [],
+                            ], $provider_health)
+                            : [
+                                'available' => false,
+                                'queue_paused' => false,
+                                'schema_ready' => false,
+                                'recent_recovered_total' => 0,
+                                'warning_items' => [],
+                                'failure_items' => [],
+                            ];
+                        $providerWarningItems = isset($providerHealth['warning_items']) && is_array($providerHealth['warning_items'])
+                            ? $providerHealth['warning_items']
+                            : [];
+                        $providerFailureItems = isset($providerHealth['failure_items']) && is_array($providerHealth['failure_items'])
+                            ? $providerHealth['failure_items']
+                            : [];
+                        $normalizeProviderMetricItems = static function (array $items) {
+                            $normalized = [];
+                            foreach ($items as $item) {
+                                if (!is_array($item)) {
+                                    continue;
+                                }
+
+                                $normalized[] = array_merge([
+                                    'code' => '',
+                                    'count' => 0,
+                                ], $item);
+                            }
+
+                            return $normalized;
+                        };
+                        $providerWarningItems = $normalizeProviderMetricItems($providerWarningItems);
+                        $providerFailureItems = $normalizeProviderMetricItems($providerFailureItems);
+                        $events_pagination = isset($events_pagination) && is_array($events_pagination)
+                            ? array_merge(['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1], $events_pagination)
+                            : ['page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 1];
+                        $analytics_warning_message = isset($analytics_warning_message) && is_string($analytics_warning_message)
+                            ? trim($analytics_warning_message)
+                            : '';
                         $eventTypeLabels = [
                             'queued' => 'Recipients Queued',
                             'send_start' => 'Send Started',
@@ -135,20 +446,75 @@
 
                             return admin_url('marketing/analytics?' . http_build_query($query));
                         };
+                        $formatMetricCode = static function ($code) {
+                            $code = trim((string) $code);
+                            if ($code === '') {
+                                return '-';
+                            }
+
+                            return ucwords(str_replace('_', ' ', $code));
+                        };
+                        $acceptedSentHelper = '';
+                        if ((int) ($stats['events']['accepted_sent_events'] ?? 0) !== (int) $stats['events']['accepted_sent']) {
+                            $acceptedSentHelper = sprintf(_l('marketing_campaign_raw_sent_events_helper'), (int) $stats['events']['accepted_sent_events']);
+                        }
+                        $retentionDiagnostics = isset($retention_diagnostics) && is_array($retention_diagnostics)
+                            ? array_merge([
+                                'cleanup_mode' => 'explicit_only',
+                                'event_retention_days' => 0,
+                                'webhook_log_retention_days' => 0,
+                                'retention_floor_days' => 30,
+                                'delete_limit_per_run' => 500,
+                                'events_cleanup_candidate_preview' => 0,
+                                'events_cleanup_candidate_more' => false,
+                                'webhook_logs_cleanup_candidate_preview' => 0,
+                                'webhook_logs_cleanup_candidate_more' => false,
+                                'click_aggregate_candidate_preview' => 0,
+                                'click_aggregate_candidate_more' => false,
+                                'warnings' => [],
+                            ], $retention_diagnostics)
+                            : [
+                                'cleanup_mode' => 'explicit_only',
+                                'event_retention_days' => 0,
+                                'webhook_log_retention_days' => 0,
+                                'retention_floor_days' => 30,
+                                'delete_limit_per_run' => 500,
+                                'events_cleanup_candidate_preview' => 0,
+                                'events_cleanup_candidate_more' => false,
+                                'webhook_logs_cleanup_candidate_preview' => 0,
+                                'webhook_logs_cleanup_candidate_more' => false,
+                                'click_aggregate_candidate_preview' => 0,
+                                'click_aggregate_candidate_more' => false,
+                                'warnings' => [],
+                            ];
                         ?>
                         <div class="tw-flex tw-items-start tw-justify-between tw-gap-4">
                             <div>
                                 <h4 class="no-margin"><?= _l('marketing_analytics'); ?></h4>
                                 <p class="text-muted mtop10"><?= _l('marketing_analytics_placeholder'); ?></p>
                             </div>
-                            <?php if (!empty($can_clear_event_history)) { ?>
+                            <?php if (!empty($can_run_retention_cleanup)) { ?>
                                 <div class="tw-flex-shrink-0">
-                                    <?= form_open(admin_url('marketing/analytics'), ['class' => 'inline-block', 'onsubmit' => "return confirm('" . html_escape(_l('marketing_clear_event_history_confirm')) . "');"]); ?>
-                                        <input type="hidden" name="clear_marketing_events" value="1">
-                                        <button type="submit" class="btn btn-danger"><?= _l('marketing_clear_event_history'); ?></button>
+                                    <?= form_open(admin_url('marketing/analytics'), ['class' => 'inline-block']); ?>
+                                        <input type="hidden" name="run_retention_cleanup" value="1">
+                                        <button type="submit" class="btn btn-default">Run Retention Cleanup</button>
                                     <?= form_close(); ?>
                                 </div>
                             <?php } ?>
+                        </div>
+                        <?php if ($analytics_warning_message !== '') { ?>
+                            <div class="marketing-analytics-warning">
+                                <?= html_escape($analytics_warning_message); ?>
+                            </div>
+                        <?php } ?>
+                        <div class="marketing-analytics-note">
+                            <strong>Retention policy:</strong> Audit-critical events such as unsubscribes, suppressions, bounces, complaints, and operator actions are retained by design.
+                            Bounded cleanup removes only non-critical telemetry and safely resets stale click aggregates for old tracking links.
+                            <div class="marketing-analytics-badge-row">
+                                <span class="marketing-analytics-badge">Event candidates: <?= (int) ($retentionDiagnostics['events_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['events_cleanup_candidate_more']) ? '+' : ''; ?></span>
+                                <span class="marketing-analytics-badge">Webhook candidates: <?= (int) ($retentionDiagnostics['webhook_logs_cleanup_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['webhook_logs_cleanup_candidate_more']) ? '+' : ''; ?></span>
+                                <span class="marketing-analytics-badge">Click aggregate candidates: <?= (int) ($retentionDiagnostics['click_aggregate_candidate_preview'] ?? 0); ?><?= !empty($retentionDiagnostics['click_aggregate_candidate_more']) ? '+' : ''; ?></span>
+                            </div>
                         </div>
                         <hr />
                         <div class="marketing-analytics-section">
@@ -177,27 +543,129 @@
                         </div>
                         <div class="marketing-analytics-section">
                             <div>
+                                <h5 class="marketing-analytics-section-title"><?= _l('marketing_link_click_analytics'); ?></h5>
+                            </div>
+                            <div class="marketing-analytics-grid">
+                                <?php $renderMetricCard(_l('marketing_human_clicks'), $stats['events']['human_clicks'], 'marketing-metric-blue', sprintf(_l('marketing_tracked_link_human_clicks_helper'), (int) ($stats['events']['tracked_link_human_clicks'] ?? 0))); ?>
+                                <?php $renderMetricCard(_l('marketing_unique_human_clicks'), $stats['events']['unique_human_clicks'], 'marketing-metric-blue', sprintf(_l('marketing_tracked_link_unique_human_clicks_helper'), (int) ($stats['events']['tracked_link_unique_human_clicks'] ?? 0))); ?>
+                                <?php $renderMetricCard(_l('marketing_raw_click_events'), $stats['events']['raw_click_events'], 'marketing-metric-slate', _l('marketing_raw_click_events_note')); ?>
+                            </div>
+                        </div>
+                        <div class="marketing-analytics-section">
+                            <div>
                                 <h5 class="marketing-analytics-section-title">Event Activity</h5>
                             </div>
                             <div class="marketing-analytics-grid">
                                 <?php $renderMetricCard('Total Event Records', $stats['events']['total_records'], 'marketing-metric-slate', 'All rows from marketing_events'); ?>
-                                <?php $renderMetricCard(_l('marketing_accepted_sent'), $stats['events']['accepted_sent'], 'marketing-metric-green'); ?>
+                                <?php $renderMetricCard(_l('marketing_accepted_sent'), $stats['events']['accepted_sent'], 'marketing-metric-green', $acceptedSentHelper); ?>
                                 <?php $renderMetricCard('Delivered', $stats['events']['delivered'], 'marketing-metric-green'); ?>
                                 <?php $renderMetricCard('Opens', $stats['events']['open'], 'marketing-metric-blue'); ?>
-                                <?php $renderMetricCard('Clicks', $stats['events']['click'], 'marketing-metric-blue'); ?>
                                 <?php $renderMetricCard('Bounces', $stats['events']['bounce'], 'marketing-metric-red'); ?>
                                 <?php $renderMetricCard('Complaints', $stats['events']['complaint'], 'marketing-metric-red'); ?>
                                 <?php $renderMetricCard(_l('marketing_failed_rejections'), $stats['events']['failed_rejected'], 'marketing-metric-red'); ?>
+                                <?php $renderMetricCard(_l('marketing_send_readiness_failed'), $stats['events']['send_readiness_failed'], 'marketing-metric-amber'); ?>
                                 <?php $renderMetricCard(_l('marketing_unsubscribes'), $stats['events']['unsubscribe'], 'marketing-metric-slate'); ?>
                                 <?php $renderMetricCard('Delivery Delays', $stats['events']['delivery_delay'], 'marketing-metric-amber'); ?>
                             </div>
                         </div>
+                        <div class="marketing-analytics-report-grid">
+                            <div class="marketing-analytics-card">
+                                <div class="marketing-analytics-card-body">
+                                    <h5 class="marketing-analytics-section-title"><?= _l('marketing_campaign_performance_reporting'); ?></h5>
+                                    <p class="marketing-analytics-card-copy"><?= _l('marketing_campaign_performance_reporting_note'); ?></p>
+                                    <?php if (empty($campaignPerformanceItems)) { ?>
+                                        <div class="marketing-analytics-provider-empty"><?= _l('marketing_campaign_performance_reporting_empty'); ?></div>
+                                    <?php } else { ?>
+                                        <div class="table-responsive mtop15">
+                                            <table class="table marketing-analytics-performance-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th class="is-name"><?= _l('marketing_campaigns'); ?></th>
+                                                        <th><?= _l('marketing_status'); ?></th>
+                                                        <th><?= _l('marketing_accepted_sent'); ?></th>
+                                                        <th><?= _l('marketing_delivered'); ?></th>
+                                                        <th><?= _l('marketing_opened'); ?></th>
+                                                        <th><?= _l('marketing_clicked'); ?></th>
+                                                        <th><?= _l('marketing_bounced'); ?></th>
+                                                        <th><?= _l('marketing_complaints'); ?></th>
+                                                        <th><?= _l('marketing_unsubscribes'); ?></th>
+                                                        <th class="is-activity"><?= _l('marketing_last_activity'); ?></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($campaignPerformanceItems as $campaignRow) { ?>
+                                                        <?php
+                                                        $campaignName = trim((string) ($campaignRow['name'] ?? ''));
+                                                        $campaignStatus = trim((string) ($campaignRow['status'] ?? 'draft'));
+                                                        $campaignLastActivity = trim((string) ($campaignRow['last_activity_at'] ?? ''));
+                                                        ?>
+                                                        <tr>
+                                                            <td class="is-name">
+                                                                <strong><?= html_escape($campaignName !== '' ? $campaignName : ('#' . (int) ($campaignRow['id'] ?? 0))); ?></strong>
+                                                            </td>
+                                                            <td><?= html_escape(ucfirst($campaignStatus)); ?></td>
+                                                            <td><?= (int) ($campaignRow['sent_count'] ?? 0); ?></td>
+                                                            <td><?= (int) ($campaignRow['delivered_count'] ?? 0); ?></td>
+                                                            <td><?= (int) ($campaignRow['open_count'] ?? 0); ?></td>
+                                                            <td><?= (int) ($campaignRow['click_count'] ?? 0); ?></td>
+                                                            <td><?= (int) ($campaignRow['bounce_count'] ?? 0); ?></td>
+                                                            <td><?= (int) ($campaignRow['complaint_count'] ?? 0); ?></td>
+                                                            <td><?= (int) ($campaignRow['unsubscribe_count'] ?? 0); ?></td>
+                                                            <td class="is-activity"><?= html_escape($campaignLastActivity !== '' ? _dt($campaignLastActivity) : '-'); ?></td>
+                                                        </tr>
+                                                    <?php } ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    <?php } ?>
+                                </div>
+                            </div>
+
+                            <div class="marketing-analytics-card">
+                                <div class="marketing-analytics-card-body">
+                                    <h5 class="marketing-analytics-section-title"><?= _l('marketing_provider_health_summary'); ?></h5>
+                                    <p class="marketing-analytics-card-copy"><?= _l('marketing_provider_health_summary_note'); ?></p>
+                                    <div class="marketing-analytics-provider-badges">
+                                        <span class="marketing-analytics-badge"><?= _l('marketing_queue_active'); ?>: <?= !empty($providerHealth['queue_paused']) ? _l('marketing_disabled') : _l('marketing_enabled'); ?></span>
+                                        <span class="marketing-analytics-badge"><?= _l('marketing_schema_ready'); ?>: <?= !empty($providerHealth['schema_ready']) ? _l('settings_yes') : _l('settings_no'); ?></span>
+                                        <span class="marketing-analytics-badge"><?= _l('marketing_provider_health_recent_recoveries'); ?>: <?= (int) ($providerHealth['recent_recovered_total'] ?? 0); ?></span>
+                                        <span class="marketing-analytics-badge">Warning signals: <?= count($providerWarningItems); ?></span>
+                                        <span class="marketing-analytics-badge">Failure signals: <?= count($providerFailureItems); ?></span>
+                                    </div>
+
+                                    <div class="marketing-analytics-provider-list">
+                                        <?php if (!empty($providerWarningItems)) { ?>
+                                            <div class="marketing-analytics-provider-group-title">Warnings</div>
+                                        <?php } ?>
+                                        <?php foreach ($providerWarningItems as $item) { ?>
+                                            <div class="marketing-analytics-provider-row">
+                                                <span class="marketing-analytics-provider-label"><?= html_escape($formatMetricCode($item['code'] ?? '')); ?></span>
+                                                <span class="marketing-analytics-provider-count"><?= (int) ($item['count'] ?? 0); ?></span>
+                                            </div>
+                                        <?php } ?>
+                                        <?php if (!empty($providerFailureItems)) { ?>
+                                            <div class="marketing-analytics-provider-group-title">Failures</div>
+                                        <?php } ?>
+                                        <?php foreach ($providerFailureItems as $item) { ?>
+                                            <div class="marketing-analytics-provider-row">
+                                                <span class="marketing-analytics-provider-label"><?= html_escape($formatMetricCode($item['code'] ?? '')); ?></span>
+                                                <span class="marketing-analytics-provider-count"><?= (int) ($item['count'] ?? 0); ?></span>
+                                            </div>
+                                        <?php } ?>
+                                    </div>
+
+                                    <?php if (empty($providerWarningItems) && empty($providerFailureItems)) { ?>
+                                        <div class="marketing-analytics-provider-empty"><?= _l('marketing_provider_health_summary_empty'); ?></div>
+                                    <?php } ?>
+                                </div>
+                            </div>
+                        </div>
                         <hr />
-                        <?php if (count($recent) === 0) { ?>
+                        <?php if (empty($recent)) { ?>
                             <p class="text-muted no-margin"><?= _l('marketing_no_records_yet'); ?></p>
                         <?php } else { ?>
-                            <div class="table-responsive">
-                                <table class="table dt-table">
+                            <div class="table-responsive marketing-analytics-events-table-wrap">
+                                <table class="table marketing-analytics-events-table">
                                     <thead>
                                         <tr>
                                             <th><?= _l('id'); ?></th>
@@ -214,23 +682,25 @@
                                             $eventType = (string) $event['event_type'];
                                             $eventLabel = $eventTypeLabels[$eventType] ?? ucwords(str_replace('_', ' ', $eventType));
                                             $badgeClass = $eventTypeBadgeClasses[$eventType] ?? 'default';
+                                            $eventAt = !empty($event['event_at']) ? _dt($event['event_at']) : '-';
                                             ?>
                                             <tr>
                                                 <td><?= (int) $event['id']; ?></td>
                                                 <td><span class="label label-<?= html_escape($badgeClass); ?>"><?= html_escape($eventLabel); ?></span></td>
-                                                <td><?= e($event['email'] ?: '-'); ?></td>
-                                                <td><?= e($event['provider']); ?></td>
-                                                <td><?= e($event['url'] ?: '-'); ?></td>
-                                                <td><?= e(_dt($event['event_at'])); ?></td>
+                                                <td><?= html_escape($event['email'] ?: '-'); ?></td>
+                                                <td><?= html_escape($event['provider']); ?></td>
+                                                <td class="marketing-analytics-click-target">
+                                                    <span class="marketing-analytics-click-target-text" title="<?= html_escape($event['url'] ?: '-'); ?>">
+                                                        <?= html_escape($event['url'] ?: '-'); ?>
+                                                    </span>
+                                                </td>
+                                                <td><?= html_escape($eventAt); ?></td>
                                             </tr>
                                         <?php } ?>
                                     </tbody>
                                 </table>
                             </div>
                             <div class="clearfix mtop15">
-                                <div class="pull-left text-muted">
-                                    <?= sprintf('Showing %d to %d of %d event records', (($events_pagination['page'] - 1) * $events_pagination['per_page']) + 1, min($events_pagination['page'] * $events_pagination['per_page'], $events_pagination['total']), $events_pagination['total']); ?>
-                                </div>
                                 <?php if ($events_pagination['total_pages'] > 1) { ?>
                                     <ul class="pagination no-margin pull-right">
                                         <li class="<?= $events_pagination['page'] <= 1 ? 'disabled' : ''; ?>">

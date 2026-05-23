@@ -4,9 +4,11 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Marketing_conversations_model extends App_Model
 {
+    const CONTACTS_TABLE = 'marketing_contacts';
     const CONVERSATIONS_TABLE = 'marketing_conversations';
     const MESSAGES_TABLE = 'marketing_messages';
 
+    protected $contactsTable;
     protected $conversationsTable;
     protected $messagesTable;
 
@@ -14,6 +16,7 @@ class Marketing_conversations_model extends App_Model
     {
         parent::__construct();
 
+        $this->contactsTable      = db_prefix() . self::CONTACTS_TABLE;
         $this->conversationsTable = db_prefix() . self::CONVERSATIONS_TABLE;
         $this->messagesTable      = db_prefix() . self::MESSAGES_TABLE;
     }
@@ -39,11 +42,16 @@ class Marketing_conversations_model extends App_Model
             && $this->db->table_exists($this->messagesTable);
     }
 
-    public function find_conversation($campaignId = null, $contactId = null, $email = null)
+    public function find_conversation($campaignId = null, $contactId = null, $email = null, array $options = [])
     {
         if (!$this->db->table_exists($this->conversationsTable)) {
             return null;
         }
+
+        $providerThreadId = trim((string) ($options['provider_thread_id'] ?? ''));
+        $normalizedPhone = $this->normalize_phone($options['normalized_phone'] ?? ($options['contact_phone'] ?? ''));
+        $channel = trim((string) ($options['channel'] ?? ''));
+        $provider = trim((string) ($options['provider'] ?? ''));
 
         $this->db->from($this->conversationsTable);
 
@@ -51,8 +59,22 @@ class Marketing_conversations_model extends App_Model
             $this->db->where('campaign_id', (int) $campaignId);
         }
 
-        if ($contactId !== null && $this->db->field_exists('marketing_contact_id', $this->conversationsTable)) {
+        if ($channel !== '' && $this->db->field_exists('channel', $this->conversationsTable)) {
+            $this->db->where('channel', $channel);
+        }
+
+        if ($provider !== '' && $this->db->field_exists('provider', $this->conversationsTable)) {
+            $this->db->where('provider', $provider);
+        }
+
+        if ($providerThreadId !== '' && $this->db->field_exists('provider_thread_id', $this->conversationsTable)) {
+            $this->db->where('provider_thread_id', $providerThreadId);
+        } elseif ($contactId !== null && $this->db->field_exists('marketing_contact_id', $this->conversationsTable)) {
             $this->db->where('marketing_contact_id', (int) $contactId);
+        } elseif ($normalizedPhone !== '' && $this->db->field_exists('normalized_phone', $this->conversationsTable)) {
+            $this->db->where('normalized_phone', $normalizedPhone);
+        } elseif ($normalizedPhone !== '' && $this->db->field_exists('contact_phone', $this->conversationsTable)) {
+            $this->db->where('contact_phone', $normalizedPhone);
         } elseif ($email !== null && $email !== '' && $this->db->field_exists('email', $this->conversationsTable)) {
             $this->db->where('email', mb_strtolower(trim((string) $email)));
         } elseif ($email !== null && $email !== '' && $this->db->field_exists('contact_email', $this->conversationsTable)) {
@@ -71,11 +93,27 @@ class Marketing_conversations_model extends App_Model
         $campaignId = isset($data['campaign_id']) ? (int) $data['campaign_id'] : null;
         $contactId = isset($data['marketing_contact_id']) ? (int) $data['marketing_contact_id'] : null;
         $email = isset($data['email']) ? trim((string) $data['email']) : '';
-        $existing = $this->find_conversation($campaignId, $contactId ?: null, $email);
+        $normalizedPhone = $this->normalize_phone($data['normalized_phone'] ?? ($data['contact_phone'] ?? ''));
+        $providerThreadId = trim((string) ($data['provider_thread_id'] ?? ''));
+        $sourceType = isset($data['source_type']) ? trim((string) $data['source_type']) : '';
+        $provider = isset($data['provider']) ? trim((string) $data['provider']) : '';
+        $channel = isset($data['channel']) ? trim((string) $data['channel']) : '';
+        if ($channel === '' && ($sourceType === 'email_reply' || $provider === 'inbound_email')) {
+            $channel = 'email';
+        }
+        if ($channel === '') {
+            $channel = 'email';
+        }
+        $existing = $this->find_conversation($campaignId, $contactId ?: null, $email, [
+            'channel' => $channel,
+            'provider' => $provider,
+            'normalized_phone' => $normalizedPhone,
+            'provider_thread_id' => $providerThreadId,
+        ]);
         if ($existing) {
             $this->touch_conversation((int) $existing['id'], $data);
 
-            return $existing;
+            return $this->get_conversation_row((int) $existing['id']);
         }
 
         $insert = [
@@ -83,10 +121,21 @@ class Marketing_conversations_model extends App_Model
             'marketing_contact_id' => $contactId ?: null,
             'email' => $email !== '' ? mb_strtolower($email) : null,
             'contact_email' => $email !== '' ? mb_strtolower($email) : null,
+            'channel' => $channel,
+            'provider' => $provider !== '' ? $provider : null,
+            'contact_phone' => $normalizedPhone !== '' ? $normalizedPhone : null,
+            'normalized_phone' => $normalizedPhone !== '' ? $normalizedPhone : null,
+            'provider_thread_id' => $providerThreadId !== '' ? $providerThreadId : null,
+            'lead_id' => !empty($data['lead_id']) ? (int) $data['lead_id'] : null,
+            'assigned_staff_id' => !empty($data['assigned_staff_id']) ? (int) $data['assigned_staff_id'] : null,
+            'unread_count' => isset($data['unread_count']) ? max(0, (int) $data['unread_count']) : 0,
             'subject' => isset($data['subject']) ? trim((string) $data['subject']) : null,
             'last_message_at' => isset($data['last_message_at']) ? (string) $data['last_message_at'] : date('Y-m-d H:i:s'),
+            'last_inbound_at' => isset($data['last_inbound_at']) ? (string) $data['last_inbound_at'] : null,
+            'last_outbound_at' => isset($data['last_outbound_at']) ? (string) $data['last_outbound_at'] : null,
             'status' => isset($data['status']) ? trim((string) $data['status']) : 'open',
             'source_type' => isset($data['source_type']) ? trim((string) $data['source_type']) : 'email_reply',
+            'internal_notes' => isset($data['internal_notes']) ? trim((string) $data['internal_notes']) : null,
             'datecreated' => date('Y-m-d H:i:s'),
         ];
 
@@ -98,7 +147,7 @@ class Marketing_conversations_model extends App_Model
             return null;
         }
 
-        return $this->db->get_where($this->conversationsTable, ['id' => $conversationId])->row_array();
+        return $this->get_conversation_row($conversationId);
     }
 
     public function add_message(array $data)
@@ -107,19 +156,46 @@ class Marketing_conversations_model extends App_Model
             return 0;
         }
 
+        $provider = isset($data['provider']) ? trim((string) $data['provider']) : '';
+        $channel = isset($data['channel']) ? trim((string) $data['channel']) : '';
+        if ($channel === '' && $provider === 'inbound_email') {
+            $channel = 'email';
+        }
+        if ($channel === '') {
+            $channel = 'email';
+        }
+
         $insert = [
             'conversation_id' => isset($data['conversation_id']) ? (int) $data['conversation_id'] : 0,
             'campaign_id' => isset($data['campaign_id']) ? (int) $data['campaign_id'] : null,
             'marketing_contact_id' => isset($data['marketing_contact_id']) ? (int) $data['marketing_contact_id'] : null,
             'direction' => isset($data['direction']) ? trim((string) $data['direction']) : 'inbound',
+            'channel' => $channel,
             'email' => isset($data['email']) ? mb_strtolower(trim((string) $data['email'])) : null,
-            'from_email' => isset($data['email']) ? mb_strtolower(trim((string) $data['email'])) : null,
+            'from_email' => isset($data['from_email'])
+                ? mb_strtolower(trim((string) $data['from_email']))
+                : (isset($data['email']) ? mb_strtolower(trim((string) $data['email'])) : null),
+            'provider' => $provider !== '' ? $provider : null,
+            'message_type' => isset($data['message_type']) ? trim((string) $data['message_type']) : null,
+            'provider_thread_id' => isset($data['provider_thread_id']) ? trim((string) $data['provider_thread_id']) : null,
+            'provider_status' => isset($data['provider_status']) ? trim((string) $data['provider_status']) : null,
             'subject' => isset($data['subject']) ? trim((string) $data['subject']) : null,
             'message' => isset($data['message']) ? (string) $data['message'] : null,
             'body' => isset($data['message']) ? (string) $data['message'] : null,
             'body_text' => isset($data['body_text']) ? (string) $data['body_text'] : (isset($data['message']) ? (string) $data['message'] : null),
             'body_html' => isset($data['body_html']) ? (string) $data['body_html'] : null,
+            'media_meta_json' => $this->encode_media_meta_json($data['media_meta_json'] ?? ($data['media_meta'] ?? null)),
+            'context_provider_message_id' => isset($data['context_provider_message_id']) ? trim((string) $data['context_provider_message_id']) : null,
             'provider_message_id' => isset($data['provider_message_id']) ? trim((string) $data['provider_message_id']) : null,
+            'message_identifier' => isset($data['message_identifier']) ? trim((string) $data['message_identifier']) : null,
+            'in_reply_to' => isset($data['in_reply_to']) ? trim((string) $data['in_reply_to']) : null,
+            'references_header' => isset($data['references_header']) ? trim((string) $data['references_header']) : null,
+            'mailbox_uid' => isset($data['mailbox_uid']) ? trim((string) $data['mailbox_uid']) : null,
+            'mailbox_folder' => isset($data['mailbox_folder']) ? trim((string) $data['mailbox_folder']) : null,
+            'received_at' => isset($data['received_at']) ? (string) $data['received_at'] : null,
+            'headers_json' => isset($data['headers_json']) ? (string) $data['headers_json'] : null,
+            'source_provider' => isset($data['source_provider']) ? trim((string) $data['source_provider']) : 'inbound_email',
+            'dedupe_key' => isset($data['dedupe_key']) ? trim((string) $data['dedupe_key']) : null,
             'datecreated' => isset($data['datecreated']) ? (string) $data['datecreated'] : date('Y-m-d H:i:s'),
         ];
 
@@ -133,12 +209,285 @@ class Marketing_conversations_model extends App_Model
 
         if ($messageId > 0) {
             $this->touch_conversation((int) $insert['conversation_id'], [
+                'direction' => $insert['direction'] ?? 'inbound',
                 'last_message_at' => $insert['datecreated'] ?? date('Y-m-d H:i:s'),
                 'subject' => $insert['subject'] ?? null,
+                'channel' => $insert['channel'] ?? null,
+                'provider' => $insert['provider'] ?? null,
+                'contact_phone' => $data['contact_phone'] ?? null,
+                'normalized_phone' => $data['normalized_phone'] ?? null,
+                'provider_thread_id' => $insert['provider_thread_id'] ?? null,
             ]);
         }
 
         return $messageId;
+    }
+
+    public function find_message_by_provider_message_id($providerMessageId, $provider = null)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('provider_message_id', $this->messagesTable)) {
+            return null;
+        }
+
+        $providerMessageId = trim((string) $providerMessageId);
+        if ($providerMessageId === '') {
+            return null;
+        }
+
+        $this->db->from($this->messagesTable);
+        $this->db->where('provider_message_id', $providerMessageId);
+        if ($provider !== null && $provider !== '' && $this->db->field_exists('provider', $this->messagesTable)) {
+            $this->db->where('provider', trim((string) $provider));
+        }
+
+        return $this->db->order_by('id', 'DESC')->limit(1)->get()->row_array();
+    }
+
+    public function find_message_by_identifier($identifier)
+    {
+        $identifier = trim((string) $identifier);
+        $identifier = trim($identifier, '<>');
+        if ($identifier === '') {
+            return null;
+        }
+
+        if (method_exists($this, 'find_message_by_message_identifier')) {
+            $message = $this->find_message_by_message_identifier($identifier);
+            if (!empty($message)) {
+                return $message;
+            }
+        }
+
+        if (!$this->db->table_exists($this->messagesTable)) {
+            return null;
+        }
+
+        $this->db->from($this->messagesTable);
+        $hasAnyField = false;
+        foreach (['message_identifier', 'provider_message_id', 'context_provider_message_id'] as $field) {
+            if ($this->db->field_exists($field, $this->messagesTable)) {
+                if (!$hasAnyField) {
+                    $this->db->group_start();
+                    $this->db->where($field, $identifier);
+                    $hasAnyField = true;
+                } else {
+                    $this->db->or_where($field, $identifier);
+                }
+            }
+        }
+
+        if (!$hasAnyField) {
+            return null;
+        }
+
+        $this->db->group_end();
+
+        return $this->db->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
+    public function find_message_by_dedupe_key($dedupeKey)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('dedupe_key', $this->messagesTable)) {
+            return null;
+        }
+
+        $dedupeKey = trim((string) $dedupeKey);
+        if ($dedupeKey === '') {
+            return null;
+        }
+
+        return $this->db->from($this->messagesTable)
+            ->where('dedupe_key', $dedupeKey)
+            ->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
+    public function find_message_by_message_identifier($messageIdentifier)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('message_identifier', $this->messagesTable)) {
+            return null;
+        }
+
+        $messageIdentifier = trim((string) $messageIdentifier);
+        $messageIdentifier = trim($messageIdentifier, '<>');
+        if ($messageIdentifier === '') {
+            return null;
+        }
+
+        return $this->db->from($this->messagesTable)
+            ->where('message_identifier', $messageIdentifier)
+            ->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
+    public function find_message_by_mailbox_uid($mailboxUid, $mailboxFolder = null)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('mailbox_uid', $this->messagesTable)) {
+            return null;
+        }
+
+        $mailboxUid = trim((string) $mailboxUid);
+        if ($mailboxUid === '') {
+            return null;
+        }
+
+        $this->db->from($this->messagesTable);
+        $this->db->where('mailbox_uid', $mailboxUid);
+        if ($mailboxFolder !== null && $mailboxFolder !== '' && $this->db->field_exists('mailbox_folder', $this->messagesTable)) {
+            $this->db->where('mailbox_folder', trim((string) $mailboxFolder));
+        }
+
+        return $this->db->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
+    public function add_message_idempotent(array $data)
+    {
+        $messageIdentifier = trim((string) ($data['message_identifier'] ?? ''));
+        $mailboxUid = trim((string) ($data['mailbox_uid'] ?? ''));
+        $mailboxFolder = trim((string) ($data['mailbox_folder'] ?? ''));
+        $providerMessageId = trim((string) ($data['provider_message_id'] ?? ''));
+        $provider = trim((string) ($data['provider'] ?? ''));
+        $dedupeKey = trim((string) ($data['dedupe_key'] ?? ''));
+
+        if ($messageIdentifier !== '') {
+            $existingByMessageIdentifier = $this->find_message_by_message_identifier($messageIdentifier);
+            if ($existingByMessageIdentifier) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMessageIdentifier['id'],
+                    'conversation_id' => (int) ($existingByMessageIdentifier['conversation_id'] ?? 0),
+                    'reason' => 'message_identifier',
+                ];
+            }
+        }
+
+        if ($mailboxUid !== '') {
+            $existingByMailboxUid = $this->find_message_by_mailbox_uid($mailboxUid, $mailboxFolder !== '' ? $mailboxFolder : null);
+            if ($existingByMailboxUid) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMailboxUid['id'],
+                    'conversation_id' => (int) ($existingByMailboxUid['conversation_id'] ?? 0),
+                    'reason' => 'mailbox_uid',
+                ];
+            }
+        }
+
+        if ($providerMessageId !== '') {
+            $existingByProvider = $this->find_message_by_provider_message_id($providerMessageId, $provider !== '' ? $provider : null);
+            if ($existingByProvider) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByProvider['id'],
+                    'conversation_id' => (int) ($existingByProvider['conversation_id'] ?? 0),
+                    'reason' => 'provider_message_id',
+                ];
+            }
+        }
+
+        if ($dedupeKey !== '') {
+            $existingByDedupeKey = $this->find_message_by_dedupe_key($dedupeKey);
+            if ($existingByDedupeKey) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByDedupeKey['id'],
+                    'conversation_id' => (int) ($existingByDedupeKey['conversation_id'] ?? 0),
+                    'reason' => 'dedupe_key',
+                ];
+            }
+        }
+
+        $messageId = $this->add_message($data);
+        if ($messageId > 0) {
+            return [
+                'success' => true,
+                'inserted' => true,
+                'duplicate' => false,
+                'id' => (int) $messageId,
+                'conversation_id' => (int) ($data['conversation_id'] ?? 0),
+            ];
+        }
+
+        if ($providerMessageId !== '') {
+            $existingByProvider = $this->find_message_by_provider_message_id($providerMessageId, $provider !== '' ? $provider : null);
+            if ($existingByProvider) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByProvider['id'],
+                    'conversation_id' => (int) ($existingByProvider['conversation_id'] ?? 0),
+                    'reason' => 'provider_message_id',
+                ];
+            }
+        }
+
+        if ($dedupeKey !== '') {
+            $existingByDedupeKey = $this->find_message_by_dedupe_key($dedupeKey);
+            if ($existingByDedupeKey) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByDedupeKey['id'],
+                    'conversation_id' => (int) ($existingByDedupeKey['conversation_id'] ?? 0),
+                    'reason' => 'dedupe_key',
+                ];
+            }
+        }
+
+        if ($messageIdentifier !== '') {
+            $existingByMessageIdentifier = $this->find_message_by_message_identifier($messageIdentifier);
+            if ($existingByMessageIdentifier) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMessageIdentifier['id'],
+                    'conversation_id' => (int) ($existingByMessageIdentifier['conversation_id'] ?? 0),
+                    'reason' => 'message_identifier',
+                ];
+            }
+        }
+
+        if ($mailboxUid !== '') {
+            $existingByMailboxUid = $this->find_message_by_mailbox_uid($mailboxUid, $mailboxFolder !== '' ? $mailboxFolder : null);
+            if ($existingByMailboxUid) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMailboxUid['id'],
+                    'conversation_id' => (int) ($existingByMailboxUid['conversation_id'] ?? 0),
+                    'reason' => 'mailbox_uid',
+                ];
+            }
+        }
+
+        return [
+            'success' => false,
+            'inserted' => false,
+            'duplicate' => false,
+            'id' => 0,
+        ];
     }
 
     public function get_campaign_replies($campaignId, $limit = 20)
@@ -229,28 +578,755 @@ class Marketing_conversations_model extends App_Model
         return $this->append_previews($rows);
     }
 
+    public function get_recent_whatsapp_conversations($limit = 5)
+    {
+        $summary = [
+            'available' => false,
+            'shown_count' => 0,
+            'unread_conversation_count' => 0,
+            'unread_message_count' => 0,
+            'items' => [],
+        ];
+
+        if (!$this->tables_available()
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('channel', $this->conversationsTable)
+            || !$this->db->field_exists('provider', $this->conversationsTable)) {
+            return $summary;
+        }
+
+        $limit = max(1, min(10, (int) $limit));
+        $select = [
+            'c.id',
+            ($this->db->field_exists('contact_phone', $this->conversationsTable) ? 'c.contact_phone' : 'NULL as contact_phone'),
+            ($this->db->field_exists('normalized_phone', $this->conversationsTable) ? 'c.normalized_phone' : 'NULL as normalized_phone'),
+            ($this->db->field_exists('email', $this->conversationsTable) ? 'c.email' : 'NULL as email'),
+            ($this->db->field_exists('unread_count', $this->conversationsTable) ? 'c.unread_count' : '0 as unread_count'),
+            ($this->db->field_exists('lead_id', $this->conversationsTable) ? 'c.lead_id' : 'NULL as lead_id'),
+            ($this->db->field_exists('last_message_at', $this->conversationsTable) ? 'c.last_message_at' : 'NULL as last_message_at'),
+            ($this->db->field_exists('dateupdated', $this->conversationsTable) ? 'c.dateupdated' : 'NULL as dateupdated'),
+            'NULL as contact_full_name',
+        ];
+
+        $canJoinContacts = $this->db->table_exists($this->contactsTable)
+            && $this->db->field_exists('marketing_contact_id', $this->conversationsTable)
+            && $this->db->field_exists('id', $this->contactsTable);
+        if ($canJoinContacts) {
+            if ($this->db->field_exists('full_name', $this->contactsTable)) {
+                $select[count($select) - 1] = 'mc.full_name as contact_full_name';
+            } elseif ($this->db->field_exists('first_name', $this->contactsTable) && $this->db->field_exists('last_name', $this->contactsTable)) {
+                $select[count($select) - 1] = "TRIM(CONCAT(COALESCE(mc.first_name, ''), ' ', COALESCE(mc.last_name, ''))) as contact_full_name";
+            }
+        }
+
+        $this->db->select(implode(', ', $select), false);
+        $this->db->from($this->conversationsTable . ' c');
+        if ($canJoinContacts) {
+            $this->db->join($this->contactsTable . ' mc', 'mc.id = c.marketing_contact_id', 'left');
+        }
+        $this->db->where('c.channel', 'whatsapp');
+        $this->db->where('c.provider', 'whatsapp_cloud');
+        if ($this->db->field_exists('unread_count', $this->conversationsTable)) {
+            $this->db->order_by('c.unread_count', 'DESC');
+        }
+        if ($this->db->field_exists('last_message_at', $this->conversationsTable)) {
+            $this->db->order_by('c.last_message_at', 'DESC');
+        } elseif ($this->db->field_exists('dateupdated', $this->conversationsTable)) {
+            $this->db->order_by('c.dateupdated', 'DESC');
+        } else {
+            $this->db->order_by('c.id', 'DESC');
+        }
+
+        $rows = $this->db->limit($limit)->get()->result_array();
+        if (empty($rows)) {
+            $summary['available'] = true;
+
+            return $summary;
+        }
+
+        $items = [];
+        $unreadConversationCount = 0;
+        $unreadMessageCount = 0;
+        foreach ($rows as $row) {
+            $unreadCount = max(0, (int) ($row['unread_count'] ?? 0));
+            if ($unreadCount > 0) {
+                $unreadConversationCount++;
+                $unreadMessageCount += $unreadCount;
+            }
+
+            $items[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'contact_name' => trim((string) ($row['contact_full_name'] ?? '')),
+                'contact_phone' => trim((string) ($row['contact_phone'] ?? '')),
+                'normalized_phone' => trim((string) ($row['normalized_phone'] ?? '')),
+                'email' => trim((string) ($row['email'] ?? '')),
+                'unread_count' => $unreadCount,
+                'lead_id' => !empty($row['lead_id']) ? (int) $row['lead_id'] : null,
+                'last_activity_at' => trim((string) ($row['last_message_at'] ?? ($row['dateupdated'] ?? ''))),
+                'preview' => '',
+            ];
+        }
+
+        $summary['available'] = true;
+        $summary['shown_count'] = count($items);
+        $summary['unread_conversation_count'] = $unreadConversationCount;
+        $summary['unread_message_count'] = $unreadMessageCount;
+        $summary['items'] = $this->append_whatsapp_conversation_previews($items);
+
+        return $summary;
+    }
+
+    public function get_whatsapp_conversation_context($conversationId)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0
+            || !$this->tables_available()
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('channel', $this->conversationsTable)
+            || !$this->db->field_exists('provider', $this->conversationsTable)) {
+            return null;
+        }
+
+        $select = [
+            'c.id',
+            ($this->db->field_exists('lead_id', $this->conversationsTable) ? 'c.lead_id' : 'NULL as lead_id'),
+            ($this->db->field_exists('contact_phone', $this->conversationsTable) ? 'c.contact_phone' : 'NULL as contact_phone'),
+            ($this->db->field_exists('normalized_phone', $this->conversationsTable) ? 'c.normalized_phone' : 'NULL as normalized_phone'),
+            ($this->db->field_exists('email', $this->conversationsTable) ? 'c.email' : 'NULL as email'),
+            ($this->db->field_exists('marketing_contact_id', $this->conversationsTable) ? 'c.marketing_contact_id' : 'NULL as marketing_contact_id'),
+            ($this->db->field_exists('last_message_at', $this->conversationsTable) ? 'c.last_message_at' : 'NULL as last_message_at'),
+            'NULL as contact_full_name',
+        ];
+
+        $canJoinContacts = $this->db->table_exists($this->contactsTable)
+            && $this->db->field_exists('marketing_contact_id', $this->conversationsTable)
+            && $this->db->field_exists('id', $this->contactsTable);
+        if ($canJoinContacts) {
+            if ($this->db->field_exists('full_name', $this->contactsTable)) {
+                $select[count($select) - 1] = 'mc.full_name as contact_full_name';
+            } elseif ($this->db->field_exists('first_name', $this->contactsTable) && $this->db->field_exists('last_name', $this->contactsTable)) {
+                $select[count($select) - 1] = "TRIM(CONCAT(COALESCE(mc.first_name, ''), ' ', COALESCE(mc.last_name, ''))) as contact_full_name";
+            }
+        }
+
+        $this->db->select(implode(', ', $select), false);
+        $this->db->from($this->conversationsTable . ' c');
+        if ($canJoinContacts) {
+            $this->db->join($this->contactsTable . ' mc', 'mc.id = c.marketing_contact_id', 'left');
+        }
+        $this->db->where('c.id', $conversationId);
+        $this->db->where('c.channel', 'whatsapp');
+        $this->db->where('c.provider', 'whatsapp_cloud');
+        $row = $this->db->limit(1)->get()->row_array();
+        if (empty($row)) {
+            return null;
+        }
+
+        return [
+            'conversation_id' => (int) ($row['id'] ?? 0),
+            'lead_id' => !empty($row['lead_id']) ? (int) $row['lead_id'] : null,
+            'marketing_contact_id' => !empty($row['marketing_contact_id']) ? (int) $row['marketing_contact_id'] : null,
+            'contact_name' => trim((string) ($row['contact_full_name'] ?? '')),
+            'phone' => trim((string) ($row['contact_phone'] ?? '')),
+            'normalized_phone' => trim((string) ($row['normalized_phone'] ?? '')),
+            'email' => trim((string) ($row['email'] ?? '')),
+            'preview' => $this->get_latest_inbound_message_preview($conversationId),
+            'last_activity_at' => trim((string) ($row['last_message_at'] ?? '')),
+            'channel' => 'whatsapp',
+            'provider' => 'whatsapp_cloud',
+        ];
+    }
+
+    public function get_whatsapp_conversation($conversationId)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0
+            || !$this->db->table_exists($this->conversationsTable)
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('channel', $this->conversationsTable)
+            || !$this->db->field_exists('provider', $this->conversationsTable)) {
+            return null;
+        }
+
+        $select = [
+            'c.id',
+            ($this->db->field_exists('campaign_id', $this->conversationsTable) ? 'c.campaign_id' : 'NULL as campaign_id'),
+            ($this->db->field_exists('marketing_contact_id', $this->conversationsTable) ? 'c.marketing_contact_id' : 'NULL as marketing_contact_id'),
+            ($this->db->field_exists('lead_id', $this->conversationsTable) ? 'c.lead_id' : 'NULL as lead_id'),
+            ($this->db->field_exists('contact_phone', $this->conversationsTable) ? 'c.contact_phone' : 'NULL as contact_phone'),
+            ($this->db->field_exists('normalized_phone', $this->conversationsTable) ? 'c.normalized_phone' : 'NULL as normalized_phone'),
+            ($this->db->field_exists('email', $this->conversationsTable) ? 'c.email' : 'NULL as email'),
+            ($this->db->field_exists('provider_thread_id', $this->conversationsTable) ? 'c.provider_thread_id' : 'NULL as provider_thread_id'),
+            ($this->db->field_exists('unread_count', $this->conversationsTable) ? 'c.unread_count' : '0 as unread_count'),
+            ($this->db->field_exists('last_message_at', $this->conversationsTable) ? 'c.last_message_at' : 'NULL as last_message_at'),
+            ($this->db->field_exists('last_inbound_at', $this->conversationsTable) ? 'c.last_inbound_at' : 'NULL as last_inbound_at'),
+            ($this->db->field_exists('last_outbound_at', $this->conversationsTable) ? 'c.last_outbound_at' : 'NULL as last_outbound_at'),
+            ($this->db->field_exists('status', $this->conversationsTable) ? 'c.status' : 'NULL as status'),
+            ($this->db->field_exists('source_type', $this->conversationsTable) ? 'c.source_type' : 'NULL as source_type'),
+            ($this->db->field_exists('datecreated', $this->conversationsTable) ? 'c.datecreated' : 'NULL as datecreated'),
+            ($this->db->field_exists('dateupdated', $this->conversationsTable) ? 'c.dateupdated' : 'NULL as dateupdated'),
+            'NULL as contact_full_name',
+        ];
+
+        $canJoinContacts = $this->db->table_exists($this->contactsTable)
+            && $this->db->field_exists('marketing_contact_id', $this->conversationsTable)
+            && $this->db->field_exists('id', $this->contactsTable);
+        if ($canJoinContacts) {
+            if ($this->db->field_exists('full_name', $this->contactsTable)) {
+                $select[count($select) - 1] = 'mc.full_name as contact_full_name';
+            } elseif ($this->db->field_exists('first_name', $this->contactsTable) && $this->db->field_exists('last_name', $this->contactsTable)) {
+                $select[count($select) - 1] = "TRIM(CONCAT(COALESCE(mc.first_name, ''), ' ', COALESCE(mc.last_name, ''))) as contact_full_name";
+            }
+        }
+
+        $this->db->select(implode(', ', $select), false);
+        $this->db->from($this->conversationsTable . ' c');
+        if ($canJoinContacts) {
+            $this->db->join($this->contactsTable . ' mc', 'mc.id = c.marketing_contact_id', 'left');
+        }
+        $this->db->where('c.id', $conversationId);
+        $this->db->where('c.channel', 'whatsapp');
+        $this->db->where('c.provider', 'whatsapp_cloud');
+
+        $row = $this->db->limit(1)->get()->row_array();
+        if (empty($row)) {
+            return null;
+        }
+
+        return [
+            'id' => (int) ($row['id'] ?? 0),
+            'campaign_id' => !empty($row['campaign_id']) ? (int) $row['campaign_id'] : null,
+            'marketing_contact_id' => !empty($row['marketing_contact_id']) ? (int) $row['marketing_contact_id'] : null,
+            'lead_id' => !empty($row['lead_id']) ? (int) $row['lead_id'] : null,
+            'contact_name' => trim((string) ($row['contact_full_name'] ?? '')),
+            'contact_phone' => trim((string) ($row['contact_phone'] ?? '')),
+            'normalized_phone' => trim((string) ($row['normalized_phone'] ?? '')),
+            'email' => trim((string) ($row['email'] ?? '')),
+            'provider_thread_id' => trim((string) ($row['provider_thread_id'] ?? '')),
+            'unread_count' => max(0, (int) ($row['unread_count'] ?? 0)),
+            'last_activity_at' => trim((string) ($row['last_message_at'] ?? ($row['dateupdated'] ?? ''))),
+            'last_inbound_at' => trim((string) ($row['last_inbound_at'] ?? '')),
+            'last_outbound_at' => trim((string) ($row['last_outbound_at'] ?? '')),
+            'status' => trim((string) ($row['status'] ?? 'open')),
+            'source_type' => trim((string) ($row['source_type'] ?? '')),
+            'datecreated' => trim((string) ($row['datecreated'] ?? '')),
+            'dateupdated' => trim((string) ($row['dateupdated'] ?? '')),
+            'channel' => 'whatsapp',
+            'provider' => 'whatsapp_cloud',
+            'preview' => $this->get_latest_inbound_message_preview($conversationId),
+        ];
+    }
+
+    public function get_whatsapp_conversation_messages($conversationId, $limit = 100)
+    {
+        $conversationId = (int) $conversationId;
+        $limit = max(1, min(200, (int) $limit));
+        if ($conversationId <= 0
+            || !$this->tables_available()
+            || !$this->db->field_exists('conversation_id', $this->messagesTable)) {
+            return [];
+        }
+
+        $select = [
+            ($this->db->field_exists('id', $this->messagesTable) ? 'm.id' : 'NULL as id'),
+            ($this->db->field_exists('direction', $this->messagesTable) ? 'm.direction' : 'NULL as direction'),
+            ($this->db->field_exists('message_type', $this->messagesTable) ? 'm.message_type' : 'NULL as message_type'),
+            ($this->db->field_exists('provider_message_id', $this->messagesTable) ? 'm.provider_message_id' : 'NULL as provider_message_id'),
+            ($this->db->field_exists('provider_thread_id', $this->messagesTable) ? 'm.provider_thread_id' : 'NULL as provider_thread_id'),
+            ($this->db->field_exists('provider_status', $this->messagesTable) ? 'm.provider_status' : 'NULL as provider_status'),
+            ($this->db->field_exists('context_provider_message_id', $this->messagesTable) ? 'm.context_provider_message_id' : 'NULL as context_provider_message_id'),
+            ($this->db->field_exists('body_text', $this->messagesTable) ? 'm.body_text' : 'NULL as body_text'),
+            ($this->db->field_exists('body', $this->messagesTable) ? 'm.body' : 'NULL as body'),
+            ($this->db->field_exists('message', $this->messagesTable) ? 'm.message' : 'NULL as message'),
+            ($this->db->field_exists('media_meta_json', $this->messagesTable) ? 'm.media_meta_json' : 'NULL as media_meta_json'),
+            ($this->db->field_exists('datecreated', $this->messagesTable) ? 'm.datecreated' : 'NULL as datecreated'),
+        ];
+
+        $this->db->select(implode(', ', $select), false);
+        $this->db->from($this->messagesTable . ' m');
+        $this->db->join($this->conversationsTable . ' c', 'c.id = m.conversation_id', 'inner');
+        $this->db->where('m.conversation_id', $conversationId);
+        if ($this->db->field_exists('channel', $this->messagesTable)) {
+            $this->db->where('m.channel', 'whatsapp');
+        }
+        if ($this->db->field_exists('provider', $this->messagesTable)) {
+            $this->db->where('m.provider', 'whatsapp_cloud');
+        }
+        $this->db->where('c.channel', 'whatsapp');
+        $this->db->where('c.provider', 'whatsapp_cloud');
+        if ($this->db->field_exists('datecreated', $this->messagesTable)) {
+            $this->db->order_by('m.datecreated', 'ASC');
+        } elseif ($this->db->field_exists('id', $this->messagesTable)) {
+            $this->db->order_by('m.id', 'ASC');
+        }
+
+        $rows = $this->db->limit($limit)->get()->result_array();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $messages = [];
+        foreach ($rows as $row) {
+            $bodyText = trim((string) ($row['body_text'] ?? ''));
+            if ($bodyText === '') {
+                $bodyText = trim((string) ($row['body'] ?? ($row['message'] ?? '')));
+            }
+
+            $messages[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'direction' => trim((string) ($row['direction'] ?? 'inbound')),
+                'message_type' => trim((string) ($row['message_type'] ?? '')),
+                'provider_message_id' => trim((string) ($row['provider_message_id'] ?? '')),
+                'provider_thread_id' => trim((string) ($row['provider_thread_id'] ?? '')),
+                'provider_status' => trim((string) ($row['provider_status'] ?? '')),
+                'context_provider_message_id' => trim((string) ($row['context_provider_message_id'] ?? '')),
+                'body_text' => $bodyText,
+                'datecreated' => trim((string) ($row['datecreated'] ?? '')),
+                'media_summary' => $this->summarize_media_meta_json($row['media_meta_json'] ?? null),
+            ];
+        }
+
+        return $messages;
+    }
+
+    public function set_conversation_lead_id($conversationId, $leadId)
+    {
+        $conversationId = (int) $conversationId;
+        $leadId = (int) $leadId;
+        if ($conversationId <= 0
+            || $leadId <= 0
+            || !$this->db->table_exists($this->conversationsTable)
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('lead_id', $this->conversationsTable)) {
+            return false;
+        }
+
+        $update = ['lead_id' => $leadId];
+        if ($this->db->field_exists('dateupdated', $this->conversationsTable)) {
+            $update['dateupdated'] = date('Y-m-d H:i:s');
+        }
+
+        $this->db->where('id', $conversationId);
+        if ($this->db->field_exists('channel', $this->conversationsTable)) {
+            $this->db->where('channel', 'whatsapp');
+        }
+        if ($this->db->field_exists('provider', $this->conversationsTable)) {
+            $this->db->where('provider', 'whatsapp_cloud');
+        }
+
+        return $this->db->update($this->conversationsTable, $this->filter_existing_columns($this->conversationsTable, $update));
+    }
+
+    public function mark_whatsapp_conversation_read($conversationId)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0
+            || !$this->db->table_exists($this->conversationsTable)
+            || !$this->db->field_exists('id', $this->conversationsTable)
+            || !$this->db->field_exists('unread_count', $this->conversationsTable)) {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp conversation unread state is unavailable.',
+            ];
+        }
+
+        $update = ['unread_count' => 0];
+        if ($this->db->field_exists('dateupdated', $this->conversationsTable)) {
+            $update['dateupdated'] = date('Y-m-d H:i:s');
+        }
+
+        $this->db->where('id', $conversationId);
+        if ($this->db->field_exists('channel', $this->conversationsTable)) {
+            $this->db->where('channel', 'whatsapp');
+        }
+        if ($this->db->field_exists('provider', $this->conversationsTable)) {
+            $this->db->where('provider', 'whatsapp_cloud');
+        }
+
+        $updated = $this->db->update($this->conversationsTable, $this->filter_existing_columns($this->conversationsTable, $update));
+
+        return [
+            'success' => (bool) $updated,
+            'conversation_id' => $conversationId,
+            'message' => $updated ? 'WhatsApp conversation marked read.' : 'WhatsApp conversation could not be marked read.',
+        ];
+    }
+
+    public function record_whatsapp_outbound_reply($conversationId, array $data)
+    {
+        $conversationId = (int) $conversationId;
+        if ($conversationId <= 0 || !$this->tables_available()) {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp outbound reply persistence is unavailable.',
+            ];
+        }
+
+        $conversation = $this->get_whatsapp_conversation($conversationId);
+        if (empty($conversation)) {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp conversation could not be found for outbound reply persistence.',
+            ];
+        }
+
+        $bodyText = trim((string) ($data['body_text'] ?? ($data['message'] ?? '')));
+        if ($bodyText === '') {
+            return [
+                'success' => false,
+                'conversation_id' => $conversationId,
+                'message' => 'WhatsApp outbound reply text is missing.',
+            ];
+        }
+
+        $providerMessageId = trim((string) ($data['provider_message_id'] ?? ''));
+        $dateCreated = trim((string) ($data['datecreated'] ?? ''));
+        if ($dateCreated === '') {
+            $dateCreated = date('Y-m-d H:i:s');
+        }
+
+        $dedupeKey = $providerMessageId !== ''
+            ? 'whatsapp_cloud:outbound:' . $providerMessageId
+            : 'whatsapp_cloud:outbound:' . sha1($conversationId . '|' . $dateCreated . '|' . $bodyText);
+
+        $result = $this->add_message_idempotent([
+            'conversation_id' => $conversationId,
+            'campaign_id' => $conversation['campaign_id'] ?? null,
+            'marketing_contact_id' => $conversation['marketing_contact_id'] ?? null,
+            'direction' => 'outbound',
+            'channel' => 'whatsapp',
+            'provider' => 'whatsapp_cloud',
+            'message_type' => 'text',
+            'provider_thread_id' => trim((string) ($data['provider_thread_id'] ?? ($conversation['provider_thread_id'] ?? ''))),
+            'provider_status' => trim((string) ($data['provider_status'] ?? 'accepted')),
+            'message' => $bodyText,
+            'body_text' => $bodyText,
+            'provider_message_id' => $providerMessageId !== '' ? $providerMessageId : null,
+            'dedupe_key' => $dedupeKey,
+            'datecreated' => $dateCreated,
+            'contact_phone' => trim((string) ($data['contact_phone'] ?? ($conversation['contact_phone'] ?? ''))),
+            'normalized_phone' => trim((string) ($data['normalized_phone'] ?? ($conversation['normalized_phone'] ?? ''))),
+        ]);
+
+        if (!empty($result['success'])) {
+            return [
+                'success' => true,
+                'inserted' => !empty($result['inserted']),
+                'duplicate' => !empty($result['duplicate']),
+                'conversation_id' => $conversationId,
+                'message_id' => (int) ($result['id'] ?? 0),
+                'provider_message_id' => $providerMessageId,
+                'message' => !empty($result['duplicate'])
+                    ? 'WhatsApp outbound reply was already recorded.'
+                    : 'WhatsApp outbound reply recorded successfully.',
+            ];
+        }
+
+        return [
+            'success' => false,
+            'conversation_id' => $conversationId,
+            'provider_message_id' => $providerMessageId,
+            'message' => 'WhatsApp reply was sent but could not be recorded in conversation history.',
+        ];
+    }
+
+    public function reconcile_whatsapp_status_update(array $statusUpdate)
+    {
+        if (!$this->tables_available() || !$this->db->field_exists('id', $this->messagesTable)) {
+            return [
+                'success' => false,
+                'matched' => false,
+                'updated' => false,
+                'message' => 'WhatsApp message status persistence is unavailable.',
+            ];
+        }
+
+        $providerMessageId = trim((string) ($statusUpdate['message_id'] ?? ''));
+        $providerStatus = $this->normalize_whatsapp_provider_status($statusUpdate['status'] ?? '');
+        if ($providerMessageId === '' || $providerStatus === '') {
+            return [
+                'success' => false,
+                'matched' => false,
+                'updated' => false,
+                'message' => 'WhatsApp status update is missing provider message identity.',
+            ];
+        }
+
+        $message = $this->find_message_by_provider_message_id($providerMessageId, 'whatsapp_cloud');
+        if (empty($message)) {
+            return [
+                'success' => true,
+                'matched' => false,
+                'updated' => false,
+                'provider_message_id' => $providerMessageId,
+                'provider_status' => $providerStatus,
+                'message' => 'No persisted WhatsApp message matched this status update.',
+            ];
+        }
+
+        $messageId = (int) ($message['id'] ?? 0);
+        if ($messageId <= 0) {
+            return [
+                'success' => false,
+                'matched' => false,
+                'updated' => false,
+                'provider_message_id' => $providerMessageId,
+                'provider_status' => $providerStatus,
+                'message' => 'Matched WhatsApp message row is invalid.',
+            ];
+        }
+
+        $messageUpdate = [];
+        $currentStatus = $this->normalize_whatsapp_provider_status($message['provider_status'] ?? '');
+        if ($this->db->field_exists('provider_status', $this->messagesTable)
+            && $this->should_apply_whatsapp_status_transition($currentStatus, $providerStatus)) {
+            $messageUpdate['provider_status'] = $providerStatus;
+        }
+
+        $providerThreadId = trim((string) ($statusUpdate['conversation_id'] ?? ''));
+        if ($providerThreadId !== '' && $this->db->field_exists('provider_thread_id', $this->messagesTable)) {
+            $existingThreadId = trim((string) ($message['provider_thread_id'] ?? ''));
+            if ($existingThreadId !== $providerThreadId) {
+                $messageUpdate['provider_thread_id'] = $providerThreadId;
+            }
+        }
+
+        if ($this->db->field_exists('media_meta_json', $this->messagesTable)) {
+            $mergedMetaJson = $this->merge_whatsapp_status_media_meta_json($message['media_meta_json'] ?? null, $statusUpdate);
+            $currentMetaJson = $this->encode_media_meta_json($message['media_meta_json'] ?? null);
+            if ($mergedMetaJson !== $currentMetaJson) {
+                $messageUpdate['media_meta_json'] = $mergedMetaJson;
+            }
+        }
+
+        $messageUpdated = false;
+        if (!empty($messageUpdate)) {
+            if ($this->db->field_exists('dateupdated', $this->messagesTable)) {
+                $messageUpdate['dateupdated'] = date('Y-m-d H:i:s');
+            }
+            $messageUpdate = $this->filter_existing_columns($this->messagesTable, $messageUpdate);
+            if (!empty($messageUpdate)) {
+                $this->db->where('id', $messageId);
+                if ($this->db->field_exists('provider', $this->messagesTable)) {
+                    $this->db->where('provider', 'whatsapp_cloud');
+                }
+                $messageUpdated = (bool) $this->db->update($this->messagesTable, $messageUpdate);
+            }
+        }
+
+        $conversationUpdated = false;
+        $conversationId = (int) ($message['conversation_id'] ?? 0);
+        if ($conversationId > 0 && $providerThreadId !== '' && $this->db->table_exists($this->conversationsTable)) {
+            $conversationUpdate = [];
+            if ($this->db->field_exists('provider_thread_id', $this->conversationsTable)) {
+                $conversationUpdate['provider_thread_id'] = $providerThreadId;
+            }
+            if ($this->db->field_exists('dateupdated', $this->conversationsTable)) {
+                $conversationUpdate['dateupdated'] = date('Y-m-d H:i:s');
+            }
+            $conversationUpdate = $this->filter_existing_columns($this->conversationsTable, $conversationUpdate);
+            if (!empty($conversationUpdate)) {
+                $this->db->where('id', $conversationId);
+                if ($this->db->field_exists('channel', $this->conversationsTable)) {
+                    $this->db->where('channel', 'whatsapp');
+                }
+                if ($this->db->field_exists('provider', $this->conversationsTable)) {
+                    $this->db->where('provider', 'whatsapp_cloud');
+                }
+                $conversationUpdated = (bool) $this->db->update($this->conversationsTable, $conversationUpdate);
+            }
+        }
+
+        return [
+            'success' => true,
+            'matched' => true,
+            'updated' => $messageUpdated || $conversationUpdated,
+            'message_updated' => $messageUpdated,
+            'conversation_updated' => $conversationUpdated,
+            'message_id' => $messageId,
+            'conversation_id' => $conversationId > 0 ? $conversationId : null,
+            'provider_message_id' => $providerMessageId,
+            'provider_status' => $providerStatus,
+        ];
+    }
+
     private function touch_conversation($conversationId, array $data = [])
     {
         if (!$this->db->table_exists($this->conversationsTable)) {
             return false;
         }
 
+        $activityAt = isset($data['last_message_at']) ? (string) $data['last_message_at'] : date('Y-m-d H:i:s');
+        $direction = trim((string) ($data['direction'] ?? ''));
         $update = [
-            'last_message_at' => isset($data['last_message_at']) ? (string) $data['last_message_at'] : date('Y-m-d H:i:s'),
+            'last_message_at' => $activityAt,
+            'dateupdated' => date('Y-m-d H:i:s'),
         ];
         if (!empty($data['subject'])) {
             $update['subject'] = trim((string) $data['subject']);
         }
+        foreach ([
+            'status',
+            'source_type',
+            'channel',
+            'provider',
+            'provider_thread_id',
+            'internal_notes',
+        ] as $column) {
+            if (!empty($data[$column])) {
+                $update[$column] = trim((string) $data[$column]);
+            }
+        }
+        $normalizedPhone = $this->normalize_phone($data['normalized_phone'] ?? ($data['contact_phone'] ?? ''));
+        if ($normalizedPhone !== '') {
+            $update['contact_phone'] = $normalizedPhone;
+            $update['normalized_phone'] = $normalizedPhone;
+        }
+        if (!empty($data['lead_id'])) {
+            $update['lead_id'] = (int) $data['lead_id'];
+        }
+        if (!empty($data['assigned_staff_id'])) {
+            $update['assigned_staff_id'] = (int) $data['assigned_staff_id'];
+        }
+        if ($direction === 'inbound') {
+            $update['last_inbound_at'] = $activityAt;
+        } elseif ($direction === 'outbound') {
+            $update['last_outbound_at'] = $activityAt;
+        } elseif (!empty($data['last_inbound_at'])) {
+            $update['last_inbound_at'] = (string) $data['last_inbound_at'];
+        } elseif (!empty($data['last_outbound_at'])) {
+            $update['last_outbound_at'] = (string) $data['last_outbound_at'];
+        }
 
         $update = $this->filter_existing_columns($this->conversationsTable, $update);
-        if (empty($update)) {
+        $shouldIncrementUnread = $direction === 'inbound' && $this->db->field_exists('unread_count', $this->conversationsTable);
+        if (empty($update) && !$shouldIncrementUnread) {
             return false;
         }
 
         $this->db->where('id', (int) $conversationId);
+        if ($shouldIncrementUnread) {
+            $this->db->set('unread_count', 'unread_count + 1', false);
+        }
         $this->db->update($this->conversationsTable, $update);
 
         return true;
+    }
+
+    private function get_conversation_row($conversationId)
+    {
+        return $this->db->get_where($this->conversationsTable, ['id' => (int) $conversationId])->row_array();
+    }
+
+    private function append_whatsapp_conversation_previews(array $items)
+    {
+        foreach ($items as &$item) {
+            $item['preview'] = $this->get_latest_inbound_message_preview((int) ($item['id'] ?? 0));
+        }
+        unset($item);
+
+        return $items;
+    }
+
+    private function get_latest_inbound_message_preview($conversationId)
+    {
+        if ($conversationId <= 0
+            || !$this->db->table_exists($this->messagesTable)
+            || !$this->db->field_exists('conversation_id', $this->messagesTable)
+            || !$this->db->field_exists('direction', $this->messagesTable)) {
+            return '';
+        }
+
+        $select = $this->db->field_exists('body_text', $this->messagesTable) ? 'body_text' : ($this->db->field_exists('body', $this->messagesTable) ? 'body' : null);
+        if ($select === null) {
+            return '';
+        }
+
+        $this->db->select($select);
+        $this->db->from($this->messagesTable);
+        $this->db->where('conversation_id', (int) $conversationId);
+        $this->db->where('direction', 'inbound');
+        if ($this->db->field_exists('channel', $this->messagesTable)) {
+            $this->db->where('channel', 'whatsapp');
+        }
+        if ($this->db->field_exists('provider', $this->messagesTable)) {
+            $this->db->where('provider', 'whatsapp_cloud');
+        }
+        if ($this->db->field_exists('id', $this->messagesTable)) {
+            $this->db->order_by('id', 'DESC');
+        } elseif ($this->db->field_exists('datecreated', $this->messagesTable)) {
+            $this->db->order_by('datecreated', 'DESC');
+        }
+
+        $row = $this->db->limit(1)->get()->row_array();
+        $body = trim((string) ($row[$select] ?? ''));
+        if ($body === '') {
+            return '';
+        }
+
+        return mb_substr(preg_replace('/\s+/', ' ', $body), 0, 180);
+    }
+
+    private function summarize_media_meta_json($value)
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return '';
+        }
+
+        $decoded = json_decode($value, true);
+        if (!is_array($decoded)) {
+            return 'Media attached';
+        }
+
+        $type = trim((string) ($decoded['type'] ?? ''));
+        $mimeType = trim((string) ($decoded['mime_type'] ?? ''));
+        $filename = trim((string) ($decoded['filename'] ?? ''));
+        $caption = trim((string) ($decoded['caption'] ?? ''));
+        $providerMediaId = trim((string) ($decoded['id'] ?? ''));
+        $statusErrorTitle = trim((string) ($decoded['status_error_title'] ?? ($decoded['error_title'] ?? '')));
+        $statusErrorMessage = trim((string) ($decoded['status_error_message'] ?? ($decoded['error_message'] ?? '')));
+        $statusErrorCode = trim((string) ($decoded['status_error_code'] ?? ($decoded['error_code'] ?? '')));
+        $statusErrorDetails = trim((string) ($decoded['status_error_details'] ?? ($decoded['error_details'] ?? '')));
+
+        $parts = [];
+        if ($type !== '') {
+            $parts[] = ucfirst(str_replace('_', ' ', $type));
+        } elseif ($statusErrorTitle !== '' || $statusErrorMessage !== '' || $statusErrorDetails !== '' || $statusErrorCode !== '') {
+            $parts[] = 'Delivery issue';
+        } else {
+            $parts[] = 'Media';
+        }
+        if ($filename !== '') {
+            $parts[] = $filename;
+        }
+        if ($mimeType !== '') {
+            $parts[] = $mimeType;
+        }
+        if ($caption !== '') {
+            $parts[] = 'Caption: ' . mb_substr(preg_replace('/\s+/', ' ', $caption), 0, 120);
+        }
+        if ($providerMediaId !== '') {
+            $parts[] = 'ID: ' . mb_substr($providerMediaId, 0, 24) . (mb_strlen($providerMediaId) > 24 ? '...' : '');
+        }
+        if ($statusErrorTitle !== '') {
+            $parts[] = 'Error: ' . mb_substr(preg_replace('/\s+/', ' ', $statusErrorTitle), 0, 120);
+        }
+        if ($statusErrorMessage !== '') {
+            $parts[] = 'Message: ' . mb_substr(preg_replace('/\s+/', ' ', $statusErrorMessage), 0, 140);
+        }
+        if ($statusErrorDetails !== '') {
+            $parts[] = 'Details: ' . mb_substr(preg_replace('/\s+/', ' ', $statusErrorDetails), 0, 140);
+        }
+        if ($statusErrorCode !== '') {
+            $parts[] = 'Code: ' . mb_substr($statusErrorCode, 0, 32);
+        }
+
+        return implode(' · ', array_filter($parts, static function ($part) {
+            return trim((string) $part) !== '';
+        }));
     }
 
     private function filter_existing_columns($table, array $data)
@@ -262,6 +1338,125 @@ class Marketing_conversations_model extends App_Model
         }
 
         return $data;
+    }
+
+    private function normalize_phone($phone)
+    {
+        $phone = trim((string) $phone);
+        if ($phone === '') {
+            return '';
+        }
+
+        $prefix = strpos($phone, '+') === 0 ? '+' : '';
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+
+        return $digits === '' ? '' : $prefix . $digits;
+    }
+
+    private function normalize_whatsapp_provider_status($status)
+    {
+        $status = strtolower(trim((string) $status));
+        if ($status === '') {
+            return '';
+        }
+
+        return preg_replace('/[^a-z0-9_]+/', '_', $status);
+    }
+
+    private function should_apply_whatsapp_status_transition($currentStatus, $incomingStatus)
+    {
+        $currentStatus = $this->normalize_whatsapp_provider_status($currentStatus);
+        $incomingStatus = $this->normalize_whatsapp_provider_status($incomingStatus);
+        if ($incomingStatus === '') {
+            return false;
+        }
+        if ($currentStatus === '') {
+            return true;
+        }
+        if ($currentStatus === $incomingStatus) {
+            return false;
+        }
+        if ($currentStatus === 'read' && $incomingStatus !== 'read') {
+            return false;
+        }
+        if ($currentStatus === 'failed' && $incomingStatus !== 'failed') {
+            return false;
+        }
+        if ($incomingStatus === 'failed') {
+            return $currentStatus !== 'read';
+        }
+
+        $statusRank = [
+            'accepted' => 0,
+            'sent' => 10,
+            'delivered' => 20,
+            'read' => 30,
+            'failed' => 40,
+        ];
+        if (!isset($statusRank[$currentStatus]) || !isset($statusRank[$incomingStatus])) {
+            return true;
+        }
+
+        return $statusRank[$incomingStatus] >= $statusRank[$currentStatus];
+    }
+
+    private function merge_whatsapp_status_media_meta_json($currentValue, array $statusUpdate)
+    {
+        $meta = [];
+        if (is_string($currentValue) && trim($currentValue) !== '') {
+            $decoded = json_decode($currentValue, true);
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        } elseif (is_array($currentValue)) {
+            $meta = $currentValue;
+        }
+
+        $status = $this->normalize_whatsapp_provider_status($statusUpdate['status'] ?? '');
+        $raw = !empty($statusUpdate['raw']) && is_array($statusUpdate['raw']) ? $statusUpdate['raw'] : [];
+        $errorMap = [
+            'status_error_code' => ['key' => 'error_code', 'length' => 32],
+            'status_error_title' => ['key' => 'error_title', 'length' => 180],
+            'status_error_message' => ['key' => 'error_message', 'length' => 280],
+            'status_error_details' => ['key' => 'error_details', 'length' => 280],
+        ];
+
+        if ($status === 'failed') {
+            foreach ($errorMap as $targetKey => $definition) {
+                $value = trim(strip_tags((string) ($raw[$definition['key']] ?? '')));
+                $value = preg_replace('/\s+/', ' ', $value);
+                if ($value !== '') {
+                    $meta[$targetKey] = mb_substr($value, 0, (int) $definition['length']);
+                } else {
+                    unset($meta[$targetKey]);
+                }
+            }
+        } else {
+            foreach (array_keys($errorMap) as $targetKey) {
+                unset($meta[$targetKey]);
+            }
+        }
+
+        return $this->encode_media_meta_json($meta);
+    }
+
+    private function encode_media_meta_json($value)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_string($value)) {
+            return trim($value) !== '' ? $value : null;
+        }
+
+        if (!is_array($value) && !is_object($value)) {
+            return null;
+        }
+
+        $json = json_encode($value);
+
+        return $json !== false ? $json : null;
     }
 
     private function append_previews(array $rows)

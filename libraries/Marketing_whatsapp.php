@@ -28,6 +28,7 @@ class Marketing_whatsapp
             'phone_number_id' => trim((string) $this->getOptionValue('marketing_whatsapp_phone_number_id')),
             'business_account_id' => trim((string) $this->getOptionValue('marketing_whatsapp_business_account_id')),
             'access_token' => trim((string) $this->getOptionValue('marketing_whatsapp_access_token')),
+            'app_secret' => trim((string) $this->getOptionValue('marketing_whatsapp_app_secret')),
             'webhook_verify_token' => trim((string) $this->getOptionValue('marketing_whatsapp_webhook_verify_token')),
             'default_template_name' => trim((string) $this->getOptionValue('marketing_whatsapp_default_template_name')),
             'default_template_language' => trim((string) $this->getOptionValue('marketing_whatsapp_default_template_language')),
@@ -64,6 +65,67 @@ class Marketing_whatsapp
             'status_code' => 200,
             'challenge' => (string) $challenge,
             'message' => 'Webhook verified.',
+        ];
+    }
+
+    public function verify_post_signature($rawBody, array $headers = [])
+    {
+        $settings = $this->get_settings();
+        $appSecret = trim((string) ($settings['app_secret'] ?? ''));
+
+        if ($appSecret === '') {
+            return [
+                'accepted' => true,
+                'authenticated' => false,
+                'mode' => 'compatibility',
+                'warning' => 'whatsapp_post_signature_not_configured',
+            ];
+        }
+
+        $signatureHeader = trim((string) ($headers['x-hub-signature-256'] ?? ''));
+        if ($signatureHeader === '' || strpos($signatureHeader, 'sha256=') !== 0) {
+            $this->logSafeError('Marketing WhatsApp POST signature missing or malformed.');
+
+            return [
+                'accepted' => false,
+                'authenticated' => false,
+                'mode' => 'app_secret',
+                'warning' => 'whatsapp_post_signature_invalid',
+                'message' => 'WhatsApp webhook signature verification failed.',
+            ];
+        }
+
+        $presentedSignature = substr($signatureHeader, 7);
+        if ($presentedSignature === '' || preg_match('/^[a-f0-9]{64}$/i', $presentedSignature) !== 1) {
+            $this->logSafeError('Marketing WhatsApp POST signature malformed.');
+
+            return [
+                'accepted' => false,
+                'authenticated' => false,
+                'mode' => 'app_secret',
+                'warning' => 'whatsapp_post_signature_invalid',
+                'message' => 'WhatsApp webhook signature verification failed.',
+            ];
+        }
+
+        $expectedSignature = hash_hmac('sha256', (string) $rawBody, $appSecret);
+        if (!hash_equals($expectedSignature, strtolower($presentedSignature))) {
+            $this->logSafeError('Marketing WhatsApp POST signature verification failed.');
+
+            return [
+                'accepted' => false,
+                'authenticated' => false,
+                'mode' => 'app_secret',
+                'warning' => 'whatsapp_post_signature_invalid',
+                'message' => 'WhatsApp webhook signature verification failed.',
+            ];
+        }
+
+        return [
+            'accepted' => true,
+            'authenticated' => true,
+            'mode' => 'app_secret',
+            'warning' => null,
         ];
     }
 
@@ -175,6 +237,11 @@ class Marketing_whatsapp
                 'success' => false,
                 'error' => 'WhatsApp API request failed.',
                 'status_code' => $statusCode,
+                'meta_error_message' => '',
+                'meta_error_type' => '',
+                'meta_error_code' => '',
+                'meta_error_subcode' => '',
+                'meta_fbtrace_id' => '',
             ];
         }
 
@@ -189,13 +256,156 @@ class Marketing_whatsapp
             ];
         }
 
-        $apiError = $this->sanitizeMessage($decoded['error']['message'] ?? $rawResponse);
-        $this->logSafeError('Marketing WhatsApp API send failed: status=' . $statusCode . ' message=' . $apiError);
+        $metaError = $this->extractMetaErrorDetails($decoded, $rawResponse);
+        $apiError = $metaError['meta_error_message'] !== '' ? $metaError['meta_error_message'] : 'WhatsApp API request was not accepted.';
+        $this->logSafeError(
+            'Marketing WhatsApp API send failed: status=' . $statusCode
+            . ' type=' . $metaError['meta_error_type']
+            . ' code=' . $metaError['meta_error_code']
+            . ' subcode=' . $metaError['meta_error_subcode']
+            . ' fbtrace_id=' . $metaError['meta_fbtrace_id']
+            . ' message=' . $apiError
+        );
 
         return [
             'success' => false,
-            'error' => $apiError !== '' ? $apiError : 'WhatsApp API request was not accepted.',
+            'error' => $apiError,
             'status_code' => $statusCode,
+            'meta_error_message' => $metaError['meta_error_message'],
+            'meta_error_type' => $metaError['meta_error_type'],
+            'meta_error_code' => $metaError['meta_error_code'],
+            'meta_error_subcode' => $metaError['meta_error_subcode'],
+            'meta_fbtrace_id' => $metaError['meta_fbtrace_id'],
+        ];
+    }
+
+    public function send_text_message($to, $body, array $settings = [])
+    {
+        $settings = !empty($settings) ? $settings : $this->get_settings();
+        if (empty($settings['enabled'])) {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp Business integration is disabled.',
+            ];
+        }
+
+        $graphVersion = trim((string) ($settings['graph_version'] ?? ''));
+        $graphVersion = $graphVersion !== '' ? $graphVersion : 'v23.0';
+        $phoneNumberId = trim((string) ($settings['phone_number_id'] ?? ''));
+        $accessToken = trim((string) ($settings['access_token'] ?? ''));
+        $recipient = $this->normalizePhone($to);
+        $textBody = trim((string) $body);
+
+        if ($phoneNumberId === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp phone number ID is missing.',
+            ];
+        }
+
+        if ($accessToken === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp access token is missing.',
+            ];
+        }
+
+        if ($recipient === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp recipient is missing or invalid.',
+            ];
+        }
+
+        if ($textBody === '') {
+            return [
+                'success' => false,
+                'error' => 'WhatsApp reply text is missing.',
+            ];
+        }
+
+        if (!function_exists('curl_init')) {
+            return [
+                'success' => false,
+                'error' => 'cURL is required to send WhatsApp messages.',
+            ];
+        }
+
+        $endpoint = 'https://graph.facebook.com/' . rawurlencode($graphVersion) . '/' . rawurlencode($phoneNumberId) . '/messages';
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $recipient,
+            'type' => 'text',
+            'text' => [
+                'preview_url' => false,
+                'body' => $textBody,
+            ],
+        ];
+
+        $curl = curl_init($endpoint);
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $rawResponse = curl_exec($curl);
+        $curlError = curl_error($curl);
+        $statusCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        if ($rawResponse === false || $curlError !== '') {
+            $this->logSafeError('Marketing WhatsApp reply send failed at transport level: ' . $this->sanitizeMessage($curlError));
+
+            return [
+                'success' => false,
+                'error' => 'WhatsApp API request failed.',
+                'status_code' => $statusCode,
+                'meta_error_message' => '',
+                'meta_error_type' => '',
+                'meta_error_code' => '',
+                'meta_error_subcode' => '',
+                'meta_fbtrace_id' => '',
+            ];
+        }
+
+        $decoded = json_decode($rawResponse, true);
+        if ($statusCode >= 200 && $statusCode < 300 && !empty($decoded['messages'][0]['id'])) {
+            log_message('info', 'Marketing WhatsApp text reply accepted: phone_number_id=' . $phoneNumberId . ' status=' . $statusCode);
+
+            return [
+                'success' => true,
+                'status_code' => $statusCode,
+                'provider_message_id' => (string) $decoded['messages'][0]['id'],
+            ];
+        }
+
+        $metaError = $this->extractMetaErrorDetails($decoded, $rawResponse);
+        $apiError = $metaError['meta_error_message'] !== '' ? $metaError['meta_error_message'] : 'WhatsApp API request was not accepted.';
+        $this->logSafeError(
+            'Marketing WhatsApp text reply failed: status=' . $statusCode
+            . ' type=' . $metaError['meta_error_type']
+            . ' code=' . $metaError['meta_error_code']
+            . ' subcode=' . $metaError['meta_error_subcode']
+            . ' fbtrace_id=' . $metaError['meta_fbtrace_id']
+            . ' message=' . $apiError
+        );
+
+        return [
+            'success' => false,
+            'error' => $apiError,
+            'status_code' => $statusCode,
+            'meta_error_message' => $metaError['meta_error_message'],
+            'meta_error_type' => $metaError['meta_error_type'],
+            'meta_error_code' => $metaError['meta_error_code'],
+            'meta_error_subcode' => $metaError['meta_error_subcode'],
+            'meta_fbtrace_id' => $metaError['meta_fbtrace_id'],
         ];
     }
 
@@ -257,9 +467,7 @@ class Marketing_whatsapp
                         'text' => $bodyText,
                         'timestamp' => $this->normalizeTimestamp($message['timestamp'] ?? null),
                         'context_message_id' => trim((string) ($message['context']['id'] ?? '')),
-                        'raw' => [
-                            'type' => $messageType,
-                        ],
+                        'raw' => $this->extractSafeMessageRaw($message, $messageType),
                     ];
                 }
 
@@ -277,9 +485,7 @@ class Marketing_whatsapp
                         'event_type' => $this->map_status_to_event_type($status),
                         'timestamp' => $this->normalizeTimestamp($statusItem['timestamp'] ?? null),
                         'conversation_id' => trim((string) ($statusItem['conversation']['id'] ?? '')),
-                        'raw' => [
-                            'status' => $status,
-                        ],
+                        'raw' => $this->extractSafeStatusRaw($statusItem, $status),
                     ];
                 }
             }
@@ -299,6 +505,150 @@ class Marketing_whatsapp
         $digits = preg_replace('/[^0-9]/', '', $phone);
 
         return $digits === '' ? '' : $prefix . $digits;
+    }
+
+    protected function extractSafeMessageRaw(array $message, $messageType)
+    {
+        $raw = [];
+        $messageType = trim((string) $messageType);
+        if ($messageType !== '') {
+            $raw['type'] = $messageType;
+        }
+
+        foreach ($this->extractSafeMessageMediaMetadata($message, $messageType) as $key => $value) {
+            $raw[$key] = $value;
+        }
+
+        foreach ($this->extractSafeMessageErrorMetadata($message) as $key => $value) {
+            $raw[$key] = $value;
+        }
+
+        return $raw;
+    }
+
+    protected function extractSafeStatusRaw(array $statusItem, $status)
+    {
+        $meta = [];
+        $status = trim((string) $status);
+        if ($status !== '') {
+            $meta['status'] = $status;
+        }
+
+        foreach ($this->extractSafeStatusErrorMetadata($statusItem) as $key => $value) {
+            $meta[$key] = $value;
+        }
+
+        return $meta;
+    }
+
+    protected function extractSafeMessageMediaMetadata(array $message, $messageType)
+    {
+        $messageType = strtolower(trim((string) $messageType));
+        $section = [];
+
+        switch ($messageType) {
+            case 'image':
+            case 'document':
+            case 'audio':
+            case 'video':
+            case 'sticker':
+                $section = isset($message[$messageType]) && is_array($message[$messageType])
+                    ? $message[$messageType]
+                    : [];
+                break;
+            default:
+                return [];
+        }
+
+        if (empty($section)) {
+            return [];
+        }
+
+        $meta = [
+            'provider_media_type' => $messageType,
+        ];
+
+        foreach ([
+            'id' => 255,
+            'mime_type' => 120,
+            'sha256' => 255,
+            'filename' => 255,
+            'caption' => 500,
+        ] as $key => $maxLength) {
+            $value = $this->sanitizeMetadataScalar($section[$key] ?? '', $maxLength);
+            if ($value !== '') {
+                $meta[$key] = $value;
+            }
+        }
+
+        if ($messageType === 'audio' && array_key_exists('voice', $section)) {
+            $meta['voice'] = $this->normalizeMetadataBoolean($section['voice']);
+        }
+
+        if ($messageType === 'sticker' && array_key_exists('animated', $section)) {
+            $meta['animated'] = $this->normalizeMetadataBoolean($section['animated']);
+        }
+
+        return $this->filterEmptyMetadata($meta);
+    }
+
+    protected function extractSafeMessageErrorMetadata(array $message)
+    {
+        $errors = isset($message['errors']) && is_array($message['errors']) ? $message['errors'] : [];
+        $error = !empty($errors[0]) && is_array($errors[0]) ? $errors[0] : [];
+        if (empty($error)) {
+            return [];
+        }
+
+        $meta = [];
+        $errorCode = $this->sanitizeMetadataScalar($error['code'] ?? '', 32);
+        if ($errorCode !== '') {
+            $meta['error_code'] = $errorCode;
+        }
+
+        $errorTitle = $this->sanitizeMetadataScalar($error['title'] ?? '', 180);
+        if ($errorTitle !== '') {
+            $meta['error_title'] = $errorTitle;
+        }
+
+        $errorMessage = $this->sanitizeMetadataScalar($error['message'] ?? '', 280);
+        if ($errorMessage !== '') {
+            $meta['error_message'] = $errorMessage;
+        }
+
+        return $meta;
+    }
+
+    protected function extractSafeStatusErrorMetadata(array $statusItem)
+    {
+        $errors = isset($statusItem['errors']) && is_array($statusItem['errors']) ? $statusItem['errors'] : [];
+        $error = !empty($errors[0]) && is_array($errors[0]) ? $errors[0] : [];
+        if (empty($error)) {
+            return [];
+        }
+
+        $meta = [];
+        $errorCode = $this->sanitizeMetadataScalar($error['code'] ?? '', 32);
+        if ($errorCode !== '') {
+            $meta['error_code'] = $errorCode;
+        }
+
+        $errorTitle = $this->sanitizeMetadataScalar($error['title'] ?? '', 180);
+        if ($errorTitle !== '') {
+            $meta['error_title'] = $errorTitle;
+        }
+
+        $errorMessage = $this->sanitizeMetadataScalar($error['message'] ?? '', 280);
+        if ($errorMessage !== '') {
+            $meta['error_message'] = $errorMessage;
+        }
+
+        $errorDetails = $this->sanitizeMetadataScalar($error['details'] ?? ($error['error_data']['details'] ?? ''), 280);
+        if ($errorDetails !== '') {
+            $meta['error_details'] = $errorDetails;
+        }
+
+        return $meta;
     }
 
     protected function extractMessageText(array $message)
@@ -363,6 +713,76 @@ class Marketing_whatsapp
         $message = preg_replace('/\s+/', ' ', $message);
 
         return mb_substr($message, 0, 180);
+    }
+
+    protected function sanitizeMetadataScalar($value, $maxLength = 255)
+    {
+        if (is_array($value) || is_object($value) || $value === null) {
+            return '';
+        }
+
+        $value = trim(strip_tags((string) $value));
+        $value = preg_replace('/\s+/', ' ', $value);
+        if ($value === '') {
+            return '';
+        }
+
+        return mb_substr($value, 0, max(1, (int) $maxLength));
+    }
+
+    protected function normalizeMetadataBoolean($value)
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    protected function filterEmptyMetadata(array $meta)
+    {
+        $filtered = [];
+
+        foreach ($meta as $key => $value) {
+            if (is_bool($value)) {
+                $filtered[$key] = $value;
+                continue;
+            }
+
+            if (is_string($value) && $value !== '') {
+                $filtered[$key] = $value;
+            }
+        }
+
+        return $filtered;
+    }
+
+    protected function extractMetaErrorDetails($decoded, $rawResponse = '')
+    {
+        $error = is_array($decoded) && isset($decoded['error']) && is_array($decoded['error'])
+            ? $decoded['error']
+            : [];
+
+        return [
+            'meta_error_message' => $this->sanitizeMessage($error['message'] ?? $rawResponse),
+            'meta_error_type' => $this->sanitizeMetaScalar($error['type'] ?? ''),
+            'meta_error_code' => $this->sanitizeMetaScalar($error['code'] ?? ''),
+            'meta_error_subcode' => $this->sanitizeMetaScalar($error['error_subcode'] ?? ''),
+            'meta_fbtrace_id' => $this->sanitizeMetaScalar($error['fbtrace_id'] ?? ''),
+        ];
+    }
+
+    protected function sanitizeMetaScalar($value)
+    {
+        if (is_array($value) || is_object($value) || $value === null) {
+            return '';
+        }
+
+        return preg_replace('/[^A-Za-z0-9._:-]/', '', mb_substr(trim((string) $value), 0, 120));
     }
 
     protected function logSafeError($message)

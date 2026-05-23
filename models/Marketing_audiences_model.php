@@ -163,6 +163,55 @@ class Marketing_audiences_model extends App_Model
         return $this->db->affected_rows() > 0;
     }
 
+    public function mark_contact_unsubscribed($contactId)
+    {
+        $contactId = (int) $contactId;
+        if ($contactId <= 0 || !$this->db->table_exists($this->contactsTable)) {
+            return false;
+        }
+
+        $data = $this->filter_existing_columns($this->contactsTable, [
+            'status' => 'unsubscribed',
+            'consent_status' => 'unsubscribed',
+            'dateupdated' => date('Y-m-d H:i:s'),
+        ]);
+
+        if (empty($data)) {
+            return false;
+        }
+
+        $this->db->where('id', $contactId);
+        $this->db->update($this->contactsTable, $data);
+
+        return $this->db->affected_rows() >= 0;
+    }
+
+    public function mark_list_membership_unsubscribed($listId, $contactId)
+    {
+        $listId = (int) $listId;
+        $contactId = (int) $contactId;
+        if ($listId <= 0 || $contactId <= 0 || !$this->db->table_exists($this->membersTable)) {
+            return false;
+        }
+
+        if ($this->db->field_exists('member_status', $this->membersTable)) {
+            $data = $this->filter_existing_columns($this->membersTable, [
+                'member_status' => 'inactive',
+                'dateupdated' => date('Y-m-d H:i:s'),
+            ]);
+
+            if (!empty($data)) {
+                $this->db->where('list_id', $listId);
+                $this->db->where('marketing_contact_id', $contactId);
+                $this->db->update($this->membersTable, $data);
+
+                return $this->db->affected_rows() >= 0;
+            }
+        }
+
+        return $this->remove_member($listId, $contactId);
+    }
+
     public function can_delete_contact($contactId)
     {
         if (total_rows($this->campaignRecipientsTable, ['marketing_contact_id' => $contactId]) > 0) {
@@ -279,19 +328,20 @@ class Marketing_audiences_model extends App_Model
             return false;
         }
 
-        $suppressed = total_rows($this->suppressionsTable, ['normalized_email' => $normalizedEmail, 'active' => 1]) > 0;
+        $suppressed = false;
+        if (
+            $this->db->table_exists($this->suppressionsTable)
+            && $this->db->field_exists('normalized_email', $this->suppressionsTable)
+            && $this->db->field_exists('active', $this->suppressionsTable)
+        ) {
+            $suppressed = total_rows($this->suppressionsTable, ['normalized_email' => $normalizedEmail, 'active' => 1]) > 0;
+        }
 
         if ($suppressed) {
             return true;
         }
 
-        $contact = $this->get_contact_by_normalized_email($normalizedEmail);
-
-        if (!$contact) {
-            return false;
-        }
-
-        return in_array($contact['status'], ['suppressed', 'bounced', 'complained', 'unsubscribed'], true);
+        return false;
     }
 
     public function get_contact_status_options()
@@ -317,6 +367,20 @@ class Marketing_audiences_model extends App_Model
     protected function normalize_email($email)
     {
         return mb_strtolower(trim($email));
+    }
+
+    protected function filter_existing_columns($table, array $data)
+    {
+        if (!$this->db->table_exists($table)) {
+            return [];
+        }
+
+        $columns = $this->db->list_fields($table);
+        if (!is_array($columns) || empty($columns)) {
+            return [];
+        }
+
+        return array_intersect_key($data, array_flip($columns));
     }
 
     public function count_members($listId)

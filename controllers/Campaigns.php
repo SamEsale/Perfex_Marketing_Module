@@ -7,6 +7,10 @@ class Campaigns extends AdminController
     private $saveCampaignErrorMessage = null;
     private const BUILDER_STATE_MARKER_PREFIX = '<!--marketing_builder_state:';
     private const BUILDER_STATE_MARKER_SUFFIX = '-->';
+    private const UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURES = [
+        'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action',
+        'Your headline goes here Introduce the offer, explain the value, and set up the email. Call to Action Add your marketing copy here. Shop now Your Company 123 Market Street City, State Unsubscribe',
+    ];
 
     private const STATUSES = [
         'draft',
@@ -52,9 +56,18 @@ class Campaigns extends AdminController
                 access_denied('marketing');
             }
 
+            $snapshot = $this->marketing_campaigns_model->get_campaign_targeting_snapshot($campaign);
+            if ($this->should_require_prepare_license($snapshot) && !marketing_is_feature_allowed('recipient_prepare')) {
+                set_alert('warning', marketing_license_block_message());
+                redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+            }
+
+            $this->marketing_campaigns_model->record_operator_action('manual_prepare_recipients_requested', [], $campaignId, get_staff_user_id());
             $summary = $this->marketing_campaigns_model->prepare_recipients($campaignId);
 
-            if ($summary === false) {
+            if (is_array($summary) && !empty($summary['license_blocked'])) {
+                set_alert('warning', $summary['license_message'] ?? marketing_license_block_message());
+            } elseif ($summary === false) {
                 if ($this->can_reset_stuck_sending_campaign($campaignId, $campaign)) {
                     $resetStatus = !empty($campaign['scheduled_at']) ? 'scheduled' : 'draft';
                     $this->marketing_campaigns_model->update($campaignId, [
@@ -68,6 +81,56 @@ class Campaigns extends AdminController
                 set_alert('success', sprintf(_l('marketing_campaign_recipients_prepared_summary'), (int) $summary['queued']));
             } else {
                 set_alert('warning', _l('marketing_campaign_no_eligible_contacts'));
+            }
+
+            redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+        }
+
+        if ($this->input->post('reprepare_campaign_id')) {
+            if (staff_cant('send', 'marketing')) {
+                access_denied('marketing');
+            }
+
+            $campaignId = (int) $this->input->post('reprepare_campaign_id');
+            $campaign = $this->marketing_campaigns_model->get($campaignId);
+
+            if (!$campaign) {
+                set_alert('danger', _l('marketing_campaign_not_found'));
+                redirect(admin_url('marketing/campaigns'));
+            }
+
+            if (staff_cant('view', 'marketing') && staff_can('view_own', 'marketing') && $campaign['created_by'] !== get_staff_user_id()) {
+                access_denied('marketing');
+            }
+
+            if (!$this->marketing_campaigns_model->can_reprepare_recipients($campaign)) {
+                set_alert('warning', _l('marketing_campaign_reprepare_recipients_restricted'));
+                redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+            }
+
+            $queuedRecipients = $this->marketing_campaigns_model->count_recipients_by_status($campaignId, 'queued');
+            if ($queuedRecipients === 0) {
+                set_alert('warning', _l('marketing_campaign_reprepare_recipients_restricted'));
+                redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+            }
+
+            $snapshot = $this->marketing_campaigns_model->get_campaign_targeting_snapshot($campaign);
+            if ($this->should_require_prepare_license($snapshot) && !marketing_is_feature_allowed('recipient_prepare')) {
+                set_alert('warning', marketing_license_block_message());
+                redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+            }
+
+            $this->marketing_campaigns_model->record_operator_action('manual_reprepare_recipients_requested', [], $campaignId, get_staff_user_id());
+            $summary = $this->marketing_campaigns_model->sync_newly_eligible_recipients($campaignId);
+
+            if (is_array($summary) && !empty($summary['license_blocked'])) {
+                set_alert('warning', $summary['license_message'] ?? marketing_license_block_message());
+            } elseif ($summary === false) {
+                set_alert('danger', _l('marketing_campaign_prepare_recipients_failure'));
+            } elseif ((int) ($summary['added_count'] ?? 0) > 0) {
+                set_alert('success', sprintf(_l('marketing_campaign_reprepare_recipients_success'), (int) $summary['added_count']));
+            } else {
+                set_alert('warning', _l('marketing_campaign_reprepare_recipients_none'));
             }
 
             redirect(admin_url('marketing/campaigns/show/' . $campaignId));
@@ -96,6 +159,11 @@ class Campaigns extends AdminController
                 redirect(admin_url('marketing/campaigns/show/' . $campaignId));
             }
 
+            if (!marketing_is_feature_allowed($this->get_campaign_send_license_feature($campaign))) {
+                set_alert('warning', marketing_license_block_message());
+                redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+            }
+
             if (!in_array($campaign['status'], ['draft', 'scheduled', 'sending'], true)) {
                 set_alert('info', 'Campaign completed');
                 redirect(admin_url('marketing/campaigns/show/' . $campaignId));
@@ -107,6 +175,12 @@ class Campaigns extends AdminController
                 redirect(admin_url('marketing/campaigns/show/' . $campaignId));
             }
 
+            if ($this->marketing_campaigns_model->is_queue_paused()) {
+                set_alert('warning', 'Campaign queue is paused. Resume the queue before sending.');
+                redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+            }
+
+            $this->marketing_campaigns_model->record_operator_action('manual_process_queue_requested', [], $campaignId, get_staff_user_id());
             $summary = $this->marketing_campaigns_model->process_due_recipients(null, $campaignId);
 
             if (is_array($summary) && (int) ($summary['processed'] ?? 0) === 0) {
@@ -121,7 +195,11 @@ class Campaigns extends AdminController
             } elseif (is_array($summary)) {
                 $accepted = (int) ($summary['accepted'] ?? $summary['processed'] ?? 0);
                 $failed   = (int) ($summary['failed'] ?? 0);
-                set_alert('success', sprintf(_l('marketing_campaign_send_batch_summary'), $accepted, $failed));
+                if ($accepted === 0 && $failed > 0) {
+                    set_alert('warning', 'Campaign send failed for all processed recipients. Review the recipient failure reasons below and verify the sender configuration.');
+                } else {
+                    set_alert('success', sprintf(_l('marketing_campaign_send_batch_summary'), $accepted, $failed));
+                }
             } else {
                 set_alert('success', _l('marketing_campaign_queue_processed'));
             }
@@ -146,6 +224,7 @@ class Campaigns extends AdminController
                 access_denied('marketing');
             }
 
+            $this->marketing_campaigns_model->record_operator_action('manual_reset_campaign_requested', [], $campaignId, get_staff_user_id());
             if ($campaign['status'] === 'sending'
                 && $this->marketing_campaigns_model->count_recipients_by_status($campaignId, 'processing') === 0) {
                 $this->marketing_campaigns_model->update($campaignId, [
@@ -178,6 +257,7 @@ class Campaigns extends AdminController
                 access_denied('marketing');
             }
 
+            $this->marketing_campaigns_model->record_operator_action('manual_retry_failed_requested', [], $campaignId, get_staff_user_id());
             $result = $this->marketing_campaigns_model->retry_failed_recipients($campaignId);
 
             if ($result === false) {
@@ -220,6 +300,33 @@ class Campaigns extends AdminController
             redirect(admin_url('marketing/campaigns'));
         }
 
+        if ($this->input->post('duplicate_campaign_id')) {
+            if (staff_cant('create', 'marketing')) {
+                access_denied('marketing');
+            }
+
+            $campaignId = (int) $this->input->post('duplicate_campaign_id');
+            $campaign = $this->marketing_campaigns_model->get($campaignId);
+
+            if (!$campaign) {
+                set_alert('danger', _l('marketing_campaign_not_found'));
+                redirect(admin_url('marketing/campaigns'));
+            }
+
+            if (staff_cant('view', 'marketing') && staff_can('view_own', 'marketing') && (int) $campaign['created_by'] !== get_staff_user_id()) {
+                access_denied('marketing');
+            }
+
+            $duplicatedCampaignId = (int) $this->marketing_campaigns_model->duplicate_campaign($campaignId, get_staff_user_id());
+            if ($duplicatedCampaignId > 0) {
+                set_alert('success', _l('marketing_campaign_duplicate_success'));
+                redirect(admin_url('marketing/campaigns/edit/' . $duplicatedCampaignId));
+            }
+
+            set_alert('danger', _l('marketing_campaign_duplicate_failure'));
+            redirect(admin_url('marketing/campaigns/show/' . $campaignId));
+        }
+
         if (staff_can('view', 'marketing')) {
             $campaigns = $this->marketing_campaigns_model->get_all();
         } else {
@@ -243,6 +350,7 @@ class Campaigns extends AdminController
         $data['can_edit']   = staff_can('edit', 'marketing');
         $data['can_delete'] = staff_can('delete', 'marketing');
         $data['can_send']   = staff_can('send', 'marketing');
+        $data['can_duplicate'] = staff_can('create', 'marketing');
 
         $this->load->view('marketing/campaigns/index', $data);
     }
@@ -273,6 +381,8 @@ class Campaigns extends AdminController
         $data['consent_status_options'] = $this->marketing_audiences_model->get_consent_status_options();
         $data['supports_created_date_filter'] = $this->marketing_campaigns_model->contact_created_date_filter_supported();
         $data['form_error_message'] = $this->saveCampaignErrorMessage;
+        $data['builder_company_address'] = $this->get_builder_company_address_config();
+        $data['builder_merge_tags'] = $this->get_builder_merge_tags();
 
         $this->load->view('marketing/campaigns/form', $data);
     }
@@ -319,6 +429,8 @@ class Campaigns extends AdminController
         $data['consent_status_options'] = $this->marketing_audiences_model->get_consent_status_options();
         $data['supports_created_date_filter'] = $this->marketing_campaigns_model->contact_created_date_filter_supported();
         $data['form_error_message'] = $this->saveCampaignErrorMessage;
+        $data['builder_company_address'] = $this->get_builder_company_address_config();
+        $data['builder_merge_tags'] = $this->get_builder_merge_tags();
 
         $this->load->view('marketing/campaigns/form', $data);
     }
@@ -364,6 +476,13 @@ class Campaigns extends AdminController
         $eventSummary = $this->marketing_campaigns_model->get_event_summary($id);
         $whatsappEventSummary = $this->marketing_campaigns_model->get_whatsapp_event_summary($id);
         $sendReadiness = $this->marketing_campaigns_model->validate_send_ready($id);
+        $campaignReadiness = $this->marketing_campaigns_model->get_campaign_readiness_snapshot(
+            $id,
+            $campaign,
+            $recipientSummary,
+            $sendReadiness,
+            $eventSummary
+        );
         $targetingSnapshot = $this->marketing_campaigns_model->get_campaign_targeting_snapshot($campaign);
         $sendWindow = $this->marketing_campaigns_model->get_send_window_settings();
         $rateLimitSnapshot = $this->marketing_campaigns_model->get_rate_limit_snapshot();
@@ -372,7 +491,7 @@ class Campaigns extends AdminController
         $unmatchedReplies = $this->marketing_conversations_model->get_unmatched_inbound_replies(5);
         $campaignReplies = $this->marketing_reply_leads_model->decorate_replies_with_lead_metadata($campaignReplies, $id);
         $unmatchedReplies = $this->marketing_reply_leads_model->decorate_replies_with_lead_metadata($unmatchedReplies, null);
-        $readinessStatus = _l('marketing_campaign_ready_status');
+        $readinessStatus = $campaignReadiness['status_label'];
         $recipientPage = max(1, (int) $this->input->get('recipient_page'));
         $recipientPerPage = (int) $this->input->get('recipient_per_page');
         if ($recipientPerPage <= 0) {
@@ -397,12 +516,6 @@ class Campaigns extends AdminController
             $recipientStatusFilter !== '' ? $recipientStatusFilter : null
         );
 
-        if (!$sendReadiness['ready']) {
-            $readinessStatus = _l('marketing_campaign_missing_fields_status');
-        } elseif ($recipientSummary['queued'] === 0) {
-            $readinessStatus = _l('marketing_campaign_missing_recipients_status');
-        }
-
         $data['title'] = _l('marketing_campaign_detail');
         $data['campaign'] = $campaign;
         $data['preview_html'] = $this->sanitize_preview_html($campaign['html_content']);
@@ -411,6 +524,7 @@ class Campaigns extends AdminController
         $data['whatsapp_event_summary'] = $whatsappEventSummary;
         $data['whatsapp_status'] = $whatsappStatus;
         $data['send_readiness'] = $sendReadiness;
+        $data['campaign_readiness'] = $campaignReadiness;
         $data['targeting_snapshot'] = $targetingSnapshot;
         $data['targeting_summary_lines'] = $this->marketing_campaigns_model->get_targeting_summary_lines($campaign['targeting_rules']);
         $data['send_window'] = $sendWindow;
@@ -428,6 +542,7 @@ class Campaigns extends AdminController
         ];
         $data['can_send'] = staff_can('send', 'marketing');
         $data['can_prepare_recipients'] = $data['can_send'] && $this->marketing_campaigns_model->can_prepare_recipients($campaign);
+        $data['can_reprepare_recipients'] = $data['can_send'] && $this->marketing_campaigns_model->can_reprepare_recipients($campaign);
         $data['can_schedule'] = $data['can_send'] && $this->marketing_campaigns_model->can_schedule($campaign);
         $data['can_edit_campaign'] = staff_can('edit', 'marketing') && $this->marketing_campaigns_model->campaign_can_be_edited($campaign);
         $data['can_reset_campaign'] = $data['can_send']
@@ -435,6 +550,7 @@ class Campaigns extends AdminController
             && (int) $recipientSummary['processing'] === 0;
         $data['can_delete'] = staff_can('delete', 'marketing');
         $data['can_delete_campaign'] = $data['can_delete'] && $this->marketing_campaigns_model->campaign_can_be_deleted($campaign);
+        $data['can_duplicate_campaign'] = staff_can('create', 'marketing');
         $data['show_reply_lead_metadata'] = staff_can('view', 'marketing');
         $data['can_retry_failed'] = $data['can_send']
             && (int) $recipientSummary['failed'] > 0
@@ -600,6 +716,61 @@ class Campaigns extends AdminController
         redirect(admin_url('marketing/campaigns/show/' . $id));
     }
 
+    public function reprepare_recipients($id)
+    {
+        if (staff_cant('send', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (!$this->input->post()) {
+            show_404();
+        }
+
+        $campaign = $this->marketing_campaigns_model->get($id);
+
+        if (!$campaign) {
+            show_404();
+        }
+
+        if (staff_cant('view', 'marketing') && staff_can('view_own', 'marketing')) {
+            if ($campaign['created_by'] !== get_staff_user_id()) {
+                access_denied('marketing');
+            }
+        }
+
+        if (!$this->marketing_campaigns_model->can_reprepare_recipients($campaign)) {
+            set_alert('warning', _l('marketing_campaign_reprepare_recipients_restricted'));
+            redirect(admin_url('marketing/campaigns/show/' . $id));
+        }
+
+        $queuedRecipients = $this->marketing_campaigns_model->count_recipients_by_status($id, 'queued');
+        if ($queuedRecipients === 0) {
+            set_alert('warning', _l('marketing_campaign_reprepare_recipients_restricted'));
+            redirect(admin_url('marketing/campaigns/show/' . $id));
+        }
+
+        $snapshot = $this->marketing_campaigns_model->get_campaign_targeting_snapshot($campaign);
+        if ($this->should_require_prepare_license($snapshot) && !marketing_is_feature_allowed('recipient_prepare')) {
+            set_alert('warning', marketing_license_block_message());
+            redirect(admin_url('marketing/campaigns/show/' . $id));
+        }
+
+        $this->marketing_campaigns_model->record_operator_action('manual_reprepare_recipients_requested', [], $id, get_staff_user_id());
+        $summary = $this->marketing_campaigns_model->sync_newly_eligible_recipients($id);
+
+        if (is_array($summary) && !empty($summary['license_blocked'])) {
+            set_alert('warning', $summary['license_message'] ?? marketing_license_block_message());
+        } elseif ($summary === false) {
+            set_alert('danger', _l('marketing_campaign_prepare_recipients_failure'));
+        } elseif ((int) ($summary['added_count'] ?? 0) > 0) {
+            set_alert('success', sprintf(_l('marketing_campaign_reprepare_recipients_success'), (int) $summary['added_count']));
+        } else {
+            set_alert('warning', _l('marketing_campaign_reprepare_recipients_none'));
+        }
+
+        redirect(admin_url('marketing/campaigns/show/' . $id));
+    }
+
     public function schedule($id)
     {
         if (staff_cant('send', 'marketing')) {
@@ -713,6 +884,15 @@ class Campaigns extends AdminController
             redirect(admin_url('marketing/campaigns'));
         }
 
+        if ($this->marketing_campaigns_model->is_queue_paused()) {
+            set_alert('warning', 'Campaign queue is paused. Resume the queue before sending.');
+            if ($campaign !== null) {
+                redirect(admin_url('marketing/campaigns/show/' . $campaign['id']));
+            }
+
+            redirect(admin_url('marketing/campaigns'));
+        }
+
         if ($campaign !== null) {
             $queuedRecipients = $this->marketing_campaigns_model->count_recipients_by_status($campaign['id'], 'queued');
             if ($queuedRecipients <= 0) {
@@ -737,6 +917,7 @@ class Campaigns extends AdminController
             }
         }
 
+        $this->marketing_campaigns_model->record_operator_action('manual_process_queue_requested', [], $id !== null ? (int) $id : null, get_staff_user_id());
         $summary = $this->marketing_campaigns_model->process_due_recipients($limit, $id);
 
         if ((int) $summary['processed'] > 0) {
@@ -881,7 +1062,10 @@ class Campaigns extends AdminController
             }
         }
 
-        if ($deliveryChannel === 'email' && !$this->campaign_has_unsubscribe_token($htmlContent)) {
+        if ($deliveryChannel === 'email'
+            && !$this->campaign_has_unsubscribe_token($htmlContent)
+            && !$this->campaign_has_unsubscribe_token($builderState)
+        ) {
             $validationMessages[] = _l('marketing_campaign_unsubscribe_save_required');
         }
 
@@ -902,9 +1086,9 @@ class Campaigns extends AdminController
             return false;
         }
 
-        $textContent = trim((string) $this->input->post('text_content', true));
+        $textContent = $this->normalize_campaign_text_content($this->input->post('text_content', true));
         if ($textContent === '') {
-            $textContent = $this->generate_plain_text_from_html($htmlContent);
+            $textContent = $this->normalize_campaign_text_content($this->generate_plain_text_from_html($htmlContent));
         }
 
         $targetingRules = $this->get_posted_targeting_rules();
@@ -986,23 +1170,69 @@ class Campaigns extends AdminController
     private function campaign_has_unsubscribe_token($htmlContent)
     {
         $htmlContent = (string) $htmlContent;
+        $candidates = [$htmlContent];
+        $decoded = rawurldecode($htmlContent);
 
-        return strpos($htmlContent, '{{unsubscribe_url}}') !== false
-            || stripos($htmlContent, '%7B%7Bunsubscribe_url%7D%7D') !== false
-            || strpos($htmlContent, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
-            || strpos($htmlContent, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false;
+        if ($decoded !== $htmlContent) {
+            $candidates[] = $decoded;
+        }
+
+        $entityDecoded = html_entity_decode($htmlContent, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($entityDecoded !== $htmlContent) {
+            $candidates[] = $entityDecoded;
+        }
+
+        foreach ($candidates as $candidate) {
+            $haystack = strtolower((string) $candidate);
+
+            if (strpos($haystack, '{{unsubscribe_url}}') !== false
+                || strpos($haystack, '%7b%7bunsubscribe_url%7d%7d') !== false
+                || strpos($haystack, '&#123;&#123;unsubscribe_url&#125;&#125;') !== false
+                || strpos($haystack, '&lcub;&lcub;unsubscribe_url&rcub;&rcub;') !== false
+                || strpos($haystack, '\\u007b\\u007bunsubscribe_url\\u007d\\u007d') !== false
+                || strpos($haystack, 'href="{{unsubscribe_url}}"') !== false
+                || strpos($haystack, "href='{{unsubscribe_url}}'") !== false
+                || strpos($haystack, 'href=&quot;{{unsubscribe_url}}&quot;') !== false
+                || strpos($haystack, 'href=&#39;{{unsubscribe_url}}&#39;') !== false
+                || strpos($haystack, '/marketing/unsubscribe/') !== false
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalize_unsubscribe_token_markup($content)
+    {
+        if (!is_string($content) || $content === '') {
+            return (string) $content;
+        }
+
+        return str_ireplace(
+            [
+                '%7B%7Bunsubscribe_url%7D%7D',
+                '&#123;&#123;unsubscribe_url&#125;&#125;',
+                '&lcub;&lcub;unsubscribe_url&rcub;&rcub;',
+                '\\u007b\\u007bunsubscribe_url\\u007d\\u007d',
+            ],
+            '{{unsubscribe_url}}',
+            $content
+        );
     }
 
     protected function get_default_campaign()
     {
+        $senderDefaults = $this->marketing_campaigns_model->get_default_campaign_sender_values();
+
         return [
             'id'            => '',
             'name'          => '',
             'subject'       => '',
             'preview_text'  => '',
-            'from_name'     => '',
-            'from_email'    => '',
-            'reply_to_email'=> '',
+            'from_name'     => $senderDefaults['from_name'] ?? '',
+            'from_email'    => $senderDefaults['from_email'] ?? '',
+            'reply_to_email'=> $senderDefaults['reply_to_email'] ?? '',
             'list_id'       => '',
             'status'        => 'draft',
             'delivery_channel' => 'email',
@@ -1014,12 +1244,22 @@ class Campaigns extends AdminController
             'html_content'  => '',
             'builder_state' => '',
             'text_content'  => '',
-            'track_opens'   => 1,
-            'track_clicks'  => 1,
+            'track_opens'   => $this->get_default_tracking_setting('marketing_track_opens', 1),
+            'track_clicks'  => $this->get_default_tracking_setting('marketing_track_clicks', 1),
             'scheduled_at'  => '',
             'schedule_mode' => 'now',
             'targeting_rules' => $this->marketing_campaigns_model->get_default_targeting_rules(),
         ];
+    }
+
+    protected function get_default_tracking_setting($optionName, $fallback = 1)
+    {
+        $value = get_option($optionName);
+        if ($value === '' || $value === null) {
+            return (int) $fallback;
+        }
+
+        return (string) $value === '1' ? 1 : 0;
     }
 
     protected function get_posted_campaign()
@@ -1052,7 +1292,7 @@ class Campaigns extends AdminController
             'whatsapp_template_var3' => trim((string) $this->input->post('whatsapp_template_var3', true)),
             'html_content'  => $htmlContent,
             'builder_state' => $builderState,
-            'text_content'  => $this->input->post('text_content', true),
+            'text_content'  => $this->normalize_campaign_text_content($this->input->post('text_content', true)),
             'track_opens'   => $this->input->post('track_opens') ? 1 : 0,
             'track_clicks'  => $this->input->post('track_clicks') ? 1 : 0,
             'scheduled_at'  => $this->input->post('scheduled_at', true),
@@ -1115,7 +1355,7 @@ class Campaigns extends AdminController
         $sanitized = preg_replace('#(href|src)\s*=\s*("|\')?\s*javascript:[^"\'>\s]+#i', '$1="#"', $sanitized);
         $sanitized = preg_replace('#(href|src)\s*=\s*("|\')?\s*vbscript:[^"\'>\s]+#i', '$1="#"', $sanitized);
 
-        return $sanitized;
+        return $this->normalize_social_icon_email_html($sanitized);
     }
 
     private function hydrate_builder_campaign($campaign)
@@ -1130,7 +1370,8 @@ class Campaigns extends AdminController
             : $this->extract_builder_state_metadata($storedHtml);
         $campaign['targeting_rules'] = $this->marketing_campaigns_model->get_campaign_targeting_rules($campaign);
         $campaign['builder_state'] = $this->marketing_campaigns_model->strip_targeting_rules_from_builder_state($campaign['builder_state']);
-        $campaign['html_content'] = $this->strip_builder_state_metadata($storedHtml);
+        $campaign['html_content'] = $this->normalize_social_icon_email_html($this->strip_builder_state_metadata($storedHtml));
+        $campaign['text_content'] = $this->normalize_campaign_text_content($campaign['text_content'] ?? '');
         $campaign['schedule_mode'] = !empty($campaign['scheduled_at']) && $campaign['status'] === 'scheduled' ? 'later' : 'now';
         $campaign['delivery_channel'] = $this->marketing_campaigns_model->normalize_delivery_channel($campaign['delivery_channel'] ?? 'email');
         $campaign['whatsapp_template_name'] = (string) ($campaign['whatsapp_template_name'] ?? '');
@@ -1200,6 +1441,274 @@ class Campaigns extends AdminController
         $html = preg_replace('#on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html);
         $html = preg_replace('#(href|src)\s*=\s*("|\')?\s*javascript:[^"\'>\s]+#i', '$1="#"', $html);
         $html = preg_replace('#(href|src)\s*=\s*("|\')?\s*vbscript:[^"\'>\s]+#i', '$1="#"', $html);
+        $html = $this->normalize_unsubscribe_token_markup($html);
+
+        return $this->normalize_social_icon_email_html($html);
+    }
+
+    private function normalize_social_icon_email_html($html)
+    {
+        $originalHtml = (string) $html;
+        $html = (string) $html;
+        if (trim($html) === '' || !class_exists('DOMDocument')) {
+            return $html;
+        }
+
+        try {
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $wrapperId = 'marketing-social-normalizer-root';
+            $encoded = function_exists('mb_convert_encoding')
+                ? mb_convert_encoding('<div id="' . $wrapperId . '">' . $html . '</div>', 'HTML-ENTITIES', 'UTF-8')
+                : '<div id="' . $wrapperId . '">' . $html . '</div>';
+            $flags = 0;
+            if (defined('LIBXML_HTML_NOIMPLIED')) {
+                $flags |= LIBXML_HTML_NOIMPLIED;
+            }
+            if (defined('LIBXML_HTML_NODEFDTD')) {
+                $flags |= LIBXML_HTML_NODEFDTD;
+            }
+
+            $previousErrors = libxml_use_internal_errors(true);
+            $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $encoded, $flags);
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousErrors);
+
+            if (!$loaded) {
+                return $html;
+            }
+
+            $root = $dom->getElementById($wrapperId);
+            if (!$root) {
+                return $html;
+            }
+
+            $changed = false;
+            $links = [];
+            $containers = [];
+            foreach ($dom->getElementsByTagName('a') as $link) {
+                $links[] = $link;
+            }
+
+            foreach ($links as $link) {
+                $channel = $this->detect_social_icon_channel($link);
+                if ($channel === null) {
+                    continue;
+                }
+
+                $href = trim((string) $link->getAttribute('href'));
+                if ($href === '' || $href === '#') {
+                    $container = $this->find_social_icon_container($link);
+                    if ($container instanceof DOMElement) {
+                        $containers[spl_object_id($container)] = $container;
+                    }
+                    if ($link->parentNode) {
+                        $link->parentNode->removeChild($link);
+                        $changed = true;
+                    }
+                    continue;
+                }
+
+                $container = $this->find_social_icon_container($link);
+                if ($container instanceof DOMElement) {
+                    $containers[spl_object_id($container)] = $container;
+                }
+                $this->rewrite_social_icon_anchor($dom, $link, $channel, $href);
+                $changed = true;
+            }
+
+            foreach ($containers as $container) {
+                if (!$container instanceof DOMElement || !$container->parentNode) {
+                    continue;
+                }
+
+                if ($this->container_has_social_icon_links($container)) {
+                    continue;
+                }
+
+                if (trim(preg_replace('/\x{00a0}/u', ' ', (string) $container->textContent)) !== '') {
+                    continue;
+                }
+
+                $container->parentNode->removeChild($container);
+                $changed = true;
+            }
+
+            return $changed ? $this->get_dom_inner_html($root) : $html;
+        } catch (Throwable $exception) {
+            log_message('warning', 'Marketing social icon normalization fallback used in campaign controller: ' . $exception->getMessage());
+
+            return $originalHtml;
+        }
+    }
+
+    private function detect_social_icon_channel(DOMElement $link)
+    {
+        if (!$this->looks_like_social_icon_link($link)) {
+            return null;
+        }
+
+        $className = ' ' . preg_replace('/\s+/', ' ', strtolower((string) $link->getAttribute('class'))) . ' ';
+        foreach ($this->get_social_icon_email_definitions() as $channel => $definition) {
+            foreach ($definition['classes'] as $class) {
+                if (strpos($className, ' ' . strtolower($class) . ' ') !== false) {
+                    return $channel;
+                }
+            }
+        }
+
+        foreach ([
+            (string) $link->getAttribute('aria-label'),
+            (string) $link->getAttribute('title'),
+            (string) $link->textContent,
+        ] as $value) {
+            $channel = $this->map_social_icon_channel_token($value);
+            if ($channel !== null) {
+                return $channel;
+            }
+        }
+
+        return $this->infer_social_icon_channel_from_href((string) $link->getAttribute('href'));
+    }
+
+    private function looks_like_social_icon_link(DOMElement $link)
+    {
+        $className = strtolower((string) $link->getAttribute('class'));
+        $style = strtolower((string) $link->getAttribute('style'));
+
+        return strpos($className, 'mb-social-') !== false
+            || (strpos($style, 'border-radius:50%') !== false
+                && strpos($style, 'width:40px') !== false
+                && strpos($style, 'height:40px') !== false);
+    }
+
+    private function map_social_icon_channel_token($value)
+    {
+        $normalized = strtolower(preg_replace('/[^a-z0-9]+/', '', trim((string) $value)));
+        $map = [
+            'facebook' => 'facebook',
+            'f' => 'facebook',
+            'instagram' => 'instagram',
+            'ig' => 'instagram',
+            'x' => 'twitter',
+            'twitter' => 'twitter',
+            'twitterx' => 'twitter',
+            'youtube' => 'youtube',
+            'yt' => 'youtube',
+            'linkedin' => 'linkedin',
+            'in' => 'linkedin',
+            'website' => 'website',
+            'www' => 'website',
+        ];
+
+        return $map[$normalized] ?? null;
+    }
+
+    private function infer_social_icon_channel_from_href($href)
+    {
+        $normalizedHref = strtolower(trim((string) $href));
+        if ($normalizedHref === '' || $normalizedHref === '#') {
+            return null;
+        }
+
+        if (strpos($normalizedHref, 'facebook.com') !== false) {
+            return 'facebook';
+        }
+
+        if (strpos($normalizedHref, 'instagram.com') !== false) {
+            return 'instagram';
+        }
+
+        if (strpos($normalizedHref, 'x.com') !== false || strpos($normalizedHref, 'twitter.com') !== false) {
+            return 'twitter';
+        }
+
+        if (strpos($normalizedHref, 'youtube.com') !== false || strpos($normalizedHref, 'youtu.be') !== false) {
+            return 'youtube';
+        }
+
+        if (strpos($normalizedHref, 'linkedin.com') !== false) {
+            return 'linkedin';
+        }
+
+        if (preg_match('#^https?://#i', $normalizedHref)) {
+            return 'website';
+        }
+
+        return null;
+    }
+
+    private function find_social_icon_container(DOMElement $node)
+    {
+        $current = $node;
+
+        while ($current instanceof DOMElement) {
+            if (strtolower($current->tagName) === 'table') {
+                return $current;
+            }
+
+            $current = $current->parentNode instanceof DOMElement ? $current->parentNode : null;
+        }
+
+        return $node->parentNode instanceof DOMElement ? $node->parentNode : null;
+    }
+
+    private function container_has_social_icon_links(DOMElement $container)
+    {
+        foreach ($container->getElementsByTagName('a') as $link) {
+            if ($link instanceof DOMElement && $this->detect_social_icon_channel($link) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function rewrite_social_icon_anchor(DOMDocument $dom, DOMElement $link, $channel, $href)
+    {
+        $definitions = $this->get_social_icon_email_definitions();
+        if (!isset($definitions[$channel])) {
+            return;
+        }
+
+        $definition = $definitions[$channel];
+        while ($link->firstChild) {
+            $link->removeChild($link->firstChild);
+        }
+
+        $img = $dom->createElement('img');
+        $img->setAttribute('src', $definition['url']);
+        $img->setAttribute('width', '40');
+        $img->setAttribute('height', '40');
+        $img->setAttribute('alt', $definition['label']);
+        $img->setAttribute('style', 'display:block;border:0;outline:none;text-decoration:none;width:40px;height:40px;border-radius:50%;');
+        $link->appendChild($img);
+
+        $link->setAttribute('href', $href);
+        $link->setAttribute('target', '_blank');
+        $link->setAttribute('rel', 'noopener noreferrer');
+        $link->setAttribute('title', $definition['label']);
+        $link->setAttribute('aria-label', $definition['label']);
+        $link->setAttribute('style', 'display:inline-block;vertical-align:middle;width:40px;height:40px;line-height:40px;margin:0 6px;text-align:center;text-decoration:none;border-radius:50%;');
+    }
+
+    private function get_social_icon_email_definitions()
+    {
+        return [
+            'facebook' => ['label' => 'Facebook', 'url' => module_dir_url('marketing', 'assets/img/social/facebook.png'), 'classes' => ['mb-social-facebook']],
+            'instagram' => ['label' => 'Instagram', 'url' => module_dir_url('marketing', 'assets/img/social/instagram.png'), 'classes' => ['mb-social-instagram']],
+            'twitter' => ['label' => 'X', 'url' => module_dir_url('marketing', 'assets/img/social/x.png'), 'classes' => ['mb-social-twitter', 'mb-social-x']],
+            'youtube' => ['label' => 'YouTube', 'url' => module_dir_url('marketing', 'assets/img/social/youtube.png'), 'classes' => ['mb-social-youtube']],
+            'linkedin' => ['label' => 'LinkedIn', 'url' => module_dir_url('marketing', 'assets/img/social/linkedin.png'), 'classes' => ['mb-social-linkedin']],
+            'website' => ['label' => 'Website', 'url' => module_dir_url('marketing', 'assets/img/social/website.png'), 'classes' => ['mb-social-website']],
+        ];
+    }
+
+    private function get_dom_inner_html(DOMNode $node)
+    {
+        $html = '';
+        foreach ($node->childNodes as $childNode) {
+            $html .= $node->ownerDocument->saveHTML($childNode);
+        }
 
         return $html;
     }
@@ -1213,6 +1722,135 @@ class Campaigns extends AdminController
         $text = preg_replace("/\n{3,}/", "\n\n", $text);
 
         return trim($text);
+    }
+
+    private function normalize_campaign_text_content($text)
+    {
+        $text = trim((string) $text);
+
+        return $this->is_unsafe_default_plain_text($text) ? '' : $text;
+    }
+
+    private function get_builder_merge_tags()
+    {
+        return [
+            ['token' => '{{first_name}}', 'label' => _l('marketing_first_name')],
+            ['token' => '{{last_name}}', 'label' => _l('marketing_last_name')],
+            ['token' => '{{full_name}}', 'label' => _l('marketing_full_name')],
+            ['token' => '{{email}}', 'label' => _l('marketing_email_address')],
+            ['token' => '{{company}}', 'label' => _l('marketing_company')],
+        ];
+    }
+
+    private function get_builder_company_address_config()
+    {
+        $lines = [];
+        $perfexCompanyName = $this->get_first_non_empty_option(['invoice_company_name', 'companyname', 'company_name']);
+        $perfexCompanyAddress = $this->get_first_non_empty_option(['invoice_company_address', 'companyaddress', 'company_address', 'address', 'companyinfo_address', 'street']);
+        $perfexCity = $this->get_first_non_empty_option(['invoice_company_city', 'companycity', 'company_city', 'city']);
+        $perfexState = $this->get_first_non_empty_option(['invoice_company_state', 'company_state', 'companystate', 'state', 'company_state_region']);
+        $perfexZip = $this->get_first_non_empty_option(['invoice_company_postal_code', 'invoice_company_zip', 'companyzip', 'company_zip', 'zip_code', 'zipcode', 'postal_code', 'company_zip_code', 'company_postal_code']);
+        $perfexCountry = $this->get_first_non_empty_option(['invoice_company_country_code', 'company_country_code', 'companycountry', 'company_country', 'country_code', 'country']);
+        $perfexPhone = $this->get_first_non_empty_option(['invoice_company_phonenumber', 'invoice_company_phone', 'company_phone', 'company_phonenumber', 'companyphone', 'phonenumber', 'phone']);
+        $perfexVat = $this->get_first_non_empty_option(['invoice_company_vat', 'company_vat', 'companyvat', 'company_vat_number', 'vat_number', 'vatnumber']);
+        $perfexCompanyInfoFormat = $this->get_first_non_empty_option(['company_info_format', 'company_info']);
+
+        $this->append_unique_company_line($lines, $perfexCompanyName);
+
+        if ($perfexCompanyAddress !== '') {
+            $addrParts = preg_split('/\r?\n/', $perfexCompanyAddress);
+            foreach ($addrParts as $part) {
+                $this->append_unique_company_line($lines, $part);
+            }
+        }
+
+        $localityParts = array_values(array_filter([
+            $perfexCity,
+            $perfexState,
+            $perfexZip,
+        ], static function ($value) {
+            return trim((string) $value) !== '';
+        }));
+
+        if (!empty($localityParts)) {
+            $this->append_unique_company_line($lines, implode(', ', $localityParts));
+        }
+
+        $this->append_unique_company_line($lines, $perfexCountry);
+        $this->append_unique_company_line($lines, $perfexPhone !== '' ? 'Phone: ' . $perfexPhone : '');
+        $this->append_unique_company_line($lines, $perfexVat !== '' ? 'VAT: ' . $perfexVat : '');
+
+        if ($perfexCompanyInfoFormat !== '' && empty($lines)) {
+            $formattedInfo = strtr($perfexCompanyInfoFormat, [
+                '{company_name}' => $perfexCompanyName,
+                '{address}' => $perfexCompanyAddress,
+                '{city}' => $perfexCity,
+                '{state}' => $perfexState,
+                '{zip_code}' => $perfexZip,
+                '{country}' => $perfexCountry,
+                '{country_code}' => $perfexCountry,
+                '{phone}' => $perfexPhone,
+                '{vat_number}' => $perfexVat,
+                '{vat_number_with_label}' => $perfexVat !== '' ? 'VAT: ' . $perfexVat : '',
+            ]);
+
+            $formattedInfo = preg_replace('/<br\s*\/?>/i', "\n", (string) $formattedInfo);
+            $formattedLines = preg_split('/\r?\n/', html_entity_decode(strip_tags((string) $formattedInfo), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+            foreach ((array) $formattedLines as $formattedLine) {
+                $this->append_unique_company_line($lines, $formattedLine);
+            }
+        }
+
+        $configured = ($perfexCompanyName !== '' || $perfexCompanyAddress !== '' || $perfexCity !== '' || $perfexState !== '' || $perfexZip !== '' || $perfexCountry !== '' || $perfexPhone !== '' || $perfexVat !== '');
+
+        if (empty($lines)) {
+            $lines = ['Your Company', '123 Market Street', 'City, State'];
+        }
+
+        $escapedLines = array_map('html_escape', $lines);
+
+        return [
+            'html' => implode('<br>', $escapedLines),
+            'text' => implode("\n", $lines),
+            'configured' => (bool) $configured,
+            'source' => 'perfex_company_settings',
+        ];
+    }
+
+    private function get_first_non_empty_option(array $keys)
+    {
+        foreach ($keys as $key) {
+            $value = trim((string) get_option($key));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function append_unique_company_line(array &$lines, $line)
+    {
+        $line = trim((string) $line);
+        if ($line === '' || in_array($line, $lines, true)) {
+            return;
+        }
+
+        $lines[] = $line;
+    }
+
+    private function is_unsafe_default_plain_text($text)
+    {
+        $normalized = preg_replace('/\s+/', ' ', html_entity_decode(trim((string) $text), ENT_QUOTES, 'UTF-8'));
+
+        foreach (self::UNSAFE_DEFAULT_PLAIN_TEXT_SIGNATURES as $signature) {
+            if ($normalized === $signature) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function respond_json(array $data, $statusCode = 200)
@@ -1261,11 +1899,20 @@ class Campaigns extends AdminController
                 case 'send_disabled':
                     $messages[] = _l('marketing_campaign_send_disabled_exact');
                     break;
+                case 'queue_paused':
+                    $messages[] = 'Campaign queue is paused.';
+                    break;
                 case 'hourly_cap_reached':
                     $messages[] = _l('marketing_campaign_hourly_cap_reached');
                     break;
                 case 'daily_cap_reached':
                     $messages[] = _l('marketing_campaign_daily_cap_reached');
+                    break;
+                case 'rate_limit_exhausted':
+                    $messages[] = 'Campaign sending is paused because the configured rate limit is exhausted.';
+                    break;
+                case 'license_inactive':
+                    $messages[] = _l('marketing_license_inactive_alert');
                     break;
                 case 'outside_send_window':
                     $messages[] = _l('marketing_campaign_outside_send_window');
@@ -1278,6 +1925,19 @@ class Campaigns extends AdminController
                     break;
                 case 'campaign_not_found':
                     $messages[] = _l('marketing_campaign_not_found');
+                    break;
+                case 'cron_overlap_detected':
+                case 'campaign_worker_locked':
+                    $messages[] = 'Another queue worker is already processing this campaign.';
+                    break;
+                case 'stale_worker_recovered':
+                    $messages[] = 'A stale campaign worker lease was recovered safely.';
+                    break;
+                case 'stale_recipient_processing_recovered':
+                    $messages[] = 'Stale recipient processing rows were recovered safely.';
+                    break;
+                case 'stale_processing_recovered_with_outbound_attempt':
+                    $messages[] = 'Recovered stale recipients were re-queued after preserving late-event reconciliation safety.';
                     break;
                 default:
                     if (strpos($warning, 'campaign_') === 0 && substr($warning, -10) === '_not_ready') {
@@ -1299,16 +1959,30 @@ class Campaigns extends AdminController
         foreach ($warnings as $warning) {
             if ($warning === 'send_disabled') {
                 $messages[] = 'Campaign delivery is disabled in Marketing Settings.';
+            } elseif ($warning === 'queue_paused') {
+                $messages[] = 'Campaign queue is paused. Resume the queue before sending.';
             } elseif ($warning === 'campaign_not_found') {
                 $messages[] = 'Campaign not found.';
             } elseif ($warning === 'campaign_not_processable') {
                 $messages[] = 'Campaign status is not processable.';
+            } elseif ($warning === 'license_inactive') {
+                $messages[] = marketing_license_block_message();
             } elseif ($warning === 'outside_send_window') {
                 $messages[] = 'Campaign sending is paused because the current time is outside the configured send window.';
             } elseif ($warning === 'hourly_cap_reached') {
                 $messages[] = 'Hourly sending cap reached.';
             } elseif ($warning === 'daily_cap_reached') {
                 $messages[] = 'Daily sending cap reached.';
+            } elseif ($warning === 'rate_limit_exhausted') {
+                $messages[] = 'Campaign sending is paused because the configured rate limit is exhausted.';
+            } elseif ($warning === 'cron_overlap_detected' || $warning === 'campaign_worker_locked') {
+                $messages[] = 'Another queue worker is already processing this campaign.';
+            } elseif ($warning === 'stale_worker_recovered') {
+                $messages[] = 'A stale campaign worker lease was recovered safely.';
+            } elseif ($warning === 'stale_recipient_processing_recovered') {
+                $messages[] = 'Stale recipient processing rows were recovered safely.';
+            } elseif ($warning === 'stale_processing_recovered_with_outbound_attempt') {
+                $messages[] = 'Recovered stale recipients were re-queued after preserving late-event reconciliation safety.';
             } elseif (strpos($warning, 'campaign_') === 0 && substr($warning, -10) === '_not_ready') {
                 $messages[] = 'Campaign is not ready to send. Check subject, HTML content, unsubscribe link, image URLs, SMTP settings, and audience.';
             } elseif (strpos($warning, 'campaign_') === 0 && substr($warning, -20) === '_no_queued_recipients') {
@@ -1328,6 +2002,25 @@ class Campaigns extends AdminController
         $value = strtolower(trim((string) get_option($key)));
 
         return in_array($value, ['1', 'yes', 'true', 'on'], true);
+    }
+
+    private function get_campaign_send_license_feature(array $campaign)
+    {
+        return $this->marketing_campaigns_model->is_whatsapp_campaign($campaign)
+            ? 'whatsapp_campaign_send'
+            : 'campaign_send';
+    }
+
+    private function should_require_prepare_license(array $snapshot)
+    {
+        $eligibleCount = isset($snapshot['eligible_contacts']) && is_array($snapshot['eligible_contacts'])
+            ? count($snapshot['eligible_contacts'])
+            : 0;
+        $threshold = defined('MARKETING_COMMERCIAL_PREPARE_THRESHOLD')
+            ? (int) MARKETING_COMMERCIAL_PREPARE_THRESHOLD
+            : 100;
+
+        return $eligibleCount >= max(1, $threshold);
     }
 
 
