@@ -357,13 +357,18 @@
     }
     .marketing-ops-compact-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: minmax(280px, .9fr) minmax(0, 1.35fr);
         gap: 18px;
         align-items: start;
         padding: 0;
         border: 0;
         background: transparent;
         box-shadow: none;
+    }
+    .marketing-ops-diagnostics-stack {
+        display: grid;
+        gap: 18px;
+        align-content: start;
     }
     .marketing-ops-compact-card {
         min-width: 0;
@@ -385,6 +390,9 @@
     .marketing-ops-compact-card .marketing-ops-table-shell {
         max-height: 260px;
         overflow: auto;
+    }
+    .marketing-ops-diagnostics-audit .marketing-ops-table-shell {
+        max-height: 100%;
     }
     .marketing-ops-badge-grid {
         display: flex;
@@ -662,9 +670,11 @@
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid,
-        .marketing-ops-compact-grid,
         .marketing-ops-integrity-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .marketing-ops-compact-grid {
+            grid-template-columns: 1fr;
         }
     }
     @media (max-width: 767px) {
@@ -1345,37 +1355,39 @@
                                             <?php } ?>
                                         </div>
                                         <div class="marketing-ops-section marketing-ops-compact-grid" data-marketing-dashboard-queue-diagnostics="1">
-                                            <div class="marketing-ops-compact-card">
-                                                <h5 class="marketing-ops-section-title">Recent Warnings</h5>
-                                                <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
-                                                <?php if (empty($recentQueueWarnings)) { ?>
-                                                    <div class="marketing-ops-empty">No warnings in the recent window.</div>
-                                                <?php } else { ?>
-                                                    <div class="marketing-ops-badge-grid">
-                                                        <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
-                                                            <span class="marketing-ops-badge">
-                                                                <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
-                                                            </span>
-                                                        <?php } ?>
-                                                    </div>
-                                                <?php } ?>
+                                            <div class="marketing-ops-diagnostics-stack">
+                                                <div class="marketing-ops-compact-card">
+                                                    <h5 class="marketing-ops-section-title">Recent Warnings</h5>
+                                                    <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
+                                                    <?php if (empty($recentQueueWarnings)) { ?>
+                                                        <div class="marketing-ops-empty">No warnings in the recent window.</div>
+                                                    <?php } else { ?>
+                                                        <div class="marketing-ops-badge-grid">
+                                                            <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
+                                                                <span class="marketing-ops-badge">
+                                                                    <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
+                                                                </span>
+                                                            <?php } ?>
+                                                        </div>
+                                                    <?php } ?>
+                                                </div>
+                                                <div class="marketing-ops-compact-card">
+                                                    <h5 class="marketing-ops-section-title">Failure Metrics</h5>
+                                                    <p class="marketing-ops-section-copy">Recent normalized provider and recipient failure signals retained for operator review.</p>
+                                                    <?php if (empty($recentFailureMetrics)) { ?>
+                                                        <div class="marketing-ops-empty">No failure signals in the recent diagnostics window.</div>
+                                                    <?php } else { ?>
+                                                        <div class="marketing-ops-badge-grid">
+                                                            <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
+                                                                <span class="marketing-ops-badge">
+                                                                    <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
+                                                                </span>
+                                                            <?php } ?>
+                                                        </div>
+                                                    <?php } ?>
+                                                </div>
                                             </div>
-                                            <div class="marketing-ops-compact-card">
-                                                <h5 class="marketing-ops-section-title">Failure Metrics</h5>
-                                                <p class="marketing-ops-section-copy">Recent normalized provider and recipient failure signals retained for operator review.</p>
-                                                <?php if (empty($recentFailureMetrics)) { ?>
-                                                    <div class="marketing-ops-empty">No failure signals in the recent diagnostics window.</div>
-                                                <?php } else { ?>
-                                                    <div class="marketing-ops-badge-grid">
-                                                        <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
-                                                            <span class="marketing-ops-badge">
-                                                                <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
-                                                            </span>
-                                                        <?php } ?>
-                                                    </div>
-                                                <?php } ?>
-                                            </div>
-                                            <div class="marketing-ops-compact-card">
+                                            <div class="marketing-ops-compact-card marketing-ops-diagnostics-audit">
                                                 <h5 class="marketing-ops-section-title">Operator Audit</h5>
                                                 <p class="marketing-ops-section-copy">Recent manual queue and recovery actions recorded for administrator visibility.</p>
                                                 <?php if (empty($recentOperatorActions)) { ?>
