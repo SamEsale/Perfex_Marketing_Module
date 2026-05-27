@@ -18,6 +18,7 @@ class Settings extends AdminController
         $this->load->model('marketing/Marketing_reply_leads_model', 'marketing_reply_leads_model');
         $this->load->model('marketing/Marketing_dashboard_model', 'marketing_dashboard_model');
         $this->load->library('marketing/Marketing_schema');
+        $this->load->library('marketing/Marketing_reply_mailbox');
         $this->load->library('marketing/Marketing_whatsapp');
         $this->marketingLicenseAvailable = $this->load_marketing_license_library();
     }
@@ -68,6 +69,12 @@ class Settings extends AdminController
             'marketing_reply_to_lead_assigned_staff' => get_option('marketing_reply_to_lead_assigned_staff'),
             'marketing_reply_to_lead_name_prefix' => get_option('marketing_reply_to_lead_name_prefix'),
             'marketing_inbound_email_secret'   => get_option('marketing_inbound_email_secret'),
+            'marketing_reply_mailbox_host'     => get_option('marketing_reply_mailbox_host'),
+            'marketing_reply_mailbox_port'     => get_option('marketing_reply_mailbox_port'),
+            'marketing_reply_mailbox_encryption' => get_option('marketing_reply_mailbox_encryption'),
+            'marketing_reply_mailbox_username' => get_option('marketing_reply_mailbox_username'),
+            'marketing_reply_mailbox_folder'   => get_option('marketing_reply_mailbox_folder'),
+            'marketing_reply_mailbox_processed_folder' => get_option('marketing_reply_mailbox_processed_folder'),
             'marketing_whatsapp_enabled'        => get_option('marketing_whatsapp_enabled'),
             'marketing_whatsapp_graph_version'  => get_option('marketing_whatsapp_graph_version'),
             'marketing_whatsapp_phone_number_id' => get_option('marketing_whatsapp_phone_number_id'),
@@ -87,6 +94,7 @@ class Settings extends AdminController
             foreach ($submittedSettings as $key => $value) {
                 if (array_key_exists($key, $data['settings'])
                     && $key !== 'marketing_smtp_password_raw'
+                    && $key !== 'marketing_reply_mailbox_password_raw'
                     && $key !== 'marketing_whatsapp_access_token_raw') {
                     $data['settings'][$key] = $value;
                 }
@@ -102,6 +110,8 @@ class Settings extends AdminController
             && !empty($data['lead_staff_options']);
         $data['smtp_password_configured'] = trim((string) get_option('marketing_smtp_password')) !== '';
         $data['inbound_email_secret_configured'] = trim((string) get_option('marketing_inbound_email_secret')) !== '';
+        $data['reply_mailbox_password_configured'] = trim((string) get_option('marketing_reply_mailbox_password')) !== '';
+        $data['reply_mailbox_readiness'] = $this->marketing_reply_mailbox->get_readiness_summary();
         $data['whatsapp_settings'] = $this->marketing_whatsapp->get_settings();
         if (is_array($submittedWhatsappSettings) && !empty($submittedWhatsappSettings)) {
             $whatsappFieldMap = [
@@ -519,6 +529,13 @@ class Settings extends AdminController
             'marketing_reply_to_lead_assigned_staff' => (string) $getValue('marketing_reply_to_lead_assigned_staff'),
             'marketing_reply_to_lead_name_prefix' => (string) $getValue('marketing_reply_to_lead_name_prefix'),
             'marketing_inbound_email_secret' => (string) $getValue('marketing_inbound_email_secret', false),
+            'marketing_reply_mailbox_host' => (string) $getValue('marketing_reply_mailbox_host'),
+            'marketing_reply_mailbox_port' => (string) $getValue('marketing_reply_mailbox_port'),
+            'marketing_reply_mailbox_encryption' => (string) $getValue('marketing_reply_mailbox_encryption'),
+            'marketing_reply_mailbox_username' => (string) $getValue('marketing_reply_mailbox_username'),
+            'marketing_reply_mailbox_folder' => (string) $getValue('marketing_reply_mailbox_folder'),
+            'marketing_reply_mailbox_processed_folder' => (string) $getValue('marketing_reply_mailbox_processed_folder'),
+            'marketing_reply_mailbox_password_raw' => trim((string) $this->input->post('marketing_reply_mailbox_password', false)),
             'marketing_smtp_password_raw' => trim((string) $this->input->post('marketing_smtp_password', false)),
         ];
     }
@@ -734,6 +751,12 @@ class Settings extends AdminController
         $this->form_validation->set_rules('marketing_reply_to_lead_assigned_staff', _l('marketing_reply_to_lead_assigned_staff'), 'trim|integer|greater_than_equal_to[0]');
         $this->form_validation->set_rules('marketing_reply_to_lead_name_prefix', _l('marketing_reply_to_lead_name_prefix'), 'trim|max_length[100]');
         $this->form_validation->set_rules('marketing_inbound_email_secret', _l('marketing_inbound_email_secret'), 'trim|max_length[255]');
+        $this->form_validation->set_rules('marketing_reply_mailbox_host', _l('marketing_reply_mailbox_host'), 'trim|max_length[255]');
+        $this->form_validation->set_rules('marketing_reply_mailbox_port', _l('marketing_reply_mailbox_port'), 'trim|integer|greater_than_equal_to[1]|less_than_equal_to[65535]');
+        $this->form_validation->set_rules('marketing_reply_mailbox_encryption', _l('marketing_reply_mailbox_encryption'), 'trim|in_list[ssl,tls,none]');
+        $this->form_validation->set_rules('marketing_reply_mailbox_username', _l('marketing_reply_mailbox_username'), 'trim|max_length[255]');
+        $this->form_validation->set_rules('marketing_reply_mailbox_folder', _l('marketing_reply_mailbox_folder'), 'trim|max_length[191]');
+        $this->form_validation->set_rules('marketing_reply_mailbox_processed_folder', _l('marketing_reply_mailbox_processed_folder'), 'trim|max_length[191]');
 
         if ($this->form_validation->run() === false) {
             $this->session->set_tempdata('marketing_settings_reply_lead_form_data', $posted, 60);
@@ -751,7 +774,21 @@ class Settings extends AdminController
             'marketing_reply_to_lead_assigned_staff' => (int) $posted['marketing_reply_to_lead_assigned_staff'],
             'marketing_reply_to_lead_name_prefix' => $posted['marketing_reply_to_lead_name_prefix'] !== '' ? $posted['marketing_reply_to_lead_name_prefix'] : 'Marketing Reply',
             'marketing_inbound_email_secret' => $postedSecret !== '' ? $postedSecret : $existingSecret,
+            'marketing_reply_mailbox_host' => trim((string) $posted['marketing_reply_mailbox_host']),
+            'marketing_reply_mailbox_port' => trim((string) $posted['marketing_reply_mailbox_port']),
+            'marketing_reply_mailbox_encryption' => trim((string) $posted['marketing_reply_mailbox_encryption']) !== '' ? trim((string) $posted['marketing_reply_mailbox_encryption']) : 'ssl',
+            'marketing_reply_mailbox_username' => trim((string) $posted['marketing_reply_mailbox_username']),
+            'marketing_reply_mailbox_folder' => trim((string) $posted['marketing_reply_mailbox_folder']) !== '' ? trim((string) $posted['marketing_reply_mailbox_folder']) : 'INBOX',
+            'marketing_reply_mailbox_processed_folder' => trim((string) $posted['marketing_reply_mailbox_processed_folder']),
         ];
+
+        $mailboxPassword = trim((string) ($posted['marketing_reply_mailbox_password_raw'] ?? ''));
+        if ($mailboxPassword !== '') {
+            $this->load->library('encryption');
+            $settings['marketing_reply_mailbox_password'] = $this->encryption->encrypt($mailboxPassword);
+        } elseif (total_rows(db_prefix() . 'options', ['name' => 'marketing_reply_mailbox_password']) === 0) {
+            $settings['marketing_reply_mailbox_password'] = '';
+        }
 
         $this->persist_settings($settings);
         log_message('info', 'Marketing reply-to-lead settings updated: ' . implode(', ', array_keys($settings)));
@@ -1181,6 +1218,27 @@ class Settings extends AdminController
         } else {
             $error = trim($result['error'] ?? '');
             set_alert('danger', _l('marketing_smtp_test_failure') . ($error ? ' ' . $error : ''));
+        }
+
+        redirect(admin_url('marketing/settings'));
+    }
+
+    public function test_reply_mailbox()
+    {
+        if (staff_cant('settings', 'marketing')) {
+            access_denied('marketing');
+        }
+
+        if (strtoupper((string) $this->input->method(true)) !== 'POST') {
+            show_404();
+        }
+
+        $result = $this->marketing_reply_mailbox->test_connection();
+        if (!empty($result['success'])) {
+            set_alert('success', _l('marketing_reply_mailbox_test_success'));
+        } else {
+            $error = trim((string) ($result['error'] ?? ''));
+            set_alert('danger', _l('marketing_reply_mailbox_test_failure') . ($error !== '' ? ' ' . $error : ''));
         }
 
         redirect(admin_url('marketing/settings'));

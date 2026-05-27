@@ -782,6 +782,45 @@ class Marketing_campaigns_model extends App_Model
         return null;
     }
 
+    public function find_recipient_for_reply_identifiers(array $identifiers, $campaignId = null)
+    {
+        $campaignId = $campaignId !== null ? (int) $campaignId : 0;
+        $normalizedIdentifiers = [];
+
+        foreach ($identifiers as $identifier) {
+            $identifier = trim((string) $identifier);
+            $identifier = trim($identifier, '<>');
+            if ($identifier === '') {
+                continue;
+            }
+
+            $normalized = $this->normalize_message_identifier($identifier);
+            if ($normalized === null) {
+                continue;
+            }
+
+            $normalizedIdentifiers[$normalized] = true;
+        }
+
+        foreach (array_keys($normalizedIdentifiers) as $identifier) {
+            $recipient = $this->find_recipient_by_message_identifier($identifier, $campaignId);
+            if (!empty($recipient)) {
+                return $recipient;
+            }
+        }
+
+        foreach (array_keys($normalizedIdentifiers) as $identifier) {
+            $recipient = $this->find_recipient_for_event($identifier, $identifier, null, [
+                'campaign_id' => $campaignId,
+            ]);
+            if (!empty($recipient)) {
+                return $recipient;
+            }
+        }
+
+        return null;
+    }
+
     protected function find_recipient_by_outbound_attempt_token($outboundAttemptToken, $campaignId = 0)
     {
         $outboundAttemptToken = trim((string) $outboundAttemptToken);

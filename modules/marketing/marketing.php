@@ -12,7 +12,7 @@ Requires at least: 3.2.*
 define('MARKETING_MODULE_NAME', 'marketing');
 define('MARKETING_MODULE_VERSION', '1.1.0');
 define('MARKETING_COMMERCIAL_PREPARE_THRESHOLD', 100);
-define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-21-import-queue-v12');
+define('MARKETING_SCHEMA_BOOTSTRAP_VERSION', '2026-05-23-reply-mailbox-v13');
 
 hooks()->add_action('admin_init', 'marketing_module_init_menu_items');
 hooks()->add_action('admin_init', 'marketing_register_permissions');
@@ -163,6 +163,11 @@ function module_marketing_action_links($actions)
 function marketing_cron_process_queue($manually = false)
 {
     $cronRunAt = date('Y-m-d H:i:s');
+    $replySnapshot = [
+        'status' => 'idle',
+        'processed_messages' => 0,
+        'warnings' => [],
+    ];
     $importSnapshot = [
         'status' => 'idle',
         'job_found' => false,
@@ -191,7 +196,28 @@ function marketing_cron_process_queue($manually = false)
 
     try {
         marketing_bootstrap_safe_schema();
+    } catch (Throwable $exception) {
+        $replySnapshot['status'] = 'failed';
+        $replySnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
+        log_message('error', 'Marketing safe schema bootstrap failed during cron: ' . marketing_sanitize_log_message($exception->getMessage()));
+    }
 
+    try {
+        $CI = &get_instance();
+        $CI->load->library('marketing/Marketing_reply_mailbox');
+        $replySummary = $CI->marketing_reply_mailbox->poll_mailbox();
+        $replySnapshot = array_merge($replySnapshot, [
+            'status' => (string) ($replySummary['status'] ?? 'idle'),
+            'processed_messages' => (int) ($replySummary['processed_count'] ?? 0),
+            'warnings' => array_values($replySummary['warnings'] ?? []),
+        ]);
+    } catch (Throwable $exception) {
+        $replySnapshot['status'] = 'failed';
+        $replySnapshot['warnings'] = [marketing_sanitize_log_message($exception->getMessage())];
+        log_message('error', 'Marketing reply mailbox polling failed: ' . marketing_sanitize_log_message($exception->getMessage()));
+    }
+
+    try {
         $CI = &get_instance();
         $CI->load->model('marketing/Marketing_imports_model', 'marketing_imports_model');
         $importSummary = $CI->marketing_imports_model->process_queued_imports([
@@ -279,6 +305,7 @@ function marketing_cron_process_queue($manually = false)
 
     marketing_update_runtime_option('marketing_cron_last_summary_json', marketing_build_cron_summary_json([
         'last_run_at' => $cronRunAt,
+        'reply_mailbox' => $replySnapshot,
         'import' => $importSnapshot,
         'campaign' => $campaignSnapshot,
     ]));
@@ -355,6 +382,16 @@ function marketing_get_default_options()
         'marketing_reply_to_lead_assigned_staff' => '0',
         'marketing_reply_to_lead_name_prefix' => 'Marketing Reply',
         'marketing_inbound_email_secret' => '',
+        'marketing_reply_mailbox_host' => '',
+        'marketing_reply_mailbox_port' => '993',
+        'marketing_reply_mailbox_encryption' => 'ssl',
+        'marketing_reply_mailbox_username' => '',
+        'marketing_reply_mailbox_password' => '',
+        'marketing_reply_mailbox_folder' => 'INBOX',
+        'marketing_reply_mailbox_processed_folder' => '',
+        'marketing_reply_mailbox_last_poll_at' => '',
+        'marketing_reply_mailbox_last_processed_count' => '0',
+        'marketing_reply_mailbox_last_error' => '',
         'marketing_whatsapp_enabled' => '0',
         'marketing_whatsapp_graph_version' => 'v23.0',
         'marketing_whatsapp_phone_number_id' => '',

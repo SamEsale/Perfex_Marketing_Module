@@ -16,4 +16,5 @@ $route['marketing/settings'] = 'settings/index';
 $route['marketing/settings/save'] = 'settings/save';
 $route['marketing/settings/save_whatsapp_settings'] = 'settings/save_whatsapp_settings';
 $route['marketing/settings/test_smtp'] = 'settings/test_smtp';
+$route['marketing/settings/test_reply_mailbox'] = 'settings/test_reply_mailbox';
 $route['marketing/settings/test_whatsapp'] = 'settings/test_whatsapp';

@@ -1,20 +1,25 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
 <style>
+    .marketing-dashboard-shell {
+        padding: 0;
+        background: transparent;
+        border-radius: 0;
+    }
     .marketing-dashboard-layout {
         display: grid;
-        gap: 22px;
+        gap: 24px;
     }
     .marketing-dashboard-hero {
         margin-bottom: 0;
-        padding: 20px 22px;
+        padding: 18px 20px;
         border: 1px solid rgba(148, 163, 184, .22);
-        border-radius: 18px;
-        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 55%, #fff7ed 100%);
+        border-radius: 16px;
+        background: #ffffff;
         box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
     }
     .marketing-dashboard-hero-copy {
-        margin: 8px 0 0;
+        margin: 10px 0 0;
         max-width: none;
         color: #64748b;
         font-size: 13px;
@@ -98,7 +103,7 @@
         overflow: hidden;
     }
     .marketing-dashboard-section-card.is-analytics {
-        background: linear-gradient(135deg, #fff8f1 0%, #ffffff 52%, #eff6ff 100%);
+        background: #ffffff;
     }
     .marketing-dashboard-section-body {
         padding: 18px 20px;
@@ -113,7 +118,7 @@
     .marketing-dashboard-section-title {
         margin: 0;
         color: #0f172a;
-        font-size: 18px;
+        font-size: 17px;
         font-weight: 700;
     }
     .marketing-dashboard-section-copy {
@@ -133,7 +138,7 @@
         padding: 14px 16px;
         border: 1px solid rgba(148, 163, 184, .18);
         border-radius: 14px;
-        background: rgba(255, 255, 255, .92);
+        background: #f8fafc;
         text-align: left;
     }
     .marketing-dashboard-mini-kpi .marketing-dashboard-summary-value {
@@ -144,42 +149,45 @@
         color: #64748b;
         font-size: 13px;
     }
-    .marketing-dashboard-click-grid {
+    .marketing-dashboard-click-strip {
         display: grid;
-        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr);
-        gap: 18px;
-        margin-top: 16px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 12px;
     }
-    .marketing-dashboard-click-panel {
-        min-width: 0;
-    }
-    .marketing-dashboard-table-shell {
-        overflow-x: auto;
+    .marketing-dashboard-click-chip {
+        padding: 14px 16px;
         border: 1px solid rgba(148, 163, 184, .18);
         border-radius: 14px;
-        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    }
-    .marketing-dashboard-table-shell .table {
-        margin-bottom: 0;
-    }
-    .marketing-dashboard-table-shell .table thead th {
-        border-bottom: 1px solid rgba(148, 163, 184, .22);
         background: #f8fafc;
-        color: #334155;
-        font-size: 12px;
+        min-width: 0;
+    }
+    .marketing-dashboard-click-chip.is-highlight {
+        background: #eff6ff;
+        border-color: rgba(59, 130, 246, .16);
+    }
+    .marketing-dashboard-click-chip-label {
+        display: block;
+        color: #64748b;
+        font-size: 11px;
         font-weight: 700;
-        letter-spacing: .04em;
+        letter-spacing: .08em;
         text-transform: uppercase;
-        white-space: nowrap;
     }
-    .marketing-dashboard-table-shell .table tbody td {
-        border-top: 1px solid rgba(226, 232, 240, .85);
+    .marketing-dashboard-click-chip-value {
+        display: block;
+        margin-top: 8px;
         color: #0f172a;
-        font-size: 13px;
-        vertical-align: middle;
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.2;
     }
-    .marketing-dashboard-table-shell .table-striped > tbody > tr:nth-of-type(odd) {
-        background-color: rgba(248, 250, 252, .72);
+    .marketing-dashboard-click-chip-copy {
+        display: block;
+        margin-top: 6px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.5;
     }
     .marketing-ops-shell {
         border: 1px solid rgba(148, 163, 184, .22);
@@ -212,13 +220,13 @@
     .marketing-dashboard-ops-grid {
         display: grid;
         grid-template-columns: repeat(12, minmax(0, 1fr));
-        gap: 16px;
-        margin-top: 16px;
+        gap: 18px;
+        margin-top: 18px;
     }
     .marketing-ops-section {
         grid-column: span 12;
         margin-top: 0;
-        padding: 18px;
+        padding: 18px 20px;
         border: 1px solid rgba(148, 163, 184, .22);
         border-radius: 16px;
         background: #ffffff;
@@ -240,8 +248,9 @@
         margin: 0 8px 8px 0;
         padding: 7px 10px;
         border-radius: 999px;
-        background: #eff6ff;
-        color: #1d4ed8;
+        background: #ffffff;
+        border: 1px solid rgba(148, 163, 184, .28);
+        color: #334155;
         font-size: 12px;
         font-weight: 600;
     }
@@ -251,15 +260,15 @@
         gap: 6px;
         padding: 7px 11px;
         border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, .22);
+        border: 1px solid rgba(148, 163, 184, .28);
         background: #ffffff;
-        color: #0f172a;
+        color: #334155;
         font-size: 12px;
         font-weight: 700;
     }
     .marketing-ops-control-shell,
     .marketing-ops-table-shell {
-        margin-top: 14px;
+        margin-top: 16px;
         padding: 16px;
         border-radius: 14px;
         border: 1px solid rgba(148, 163, 184, .18);
@@ -267,11 +276,18 @@
     }
     .marketing-ops-control-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
-        gap: 16px;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+        gap: 18px;
+        align-items: start;
     }
     .marketing-ops-button-row .btn {
-        margin: 0 10px 10px 0;
+        margin: 0;
+    }
+    .marketing-ops-button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-start;
     }
     .marketing-ops-list {
         display: grid;
@@ -280,7 +296,8 @@
     .marketing-ops-list-row {
         display: flex;
         justify-content: space-between;
-        gap: 16px;
+        align-items: center;
+        gap: 14px;
         padding-bottom: 10px;
         border-bottom: 1px solid #f1f5f9;
         color: #334155;
@@ -295,12 +312,14 @@
         font-weight: 700;
     }
     .marketing-ops-empty {
-        margin-top: 12px;
+        margin-top: 14px;
         padding: 14px 16px;
-        border: 1px dashed #cbd5e1;
-        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        border-radius: 14px;
         color: #64748b;
         background: #f8fafc;
+        font-size: 13px;
+        line-height: 1.6;
     }
     .marketing-ops-metric {
         background: #f8fafc;
@@ -333,22 +352,27 @@
     .marketing-ops-retention-grid,
     .marketing-ops-health-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
     }
     .marketing-ops-compact-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
+        grid-template-columns: minmax(280px, .9fr) minmax(0, 1.35fr);
+        gap: 18px;
         align-items: start;
         padding: 0;
         border: 0;
         background: transparent;
         box-shadow: none;
     }
+    .marketing-ops-diagnostics-stack {
+        display: grid;
+        gap: 18px;
+        align-content: start;
+    }
     .marketing-ops-compact-card {
         min-width: 0;
-        padding: 18px;
+        padding: 18px 20px;
         border: 1px solid rgba(148, 163, 184, .22);
         border-radius: 16px;
         background: #ffffff;
@@ -358,14 +382,17 @@
         margin-bottom: 0;
     }
     .marketing-ops-compact-card .marketing-ops-section-copy {
-        min-height: 36px;
+        min-height: 0;
     }
     .marketing-ops-compact-card .marketing-ops-badge-grid {
-        margin-top: 12px;
+        margin-top: 14px;
     }
     .marketing-ops-compact-card .marketing-ops-table-shell {
-        max-height: 248px;
+        max-height: 260px;
         overflow: auto;
+    }
+    .marketing-ops-diagnostics-audit .marketing-ops-table-shell {
+        max-height: 100%;
     }
     .marketing-ops-badge-grid {
         display: flex;
@@ -376,7 +403,7 @@
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
-        margin-top: 14px;
+        margin-top: 16px;
     }
     .marketing-ops-integrity-badge.critical {
         background: #fef2f2;
@@ -389,7 +416,7 @@
     .marketing-ops-advanced {
         margin-top: 16px;
         padding: 14px 16px;
-        border: 1px dashed #cbd5e1;
+        border: 1px solid rgba(148, 163, 184, .18);
         border-radius: 14px;
         background: #f8fafc;
     }
@@ -437,14 +464,14 @@
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        margin-top: 12px;
+        margin-top: 14px;
     }
     .marketing-ops-cron-chip {
         display: inline-flex;
         align-items: center;
         gap: 8px;
         padding: 9px 12px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid rgba(148, 163, 184, .18);
         border-radius: 999px;
         background: #ffffff;
         color: #0f172a;
@@ -488,8 +515,8 @@
         color: #334155;
     }
     .marketing-ops-cron-details {
-        margin-top: 14px;
-        border: 1px dashed #cbd5e1;
+        margin-top: 16px;
+        border: 1px solid rgba(148, 163, 184, .18);
         border-radius: 14px;
         background: #f8fafc;
         overflow: hidden;
@@ -543,10 +570,37 @@
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
-        margin-top: 14px;
+        margin-top: 16px;
     }
     .marketing-dashboard-whatsapp-summary .marketing-ops-metric {
         min-height: 0;
+    }
+    .marketing-ops-table-shell .table {
+        margin-bottom: 0;
+    }
+    .marketing-ops-table-shell .table > thead > tr > th {
+        padding: 12px 14px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .marketing-ops-table-shell .table > tbody > tr > td {
+        padding: 10px 14px;
+        border-top: 1px solid #f1f5f9;
+        color: #0f172a;
+        font-size: 13px;
+        vertical-align: middle;
+    }
+    .marketing-ops-table-shell .table > tbody > tr:first-child > td {
+        border-top: 0;
+    }
+    .marketing-ops-table-shell .table > tbody > tr:nth-child(even) {
+        background: rgba(248, 250, 252, .72);
     }
     [data-marketing-cron-health-panel="1"] {
         grid-column: span 12;
@@ -561,15 +615,26 @@
     [data-marketing-dashboard-retention-panel="1"] {
         grid-column: span 12;
     }
+    [data-marketing-dashboard-whatsapp-panel="1"] .marketing-ops-table-shell,
+    [data-marketing-dashboard-queue-diagnostics="1"] .marketing-ops-table-shell {
+        overflow-x: auto;
+    }
+    @media (max-width: 1399px) {
+        .marketing-ops-control-grid {
+            grid-template-columns: 1fr;
+        }
+        .marketing-ops-health-grid,
+        .marketing-ops-retention-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
     @media (min-width: 1200px) {
         .marketing-dashboard-hero-copy {
             white-space: nowrap;
         }
     }
     @media (max-width: 1199px) {
-        .marketing-dashboard-click-grid {
-            grid-template-columns: 1fr;
-        }
+        .marketing-dashboard-click-strip,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -605,14 +670,17 @@
         .marketing-ops-control-grid,
         .marketing-ops-retention-grid,
         .marketing-ops-health-grid,
-        .marketing-ops-compact-grid,
         .marketing-ops-integrity-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .marketing-ops-compact-grid {
+            grid-template-columns: 1fr;
         }
     }
     @media (max-width: 767px) {
         .marketing-dashboard-summary-grid,
         .marketing-dashboard-mini-kpis,
+        .marketing-dashboard-click-strip,
         .marketing-dashboard-whatsapp-summary {
             grid-template-columns: repeat(1, minmax(0, 1fr));
         }
@@ -682,7 +750,7 @@
         <div class="row">
             <div class="col-md-12">
                 <div class="panel_s">
-                    <div class="panel-body" data-marketing-dashboard-analytics-layout="1">
+                    <div class="panel-body marketing-dashboard-shell" data-marketing-dashboard-analytics-layout="1">
                         <div class="marketing-dashboard-layout">
                         <div class="marketing-dashboard-hero" data-marketing-dashboard-hero-wide="1">
                             <h4 class="no-margin"><?= _l('marketing_dashboard'); ?></h4>
@@ -732,95 +800,50 @@
                         </div>
                         <div class="marketing-dashboard-section-card is-analytics">
                             <div class="marketing-dashboard-section-body">
-                                        <div class="marketing-dashboard-section-head">
-                                            <div>
-                                                <h4 class="marketing-dashboard-section-title"><?= _l('marketing_link_click_analytics'); ?></h4>
-                                                <p class="marketing-dashboard-section-copy"><?= _l('marketing_dashboard_click_analytics_copy'); ?></p>
-                                            </div>
-                                            <div class="marketing-dashboard-mini-kpis">
-                                                <div class="marketing-dashboard-mini-kpi">
-                                                    <span class="marketing-dashboard-summary-label"><?= _l('marketing_human_clicks'); ?></span>
-                                                    <span class="marketing-dashboard-summary-value" style="color:#ea580c;"><?= html_escape($click_analytics['human_clicks']); ?></span>
-                                                    <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_click_human_helper'); ?></span>
-                                                </div>
-                                                <div class="marketing-dashboard-mini-kpi">
-                                                    <span class="marketing-dashboard-summary-label"><?= _l('marketing_unique_human_clicks'); ?></span>
-                                                    <span class="marketing-dashboard-summary-value" style="color:#2563eb;"><?= html_escape($click_analytics['unique_human_clicks']); ?></span>
-                                                    <span class="marketing-dashboard-summary-helper"><?= _l('marketing_dashboard_click_unique_helper'); ?></span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <p class="marketing-dashboard-inline-note"><?= sprintf(_l('marketing_raw_click_events_helper'), (int) $click_analytics['raw_click_events']); ?></p>
-
-                                        <?php if (!$click_analytics['has_data']) { ?>
-                                            <div class="alert alert-info mtop15 mbot0">
-                                                <?= _l('marketing_click_analytics_empty'); ?>
-                                            </div>
-                                        <?php } else { ?>
-                                            <div class="marketing-dashboard-click-grid">
-                                                <div class="marketing-dashboard-click-panel">
-                                                    <div style="position:relative;height:360px;">
-                                                        <canvas id="marketing-click-analytics-chart" height="360"></canvas>
-                                                    </div>
-                                                    <div id="marketing-click-chart-fallback" class="hide">
-                                                        <div class="alert alert-info">
-                                                            <?= _l('marketing_click_chart_fallback'); ?>
-                                                        </div>
-                                                        <div class="marketing-dashboard-table-shell">
-                                                            <table class="table table-striped">
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th><?= _l('marketing_click_target'); ?></th>
-                                                                        <th><?= _l('marketing_human_clicks'); ?></th>
-                                                                        <th><?= _l('marketing_unique_human_clicks'); ?></th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    <?php
-                                                                    $fallbackRows = $click_analytics['chart_mode'] === 'links' ? $click_analytics['top_clicked_links'] : $click_analytics['clicks_by_campaign'];
-                                                                    foreach ($fallbackRows as $row) {
-                                                                        $label = $click_analytics['chart_mode'] === 'links' ? $row['url'] : $row['campaign_name'];
-                                                                        ?>
-                                                                        <tr>
-                                                                            <td title="<?= html_escape($label); ?>"><?= html_escape($truncate_dashboard_label($label)); ?></td>
-                                                                            <td><?= (int) $row['count']; ?></td>
-                                                                            <td><?= (int) ($row['unique_count'] ?? 0); ?></td>
-                                                                        </tr>
-                                                                    <?php } ?>
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="marketing-dashboard-click-panel">
-                                                    <h5 class="bold"><?= _l($click_analytics['chart_mode'] === 'links' ? 'marketing_top_clicked_links' : 'marketing_clicks_by_campaign'); ?></h5>
-                                                    <div class="marketing-dashboard-table-shell">
-                                                        <table class="table table-striped">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th><?= _l('marketing_click_target'); ?></th>
-                                                                    <th><?= _l('marketing_human_clicks'); ?></th>
-                                                                    <th><?= _l('marketing_unique_human_clicks'); ?></th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <?php
-                                                                $detailRows = $click_analytics['chart_mode'] === 'links' ? $click_analytics['top_clicked_links'] : $click_analytics['clicks_by_campaign'];
-                                                                foreach ($detailRows as $row) {
-                                                                    $label = $click_analytics['chart_mode'] === 'links' ? $row['url'] : $row['campaign_name'];
-                                                                    ?>
-                                                                    <tr>
-                                                                        <td title="<?= html_escape($label); ?>"><?= html_escape($truncate_dashboard_label($label)); ?></td>
-                                                                        <td><span class="label label-primary"><?= (int) $row['count']; ?></span></td>
-                                                                        <td><span class="label label-default"><?= (int) ($row['unique_count'] ?? 0); ?></span></td>
-                                                                    </tr>
-                                                                <?php } ?>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        <?php } ?>
+                                <?php
+                                $topClickRow = !empty($click_analytics['top_clicked_links'])
+                                    ? $click_analytics['top_clicked_links'][0]
+                                    : (!empty($click_analytics['clicks_by_campaign']) ? $click_analytics['clicks_by_campaign'][0] : null);
+                                $topClickLabel = '-';
+                                $topClickHelper = _l('marketing_click_analytics_empty');
+                                if (is_array($topClickRow)) {
+                                    $topClickLabel = !empty($click_analytics['top_clicked_links'])
+                                        ? (string) ($topClickRow['url'] ?? '-')
+                                        : (string) ($topClickRow['campaign_name'] ?? '-');
+                                    $topClickHelper = !empty($click_analytics['top_clicked_links'])
+                                        ? ((int) ($topClickRow['count'] ?? 0) . ' ' . strtolower(_l('marketing_human_clicks')))
+                                        : ((int) ($topClickRow['count'] ?? 0) . ' ' . strtolower(_l('marketing_campaigns')));
+                                }
+                                ?>
+                                <div class="marketing-dashboard-section-head">
+                                    <div>
+                                        <h4 class="marketing-dashboard-section-title"><?= _l('marketing_link_click_analytics'); ?></h4>
+                                        <p class="marketing-dashboard-section-copy"><?= _l('marketing_dashboard_click_analytics_copy'); ?></p>
+                                    </div>
+                                    <a href="<?= admin_url('marketing/analytics'); ?>" class="btn btn-default btn-sm"><?= _l('marketing_view_full_analytics'); ?></a>
+                                </div>
+                                <div class="marketing-dashboard-click-strip">
+                                    <div class="marketing-dashboard-click-chip">
+                                        <span class="marketing-dashboard-click-chip-label"><?= _l('marketing_human_clicks'); ?></span>
+                                        <span class="marketing-dashboard-click-chip-value" style="color:#ea580c;"><?= html_escape($click_analytics['human_clicks']); ?></span>
+                                        <span class="marketing-dashboard-click-chip-copy"><?= _l('marketing_dashboard_click_human_helper'); ?></span>
+                                    </div>
+                                    <div class="marketing-dashboard-click-chip">
+                                        <span class="marketing-dashboard-click-chip-label"><?= _l('marketing_unique_human_clicks'); ?></span>
+                                        <span class="marketing-dashboard-click-chip-value" style="color:#2563eb;"><?= html_escape($click_analytics['unique_human_clicks']); ?></span>
+                                        <span class="marketing-dashboard-click-chip-copy"><?= _l('marketing_dashboard_click_unique_helper'); ?></span>
+                                    </div>
+                                    <div class="marketing-dashboard-click-chip">
+                                        <span class="marketing-dashboard-click-chip-label"><?= _l('marketing_dashboard_click_raw_label'); ?></span>
+                                        <span class="marketing-dashboard-click-chip-value"><?= html_escape($click_analytics['raw_click_events']); ?></span>
+                                        <span class="marketing-dashboard-click-chip-copy"><?= _l('marketing_dashboard_click_raw_helper_compact'); ?></span>
+                                    </div>
+                                    <div class="marketing-dashboard-click-chip is-highlight">
+                                        <span class="marketing-dashboard-click-chip-label"><?= !empty($click_analytics['top_clicked_links']) ? _l('marketing_dashboard_click_top_link_label') : _l('marketing_dashboard_click_top_campaign_label'); ?></span>
+                                        <span class="marketing-dashboard-click-chip-value" title="<?= html_escape($topClickLabel); ?>"><?= html_escape($truncate_dashboard_label($topClickLabel, 34)); ?></span>
+                                        <span class="marketing-dashboard-click-chip-copy"><?= html_escape($topClickHelper); ?></span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         </div>
@@ -1332,37 +1355,39 @@
                                             <?php } ?>
                                         </div>
                                         <div class="marketing-ops-section marketing-ops-compact-grid" data-marketing-dashboard-queue-diagnostics="1">
-                                            <div class="marketing-ops-compact-card">
-                                                <h5 class="marketing-ops-section-title">Recent Warnings</h5>
-                                                <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
-                                                <?php if (empty($recentQueueWarnings)) { ?>
-                                                    <div class="marketing-ops-empty">No warnings in the recent window.</div>
-                                                <?php } else { ?>
-                                                    <div class="marketing-ops-badge-grid">
-                                                        <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
-                                                            <span class="marketing-ops-badge">
-                                                                <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
-                                                            </span>
-                                                        <?php } ?>
-                                                    </div>
-                                                <?php } ?>
+                                            <div class="marketing-ops-diagnostics-stack">
+                                                <div class="marketing-ops-compact-card">
+                                                    <h5 class="marketing-ops-section-title">Recent Warnings</h5>
+                                                    <p class="marketing-ops-section-copy">Recent queue-level warning payloads from bounded batch telemetry.</p>
+                                                    <?php if (empty($recentQueueWarnings)) { ?>
+                                                        <div class="marketing-ops-empty">No warnings in the recent window.</div>
+                                                    <?php } else { ?>
+                                                        <div class="marketing-ops-badge-grid">
+                                                            <?php foreach ($recentQueueWarnings as $warningCode => $warningCount) { ?>
+                                                                <span class="marketing-ops-badge">
+                                                                    <?= html_escape(ucwords(str_replace('_', ' ', (string) $warningCode))); ?>: <?= (int) $warningCount; ?>
+                                                                </span>
+                                                            <?php } ?>
+                                                        </div>
+                                                    <?php } ?>
+                                                </div>
+                                                <div class="marketing-ops-compact-card">
+                                                    <h5 class="marketing-ops-section-title">Failure Metrics</h5>
+                                                    <p class="marketing-ops-section-copy">Recent normalized provider and recipient failure signals retained for operator review.</p>
+                                                    <?php if (empty($recentFailureMetrics)) { ?>
+                                                        <div class="marketing-ops-empty">No failure signals in the recent diagnostics window.</div>
+                                                    <?php } else { ?>
+                                                        <div class="marketing-ops-badge-grid">
+                                                            <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
+                                                                <span class="marketing-ops-badge">
+                                                                    <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
+                                                                </span>
+                                                            <?php } ?>
+                                                        </div>
+                                                    <?php } ?>
+                                                </div>
                                             </div>
-                                            <div class="marketing-ops-compact-card">
-                                                <h5 class="marketing-ops-section-title">Failure Metrics</h5>
-                                                <p class="marketing-ops-section-copy">Recent normalized provider and recipient failure signals retained for operator review.</p>
-                                                <?php if (empty($recentFailureMetrics)) { ?>
-                                                    <div class="marketing-ops-empty">No failure signals in the recent diagnostics window.</div>
-                                                <?php } else { ?>
-                                                    <div class="marketing-ops-badge-grid">
-                                                        <?php foreach ($recentFailureMetrics as $metricCode => $metricCount) { ?>
-                                                            <span class="marketing-ops-badge">
-                                                                <?= html_escape(ucwords(str_replace('_', ' ', (string) $metricCode))); ?>: <?= (int) $metricCount; ?>
-                                                            </span>
-                                                        <?php } ?>
-                                                    </div>
-                                                <?php } ?>
-                                            </div>
-                                            <div class="marketing-ops-compact-card">
+                                            <div class="marketing-ops-compact-card marketing-ops-diagnostics-audit">
                                                 <h5 class="marketing-ops-section-title">Operator Audit</h5>
                                                 <p class="marketing-ops-section-copy">Recent manual queue and recovery actions recorded for administrator visibility.</p>
                                                 <?php if (empty($recentOperatorActions)) { ?>
@@ -1459,71 +1484,5 @@
     </div>
 </div>
 <?php init_tail(); ?>
-<?php if ($click_analytics['has_data']) { ?>
-<script>
-    (function () {
-        var chartCanvas = document.getElementById('marketing-click-analytics-chart');
-        if (!chartCanvas) {
-            return;
-        }
-
-        var labels = <?= json_encode(array_values($click_analytics['chart_labels'])); ?>;
-        var values = <?= json_encode(array_values($click_analytics['chart_values'])); ?>;
-        var fallback = document.getElementById('marketing-click-chart-fallback');
-        var palette = ['#f97316', '#2563eb', '#14b8a6', '#e11d48', '#7c3aed', '#eab308', '#0f766e'];
-
-        if (typeof window.Chart === 'undefined') {
-            chartCanvas.classList.add('hide');
-            if (fallback) {
-                fallback.classList.remove('hide');
-            }
-            return;
-        }
-
-        new Chart(chartCanvas, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: palette.slice(0, values.length),
-                    borderColor: '#ffffff',
-                    borderWidth: 3,
-                    hoverOffset: 8
-                }]
-            },
-            options: {
-                maintainAspectRatio: false,
-                cutout: '58%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            boxWidth: 14,
-                            padding: 18,
-                            generateLabels: function (chart) {
-                                var original = Chart.overrides.doughnut.plugins.legend.labels.generateLabels(chart);
-                                return original.map(function (item) {
-                                    var text = item.text || '';
-                                    item.text = text.length > 40 ? text.substring(0, 37) + '...' : text;
-                                    return item;
-                                });
-                            }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            title: function (tooltipItems) {
-                                var item = tooltipItems[0];
-                                return labels[item.dataIndex] || '';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }());
-</script>
-<?php } ?>
 </body>
 </html>

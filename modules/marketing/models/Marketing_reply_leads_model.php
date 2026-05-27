@@ -268,7 +268,6 @@ class Marketing_reply_leads_model extends App_Model
         $db = $this->getDb();
         $email = $this->normalize_email($context['email'] ?? '');
         $enabled = get_option('marketing_reply_to_lead_enabled') === '1';
-        $unknownOnly = get_option('marketing_reply_to_lead_unknown_only') === '1';
 
         if (!$enabled) {
             return $result;
@@ -301,13 +300,6 @@ class Marketing_reply_leads_model extends App_Model
                 'event_type' => 'reply_lead_existing',
                 'lead_error' => null,
             ];
-        }
-
-        if ($unknownOnly && !empty($context['existing_marketing_contact'])) {
-            $result['lead_action'] = 'skipped';
-            $result['lead_error'] = 'Skipped because sender is already a known marketing contact';
-
-            return $result;
         }
 
         $leadData = $this->build_lead_data($context, $email);
@@ -529,6 +521,10 @@ class Marketing_reply_leads_model extends App_Model
 
         if (!empty($context['subject'])) {
             $lines[] = 'Reply Subject: ' . trim((string) $context['subject']);
+        }
+
+        if (!empty($context['received_at'])) {
+            $lines[] = 'Received At: ' . trim((string) $context['received_at']);
         }
 
         if (!empty($context['preview'])) {

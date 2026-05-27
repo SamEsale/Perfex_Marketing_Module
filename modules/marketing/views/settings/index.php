@@ -90,6 +90,17 @@ $cronQueueReadiness = array_merge([
     'oldest_queued_age_minutes' => null,
     'stale_processing_count' => 0,
 ], $cronQueueReadiness);
+$reply_mailbox_readiness = isset($reply_mailbox_readiness) && is_array($reply_mailbox_readiness) ? $reply_mailbox_readiness : [];
+$reply_mailbox_readiness = array_merge([
+    'enabled' => false,
+    'imap_available' => false,
+    'mailbox_configured' => false,
+    'last_poll_at' => '',
+    'last_processed_count' => 0,
+    'last_error' => '',
+    'folder' => '',
+    'processed_folder' => '',
+], $reply_mailbox_readiness);
 
 $whatsappEnabled = !empty($whatsapp_settings['enabled']);
 $licenseStatusClass = 'alert-info';
@@ -786,6 +797,9 @@ $settingsSectionNav = [
                                                 <label for="marketing_smtp_password" class="control-label"><?= _l('marketing_smtp_password'); ?></label>
                                                 <input type="password" id="marketing_smtp_password" name="marketing_smtp_password" class="form-control" value="" placeholder="<?= html_escape(_l('marketing_smtp_password_help')); ?>">
                                                 <p class="text-muted mtop5"><?= _l('marketing_smtp_password_visibility_note'); ?></p>
+                                                <div class="alert <?= !empty($smtp_password_configured) ? 'alert-success' : 'alert-warning'; ?> mtop10 mbot0">
+                                                    <?= !empty($smtp_password_configured) ? _l('marketing_smtp_password_status_configured') : _l('marketing_smtp_password_status_missing'); ?>
+                                                </div>
                                             </div>
                                             <div class="form-group">
                                                 <label for="marketing_smtp_from_email" class="control-label"><?= _l('marketing_smtp_from_email'); ?></label>
@@ -888,21 +902,7 @@ $settingsSectionNav = [
                                         <h4 class="marketing-settings-panel-title"><?= _l('settings'); ?></h4>
                                         <p class="marketing-settings-panel-copy"><?= _l('marketing_settings_placeholder'); ?></p>
 
-                                        <div class="form-group">
-                                            <label class="control-label"><?= _l('marketing_send_enabled'); ?></label>
-                                            <div class="radio radio-primary radio-inline">
-                                                <input type="radio" id="marketing_send_enabled_yes" name="<?= html_escape($settingFieldName('marketing_send_enabled')); ?>" value="1" <?= $settingBool('marketing_send_enabled') ? 'checked' : ''; ?>>
-                                                <label for="marketing_send_enabled_yes"><?= _l('settings_yes'); ?></label>
-                                            </div>
-                                            <div class="radio radio-primary radio-inline">
-                                                <input type="radio" id="marketing_send_enabled_no" name="<?= html_escape($settingFieldName('marketing_send_enabled')); ?>" value="0" <?= !$settingBool('marketing_send_enabled') ? 'checked' : ''; ?>>
-                                                <label for="marketing_send_enabled_no"><?= _l('settings_no'); ?></label>
-                                            </div>
-                                        </div>
 
-                                        <div class="alert alert-warning">
-                                            <?= _l('marketing_settings_send_enabled_warning'); ?>
-                                        </div>
                                         <div class="alert alert-info">
                                             <?= _l('marketing_delivery_source_of_truth_note'); ?>
                                         </div>
@@ -1090,12 +1090,101 @@ $settingsSectionNav = [
                                             </div>
                                         </div>
 
+                                        <details class="marketing-settings-details" open>
+                                            <summary><?= _l('marketing_reply_mailbox_heading'); ?></summary>
+                                            <div class="marketing-settings-details-body">
+                                                <p class="text-muted"><?= _l('marketing_reply_mailbox_note'); ?></p>
+                                                <div class="marketing-settings-form-grid marketing-settings-form-grid-2">
+                                                    <div class="form-group">
+                                                        <label for="marketing_reply_mailbox_host" class="control-label"><?= _l('marketing_reply_mailbox_host'); ?></label>
+                                                        <input type="text" id="marketing_reply_mailbox_host" name="<?= html_escape($settingFieldName('marketing_reply_mailbox_host')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_reply_mailbox_host')); ?>">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label for="marketing_reply_mailbox_port" class="control-label"><?= _l('marketing_reply_mailbox_port'); ?></label>
+                                                        <input type="number" min="1" max="65535" id="marketing_reply_mailbox_port" name="<?= html_escape($settingFieldName('marketing_reply_mailbox_port')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_reply_mailbox_port', '993')); ?>">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label for="marketing_reply_mailbox_encryption" class="control-label"><?= _l('marketing_reply_mailbox_encryption'); ?></label>
+                                                        <select id="marketing_reply_mailbox_encryption" name="<?= html_escape($settingFieldName('marketing_reply_mailbox_encryption')); ?>" class="form-control">
+                                                            <option value="ssl" <?= (string) $settingValue('marketing_reply_mailbox_encryption', 'ssl') === 'ssl' ? 'selected' : ''; ?>><?= _l('marketing_reply_mailbox_encryption_ssl'); ?></option>
+                                                            <option value="tls" <?= (string) $settingValue('marketing_reply_mailbox_encryption', 'ssl') === 'tls' ? 'selected' : ''; ?>><?= _l('marketing_reply_mailbox_encryption_tls'); ?></option>
+                                                            <option value="none" <?= (string) $settingValue('marketing_reply_mailbox_encryption', 'ssl') === 'none' ? 'selected' : ''; ?>><?= _l('marketing_reply_mailbox_encryption_none'); ?></option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label for="marketing_reply_mailbox_username" class="control-label"><?= _l('marketing_reply_mailbox_username'); ?></label>
+                                                        <input type="text" id="marketing_reply_mailbox_username" name="<?= html_escape($settingFieldName('marketing_reply_mailbox_username')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_reply_mailbox_username')); ?>">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label for="marketing_reply_mailbox_folder" class="control-label"><?= _l('marketing_reply_mailbox_folder'); ?></label>
+                                                        <input type="text" id="marketing_reply_mailbox_folder" name="<?= html_escape($settingFieldName('marketing_reply_mailbox_folder')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_reply_mailbox_folder', 'INBOX')); ?>">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label for="marketing_reply_mailbox_processed_folder" class="control-label"><?= _l('marketing_reply_mailbox_processed_folder'); ?></label>
+                                                        <input type="text" id="marketing_reply_mailbox_processed_folder" name="<?= html_escape($settingFieldName('marketing_reply_mailbox_processed_folder')); ?>" class="form-control" value="<?= html_escape($settingValue('marketing_reply_mailbox_processed_folder')); ?>">
+                                                    </div>
+                                                    <div class="form-group marketing-settings-form-span-2">
+                                                        <label for="marketing_reply_mailbox_password" class="control-label"><?= _l('marketing_reply_mailbox_password'); ?></label>
+                                                        <input type="password" id="marketing_reply_mailbox_password" name="marketing_reply_mailbox_password" class="form-control" value="" autocomplete="new-password">
+                                                        <p class="text-muted mtop5"><?= _l('marketing_reply_mailbox_password_help'); ?></p>
+                                                        <div class="alert <?= !empty($reply_mailbox_password_configured) ? 'alert-success' : 'alert-warning'; ?> mtop10 mbot0">
+                                                            <?= !empty($reply_mailbox_password_configured) ? _l('marketing_reply_mailbox_password_status_configured') : _l('marketing_reply_mailbox_password_status_missing'); ?>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </details>
+
                                         <div class="marketing-settings-form-actions">
-                                            <button type="submit" class="btn btn-primary"><?= _l('save'); ?></button>
+                                            <button type="submit" class="btn btn-primary"><?= _l('marketing_save_reply_to_lead_settings'); ?></button>
                                         </div>
                                     </div>
                                 </div>
                                 <?= form_close(); ?>
+
+                                <div class="panel_s marketing-settings-panel">
+                                    <div class="panel-body">
+                                        <div class="marketing-provider-readiness-header">
+                                            <h4 class="marketing-settings-panel-title"><?= _l('marketing_reply_mailbox_diagnostics_heading'); ?></h4>
+                                            <span class="<?= html_escape(!empty($reply_mailbox_readiness['mailbox_configured']) && !empty($reply_mailbox_readiness['imap_available']) ? 'marketing-provider-readiness-status marketing-provider-readiness-status-ready' : 'marketing-provider-readiness-status marketing-provider-readiness-status-needs_review'); ?>">
+                                                <?= html_escape(!empty($reply_mailbox_readiness['mailbox_configured']) && !empty($reply_mailbox_readiness['imap_available']) ? _l('marketing_provider_readiness_status_ready') : _l('marketing_provider_readiness_status_needs_configuration')); ?>
+                                            </span>
+                                        </div>
+                                        <p class="marketing-settings-panel-copy"><?= _l('marketing_reply_mailbox_diagnostics_note'); ?></p>
+                                        <ul class="marketing-provider-readiness-checks">
+                                            <li>
+                                                <span><?= _l('marketing_reply_mailbox_enabled_label'); ?></span>
+                                                <span class="marketing-provider-readiness-check-value"><?= !empty($reply_mailbox_readiness['enabled']) ? _l('settings_yes') : _l('settings_no'); ?></span>
+                                            </li>
+                                            <li>
+                                                <span><?= _l('marketing_reply_mailbox_configured'); ?></span>
+                                                <span class="marketing-provider-readiness-check-value"><?= !empty($reply_mailbox_readiness['mailbox_configured']) ? _l('marketing_provider_readiness_check_configured') : _l('marketing_provider_readiness_check_missing'); ?></span>
+                                            </li>
+                                            <li>
+                                                <span><?= _l('marketing_reply_mailbox_imap_available'); ?></span>
+                                                <span class="marketing-provider-readiness-check-value"><?= !empty($reply_mailbox_readiness['imap_available']) ? _l('settings_yes') : _l('settings_no'); ?></span>
+                                            </li>
+                                            <li>
+                                                <span><?= _l('marketing_reply_mailbox_last_poll_at'); ?></span>
+                                                <span class="marketing-provider-readiness-check-value"><?= !empty($reply_mailbox_readiness['last_poll_at']) ? html_escape(_dt($reply_mailbox_readiness['last_poll_at'])) : '-'; ?></span>
+                                            </li>
+                                            <li>
+                                                <span><?= _l('marketing_reply_mailbox_last_processed_count'); ?></span>
+                                                <span class="marketing-provider-readiness-check-value"><?= (int) ($reply_mailbox_readiness['last_processed_count'] ?? 0); ?></span>
+                                            </li>
+                                            <li>
+                                                <span><?= _l('marketing_reply_mailbox_last_error'); ?></span>
+                                                <span class="marketing-provider-readiness-check-value"><?= !empty($reply_mailbox_readiness['last_error']) ? html_escape($reply_mailbox_readiness['last_error']) : '-'; ?></span>
+                                            </li>
+                                        </ul>
+                                        <div class="marketing-settings-form-actions">
+                                            <?= form_open(admin_url('marketing/settings/test_reply_mailbox'), ['id' => 'marketing-reply-mailbox-test-form']); ?>
+                                            <input type="hidden" name="marketing_reply_mailbox_test" value="1">
+                                            <button type="submit" class="btn btn-default"><?= _l('marketing_reply_mailbox_test_button'); ?></button>
+                                            <?= form_close(); ?>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 <div class="panel_s marketing-settings-panel marketing-settings-section-anchor" id="marketing-settings-section-general-webhook">
                                     <div class="panel-body">

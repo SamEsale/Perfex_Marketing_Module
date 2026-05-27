@@ -161,13 +161,16 @@ class Marketing_conversations_model extends App_Model
         if ($channel === '' && $provider === 'inbound_email') {
             $channel = 'email';
         }
+        if ($channel === '') {
+            $channel = 'email';
+        }
 
         $insert = [
             'conversation_id' => isset($data['conversation_id']) ? (int) $data['conversation_id'] : 0,
             'campaign_id' => isset($data['campaign_id']) ? (int) $data['campaign_id'] : null,
             'marketing_contact_id' => isset($data['marketing_contact_id']) ? (int) $data['marketing_contact_id'] : null,
             'direction' => isset($data['direction']) ? trim((string) $data['direction']) : 'inbound',
-            'channel' => $channel !== '' ? $channel : null,
+            'channel' => $channel,
             'email' => isset($data['email']) ? mb_strtolower(trim((string) $data['email'])) : null,
             'from_email' => isset($data['from_email'])
                 ? mb_strtolower(trim((string) $data['from_email']))
@@ -184,6 +187,14 @@ class Marketing_conversations_model extends App_Model
             'media_meta_json' => $this->encode_media_meta_json($data['media_meta_json'] ?? ($data['media_meta'] ?? null)),
             'context_provider_message_id' => isset($data['context_provider_message_id']) ? trim((string) $data['context_provider_message_id']) : null,
             'provider_message_id' => isset($data['provider_message_id']) ? trim((string) $data['provider_message_id']) : null,
+            'message_identifier' => isset($data['message_identifier']) ? trim((string) $data['message_identifier']) : null,
+            'in_reply_to' => isset($data['in_reply_to']) ? trim((string) $data['in_reply_to']) : null,
+            'references_header' => isset($data['references_header']) ? trim((string) $data['references_header']) : null,
+            'mailbox_uid' => isset($data['mailbox_uid']) ? trim((string) $data['mailbox_uid']) : null,
+            'mailbox_folder' => isset($data['mailbox_folder']) ? trim((string) $data['mailbox_folder']) : null,
+            'received_at' => isset($data['received_at']) ? (string) $data['received_at'] : null,
+            'headers_json' => isset($data['headers_json']) ? (string) $data['headers_json'] : null,
+            'source_provider' => isset($data['source_provider']) ? trim((string) $data['source_provider']) : 'inbound_email',
             'dedupe_key' => isset($data['dedupe_key']) ? trim((string) $data['dedupe_key']) : null,
             'datecreated' => isset($data['datecreated']) ? (string) $data['datecreated'] : date('Y-m-d H:i:s'),
         ];
@@ -232,6 +243,51 @@ class Marketing_conversations_model extends App_Model
         return $this->db->order_by('id', 'DESC')->limit(1)->get()->row_array();
     }
 
+    public function find_message_by_identifier($identifier)
+    {
+        $identifier = trim((string) $identifier);
+        $identifier = trim($identifier, '<>');
+        if ($identifier === '') {
+            return null;
+        }
+
+        if (method_exists($this, 'find_message_by_message_identifier')) {
+            $message = $this->find_message_by_message_identifier($identifier);
+            if (!empty($message)) {
+                return $message;
+            }
+        }
+
+        if (!$this->db->table_exists($this->messagesTable)) {
+            return null;
+        }
+
+        $this->db->from($this->messagesTable);
+        $hasAnyField = false;
+        foreach (['message_identifier', 'provider_message_id', 'context_provider_message_id'] as $field) {
+            if ($this->db->field_exists($field, $this->messagesTable)) {
+                if (!$hasAnyField) {
+                    $this->db->group_start();
+                    $this->db->where($field, $identifier);
+                    $hasAnyField = true;
+                } else {
+                    $this->db->or_where($field, $identifier);
+                }
+            }
+        }
+
+        if (!$hasAnyField) {
+            return null;
+        }
+
+        $this->db->group_end();
+
+        return $this->db->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
     public function find_message_by_dedupe_key($dedupeKey)
     {
         if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('dedupe_key', $this->messagesTable)) {
@@ -251,11 +307,85 @@ class Marketing_conversations_model extends App_Model
             ->row_array();
     }
 
+    public function find_message_by_message_identifier($messageIdentifier)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('message_identifier', $this->messagesTable)) {
+            return null;
+        }
+
+        $messageIdentifier = trim((string) $messageIdentifier);
+        $messageIdentifier = trim($messageIdentifier, '<>');
+        if ($messageIdentifier === '') {
+            return null;
+        }
+
+        return $this->db->from($this->messagesTable)
+            ->where('message_identifier', $messageIdentifier)
+            ->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
+    public function find_message_by_mailbox_uid($mailboxUid, $mailboxFolder = null)
+    {
+        if (!$this->db->table_exists($this->messagesTable) || !$this->db->field_exists('mailbox_uid', $this->messagesTable)) {
+            return null;
+        }
+
+        $mailboxUid = trim((string) $mailboxUid);
+        if ($mailboxUid === '') {
+            return null;
+        }
+
+        $this->db->from($this->messagesTable);
+        $this->db->where('mailbox_uid', $mailboxUid);
+        if ($mailboxFolder !== null && $mailboxFolder !== '' && $this->db->field_exists('mailbox_folder', $this->messagesTable)) {
+            $this->db->where('mailbox_folder', trim((string) $mailboxFolder));
+        }
+
+        return $this->db->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+    }
+
     public function add_message_idempotent(array $data)
     {
+        $messageIdentifier = trim((string) ($data['message_identifier'] ?? ''));
+        $mailboxUid = trim((string) ($data['mailbox_uid'] ?? ''));
+        $mailboxFolder = trim((string) ($data['mailbox_folder'] ?? ''));
         $providerMessageId = trim((string) ($data['provider_message_id'] ?? ''));
         $provider = trim((string) ($data['provider'] ?? ''));
         $dedupeKey = trim((string) ($data['dedupe_key'] ?? ''));
+
+        if ($messageIdentifier !== '') {
+            $existingByMessageIdentifier = $this->find_message_by_message_identifier($messageIdentifier);
+            if ($existingByMessageIdentifier) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMessageIdentifier['id'],
+                    'conversation_id' => (int) ($existingByMessageIdentifier['conversation_id'] ?? 0),
+                    'reason' => 'message_identifier',
+                ];
+            }
+        }
+
+        if ($mailboxUid !== '') {
+            $existingByMailboxUid = $this->find_message_by_mailbox_uid($mailboxUid, $mailboxFolder !== '' ? $mailboxFolder : null);
+            if ($existingByMailboxUid) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMailboxUid['id'],
+                    'conversation_id' => (int) ($existingByMailboxUid['conversation_id'] ?? 0),
+                    'reason' => 'mailbox_uid',
+                ];
+            }
+        }
 
         if ($providerMessageId !== '') {
             $existingByProvider = $this->find_message_by_provider_message_id($providerMessageId, $provider !== '' ? $provider : null);
@@ -320,6 +450,34 @@ class Marketing_conversations_model extends App_Model
                     'id' => (int) $existingByDedupeKey['id'],
                     'conversation_id' => (int) ($existingByDedupeKey['conversation_id'] ?? 0),
                     'reason' => 'dedupe_key',
+                ];
+            }
+        }
+
+        if ($messageIdentifier !== '') {
+            $existingByMessageIdentifier = $this->find_message_by_message_identifier($messageIdentifier);
+            if ($existingByMessageIdentifier) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMessageIdentifier['id'],
+                    'conversation_id' => (int) ($existingByMessageIdentifier['conversation_id'] ?? 0),
+                    'reason' => 'message_identifier',
+                ];
+            }
+        }
+
+        if ($mailboxUid !== '') {
+            $existingByMailboxUid = $this->find_message_by_mailbox_uid($mailboxUid, $mailboxFolder !== '' ? $mailboxFolder : null);
+            if ($existingByMailboxUid) {
+                return [
+                    'success' => true,
+                    'inserted' => false,
+                    'duplicate' => true,
+                    'id' => (int) $existingByMailboxUid['id'],
+                    'conversation_id' => (int) ($existingByMailboxUid['conversation_id'] ?? 0),
+                    'reason' => 'mailbox_uid',
                 ];
             }
         }
