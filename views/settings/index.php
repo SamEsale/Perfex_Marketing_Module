@@ -797,6 +797,9 @@ $settingsSectionNav = [
                                                 <label for="marketing_smtp_password" class="control-label"><?= _l('marketing_smtp_password'); ?></label>
                                                 <input type="password" id="marketing_smtp_password" name="marketing_smtp_password" class="form-control" value="" placeholder="<?= html_escape(_l('marketing_smtp_password_help')); ?>">
                                                 <p class="text-muted mtop5"><?= _l('marketing_smtp_password_visibility_note'); ?></p>
+                                                <div class="alert <?= !empty($smtp_password_configured) ? 'alert-success' : 'alert-warning'; ?> mtop10 mbot0">
+                                                    <?= !empty($smtp_password_configured) ? _l('marketing_smtp_password_status_configured') : _l('marketing_smtp_password_status_missing'); ?>
+                                                </div>
                                             </div>
                                             <div class="form-group">
                                                 <label for="marketing_smtp_from_email" class="control-label"><?= _l('marketing_smtp_from_email'); ?></label>
@@ -899,21 +902,7 @@ $settingsSectionNav = [
                                         <h4 class="marketing-settings-panel-title"><?= _l('settings'); ?></h4>
                                         <p class="marketing-settings-panel-copy"><?= _l('marketing_settings_placeholder'); ?></p>
 
-                                        <div class="form-group">
-                                            <label class="control-label"><?= _l('marketing_send_enabled'); ?></label>
-                                            <div class="radio radio-primary radio-inline">
-                                                <input type="radio" id="marketing_send_enabled_yes" name="<?= html_escape($settingFieldName('marketing_send_enabled')); ?>" value="1" <?= $settingBool('marketing_send_enabled') ? 'checked' : ''; ?>>
-                                                <label for="marketing_send_enabled_yes"><?= _l('settings_yes'); ?></label>
-                                            </div>
-                                            <div class="radio radio-primary radio-inline">
-                                                <input type="radio" id="marketing_send_enabled_no" name="<?= html_escape($settingFieldName('marketing_send_enabled')); ?>" value="0" <?= !$settingBool('marketing_send_enabled') ? 'checked' : ''; ?>>
-                                                <label for="marketing_send_enabled_no"><?= _l('settings_no'); ?></label>
-                                            </div>
-                                        </div>
 
-                                        <div class="alert alert-warning">
-                                            <?= _l('marketing_settings_send_enabled_warning'); ?>
-                                        </div>
                                         <div class="alert alert-info">
                                             <?= _l('marketing_delivery_source_of_truth_note'); ?>
                                         </div>
