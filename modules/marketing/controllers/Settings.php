@@ -649,7 +649,7 @@ class Settings extends AdminController
             $this->form_validation->set_rules('marketing_smtp_password_raw', _l('marketing_smtp_password'), $smtpPasswordRule);
             $this->form_validation->set_rules('marketing_smtp_from_email', _l('marketing_smtp_from_email'), 'trim|required|valid_email');
             $this->form_validation->set_rules('marketing_smtp_from_name', _l('marketing_smtp_from_name'), 'trim');
-            $this->form_validation->set_rules('marketing_smtp_reply_to', _l('marketing_smtp_reply_to'), 'trim|valid_email');
+            $this->form_validation->set_rules('marketing_smtp_reply_to', _l('marketing_smtp_reply_to'), $posted['marketing_smtp_reply_to'] !== '' ? 'trim|valid_email' : 'trim');
             $this->form_validation->set_rules('marketing_smtp_encryption', _l('marketing_smtp_encryption'), 'in_list[none,ssl,tls]');
         }
 
