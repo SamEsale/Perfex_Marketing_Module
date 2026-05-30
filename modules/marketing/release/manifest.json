@@ -23,21 +23,9 @@
   "required_docs": [
     "README.md",
     "INSTALLATION.md",
-    "docs/OPERATIONS.md",
-    "docs/PRODUCTION_CHECKLIST.md",
-    "docs/RELEASE_MANIFEST.md"
-  ],
-  "required_scripts": [
-    "scripts/build_release_package.sh",
-    "scripts/verify_release_package.sh",
-    "scripts/verify_phase2_regressions.sh",
-    "scripts/verify_phase4_integrity_runtime.php"
-  ],
-  "validation_commands": [
-    "bash scripts/build_release_package.sh",
-    "bash scripts/verify_release_package.sh",
-    "bash scripts/verify_phase2_regressions.sh",
-    "php modules/marketing/scripts/verify_phase4_integrity_runtime.php"
+    "CHANGELOG.md",
+    "SUPPORT.md",
+    "EULA.md"
   ],
   "public_routes": [
     "marketing/webhooks/ses_sns",
