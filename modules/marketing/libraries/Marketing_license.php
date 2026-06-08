@@ -4,7 +4,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Marketing_license
 {
-    private const DEFAULT_API_BASE_URL = '';
+    private const DEFAULT_API_BASE_URL = 'https://license.imbisoft.com/api';
     private const DEFAULT_API_BASE_URL_HINT = 'https://license.example.com/api';
     private const GRACE_DAYS = 7;
     private const OPTION_TABLE = 'options';

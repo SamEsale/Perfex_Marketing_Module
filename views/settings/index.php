@@ -1385,11 +1385,15 @@ $settingsSectionNav = [
                                                 </div>
                                             </div>
 
-                                            <div class="alert alert-info">
-                                                <?= sprintf(
-                                                    _l('marketing_license_api_config_note'),
-                                                    html_escape($license_state['api_base_url_hint'] ?? 'https://license.example.com/api')
-                                                ); ?>
+                                            <div class="form-group">
+                                                <label for="marketing_license_api_base_url" class="control-label"><?= _l('marketing_license_api_base_url_label'); ?></label>
+                                                <input type="url"
+                                                       id="marketing_license_api_base_url"
+                                                       name="marketing_license_api_base_url"
+                                                       class="form-control"
+                                                       value="<?= html_escape($license_state['api_base_url'] !== ($license_state['api_base_url_hint'] ?? '') ? $license_state['api_base_url'] : ''); ?>"
+                                                       placeholder="<?= html_escape($license_state['api_base_url'] ?: ($license_state['api_base_url_hint'] ?? 'https://license.imbisoft.com/api')); ?>">
+                                                <p class="help-block"><?= _l('marketing_license_api_base_url_note'); ?></p>
                                             </div>
 
                                             <div class="marketing-license-actions">

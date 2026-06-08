@@ -826,7 +826,8 @@ class Settings extends AdminController
         return [
             'marketing_license_key' => trim((string) $this->input->post('marketing_license_key', false)),
             'marketing_license_email' => trim((string) $this->input->post('marketing_license_email', true)),
-            'license_action' => trim((string) $this->input->post('license_action', true)),
+            'license_action'                 => trim((string) $this->input->post('license_action', true)),
+            'marketing_license_api_base_url' => trim((string) $this->input->post('marketing_license_api_base_url', false)),
         ];
     }
 
@@ -1124,6 +1125,10 @@ class Settings extends AdminController
             set_alert('danger', _l('marketing_license_missing_credentials'));
             redirect(admin_url('marketing/settings'));
         }
+
+        // Save the API URL override (empty string = use built-in default)
+        $apiBaseUrl = trim((string) ($posted['marketing_license_api_base_url'] ?? ''));
+        update_option('marketing_license_api_base_url', $apiBaseUrl);
 
         $checkedState = $this->marketing_license->check_license($effectiveLicenseKey, $effectiveEmail);
 
